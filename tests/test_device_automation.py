@@ -22,6 +22,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components import automation
+from homeassistant.components.device_automation.exceptions import (
+    InvalidDeviceAutomationConfig,
+)
 from homeassistant.const import STATE_OFF, STATE_ON
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
@@ -29,9 +32,14 @@ from homeassistant.setup import async_setup_component
 import pytest
 
 from custom_components.carnet_scolaire.const import (
+    CHILD_KEY,
+    CONF_CHILD_KEYS,
     DOMAIN,
+    EVENT_EVALUATION_ADDED,
     EVENT_GRADE_ADDED,
+    EVENT_INFORMATION_ADDED,
     EVENT_LESSON_CANCELED,
+    EVENT_MESSAGE_RECEIVED,
     OPT_WRITE_OPERATIONS_ENABLED,
     Tier,
 )
@@ -48,14 +56,17 @@ from custom_components.carnet_scolaire.device_condition import (
     async_get_conditions,
 )
 from custom_components.carnet_scolaire.device_trigger import (
+    TRIGGER_TIER,
     TRIGGER_TYPES,
     async_attach_trigger,
     async_get_triggers,
+    async_validate_trigger_config,
 )
 
 from .conftest import CHILDREN, REQUIRES_HASS, child_key
 from .fixtures import protocol
 from .keys import key_of
+from .test_init import _setup_ed_entry
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -708,3 +719,212 @@ async def test_a_child_device_of_an_unloaded_entry_still_reads_as_a_child(
     assert key is not None
     assert key != STUDENT_ONE
     assert await async_get_triggers(hass, device_id) != []
+
+
+# ---------------------------------------------------------------------------
+# What each source can produce
+# ---------------------------------------------------------------------------
+
+#: The three changes an EcoleDirecte entry cannot produce: it collects no news,
+#: discussions or evaluations tier, so nothing ever fires these for it.
+ED_IMPOSSIBLE_TRIGGERS = frozenset(
+    {EVENT_INFORMATION_ADDED, EVENT_MESSAGE_RECEIVED, EVENT_EVALUATION_ADDED}
+)
+
+
+def _ed_child(hass: HomeAssistant, entry: MockConfigEntry) -> str:
+    """The child device of the fictional EcoleDirecte entry."""
+    record = entry.data[CONF_CHILD_KEYS][0]
+    return _device_id(hass, entry.entry_id, f"{entry.entry_id}_{record[CHILD_KEY]}")
+
+
+def _trigger(device_id: str, trigger_type: str) -> dict[str, Any]:
+    return {
+        "platform": "device",
+        "domain": DOMAIN,
+        "device_id": device_id,
+        "type": trigger_type,
+    }
+
+
+def test_every_trigger_type_is_produced_by_some_tier() -> None:
+    """A trigger with no tier would raise ``KeyError`` inside the editor.
+
+    ``TRIGGER_TIER`` is read off the ``event`` entities, so a change type added
+    to the trigger list without an entity to carry it would break the listing
+    of every child device rather than just its own card.
+    """
+    assert set(TRIGGER_TIER) == set(TRIGGER_TYPES)
+
+
+async def test_an_ecoledirecte_child_is_not_offered_a_change_its_source_never_produces(
+    hass: HomeAssistant,
+) -> None:
+    """The defect: three cards that attached cleanly and never fired.
+
+    Every trigger was offered to every child, whatever the source. On an
+    EcoleDirecte entry "a message arrived", "a piece of news was published"
+    and "an evaluation was added" have no tier behind them, so an automation
+    built on one was accepted, attached, and silent for ever -- with nothing
+    in the log to say why.
+    """
+    entry, _session_manager = await _setup_ed_entry(hass)
+    device_id = _ed_child(hass, entry)
+
+    offered = {trigger["type"] for trigger in await async_get_triggers(hass, device_id)}
+
+    assert offered == set(TRIGGER_TYPES) - ED_IMPOSSIBLE_TRIGGERS
+    assert EVENT_GRADE_ADDED in offered
+    assert EVENT_LESSON_CANCELED in offered
+
+
+async def test_a_disabled_ecoledirecte_entry_still_offers_only_what_it_can_produce(
+    hass: HomeAssistant,
+) -> None:
+    """The source is read from the entry when no connector is loaded.
+
+    The editor still lists a disabled entry's child devices. Falling back to
+    "everything" there would bring the three impossible cards back the moment
+    the entry was switched off, and into any automation built meanwhile.
+    """
+    entry, _session_manager = await _setup_ed_entry(hass)
+    device_id = _ed_child(hass, entry)
+    await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    offered = {trigger["type"] for trigger in await async_get_triggers(hass, device_id)}
+
+    assert offered == set(TRIGGER_TYPES) - ED_IMPOSSIBLE_TRIGGERS
+
+
+@pytest.mark.parametrize("trigger_type", sorted(ED_IMPOSSIBLE_TRIGGERS))
+async def test_a_hand_written_impossible_trigger_is_refused_at_validation(
+    hass: HomeAssistant, trigger_type: str
+) -> None:
+    """A pasted or imported automation is not built from the editor's list.
+
+    Filtering the list alone would leave a YAML automation or a blueprint on
+    ``message_received`` exactly as silent as before, so validation refuses it
+    with a translated sentence naming the source and the change.
+    """
+    entry, _session_manager = await _setup_ed_entry(hass)
+    device_id = _ed_child(hass, entry)
+
+    with pytest.raises(InvalidDeviceAutomationConfig) as refused:
+        await async_validate_trigger_config(hass, _trigger(device_id, trigger_type))
+
+    assert refused.value.translation_domain == DOMAIN
+    assert refused.value.translation_key == "trigger_type_unsupported"
+    assert refused.value.translation_placeholders == {
+        "type": trigger_type,
+        "source": "ecoledirecte",
+        "device_id": device_id,
+    }
+
+
+async def test_an_impossible_trigger_is_refused_at_attach_too(
+    hass: HomeAssistant,
+) -> None:
+    """Home Assistant skips the dynamic validation in one case.
+
+    When the integration could not be set up, an automation reaches
+    ``async_attach_trigger`` having passed only the static schema, so the
+    refusal is repeated there rather than attaching a filter no event will
+    ever match.
+    """
+    entry, _session_manager = await _setup_ed_entry(hass)
+    device_id = _ed_child(hass, entry)
+
+    with pytest.raises(InvalidDeviceAutomationConfig) as refused:
+        await async_attach_trigger(
+            hass,
+            _trigger(device_id, EVENT_MESSAGE_RECEIVED),
+            lambda *_args, **_kwargs: None,
+            {},  # type: ignore[arg-type]
+        )
+
+    assert refused.value.translation_key == "trigger_type_unsupported"
+
+
+async def test_a_trigger_the_source_can_produce_validates_unchanged(
+    hass: HomeAssistant,
+) -> None:
+    """The refusal must not spill onto the changes EcoleDirecte does produce."""
+    entry, _session_manager = await _setup_ed_entry(hass)
+    config = _trigger(_ed_child(hass, entry), EVENT_GRADE_ADDED)
+
+    assert await async_validate_trigger_config(hass, config) == config
+
+
+async def test_a_pronote_child_validates_every_trigger(
+    hass: HomeAssistant, mock_entry: MockConfigEntry, account: PronoteAccount
+) -> None:
+    """PRONOTE collects every tier, so nothing it offers is refused."""
+    del account
+    device_id = _child(hass, mock_entry, STUDENT_ONE)
+
+    for trigger_type in TRIGGER_TYPES:
+        config = _trigger(device_id, trigger_type)
+        assert await async_validate_trigger_config(hass, config) == config
+
+
+async def test_a_trigger_whose_source_cannot_be_read_is_left_to_the_schema(
+    hass: HomeAssistant, mock_entry: MockConfigEntry, account: PronoteAccount
+) -> None:
+    """Refusing needs evidence: an unknown entry is not an unsupported source.
+
+    A device whose identifier names no config entry -- or a device that is not
+    this integration's at all -- gives no source to judge by, and refusing
+    there would turn "we cannot tell" into "this can never fire".
+    """
+    del account
+    ghost = dr.async_get(hass).async_get_or_create(
+        config_entry_id=mock_entry.entry_id,
+        identifiers={(DOMAIN, "no-such-entry_child-x")},
+        name="Enfant Fantôme",
+    )
+
+    for device_id in (ghost.id, "not-a-device"):
+        config = _trigger(device_id, EVENT_MESSAGE_RECEIVED)
+        assert await async_validate_trigger_config(hass, config) == config
+
+
+async def test_an_ecoledirecte_child_is_offered_only_conditions_it_can_answer(
+    hass: HomeAssistant,
+) -> None:
+    """Reviewed alongside the triggers: conditions follow their entity.
+
+    EcoleDirecte creates no ``test_today`` or ``holidays`` binary sensor, and
+    a condition on either could never be true -- so neither is offered, while
+    the school-day condition its timetable does answer still is.
+    """
+    entry, _session_manager = await _setup_ed_entry(hass)
+
+    offered = {
+        condition["type"]
+        for condition in await async_get_conditions(hass, _ed_child(hass, entry))
+    }
+
+    assert offered.isdisjoint({"is_test_today", "is_holidays", "is_not_holidays"})
+    assert {"is_school_day", "is_not_school_day"} <= offered
+
+
+async def test_an_ecoledirecte_child_is_not_offered_a_write_it_cannot_send(
+    hass: HomeAssistant,
+) -> None:
+    """The write option alone left "mark information read" in the editor.
+
+    EcoleDirecte advertises no write service, so with writes switched on the
+    action was offered and every run of it was refused by the service. The
+    refresh actions, which touch only the scheduler, remain.
+    """
+    entry, _session_manager = await _setup_ed_entry(
+        hass, options={OPT_WRITE_OPERATIONS_ENABLED: True}
+    )
+
+    offered = {
+        action["type"]
+        for action in await async_get_actions(hass, _ed_child(hass, entry))
+    }
+
+    assert offered == set(ACTION_TYPES) - set(WRITE_ACTIONS)

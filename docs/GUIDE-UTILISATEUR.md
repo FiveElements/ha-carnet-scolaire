@@ -1411,7 +1411,8 @@ La liste des appareils proposés **exclut l'appareil du compte** : « un cours a
 
 Si vous préférez écrire votre automatisation, l'éditeur graphique vous propose,
 sur l'appareil d'un enfant, quatorze déclencheurs, dix conditions et deux à
-quatre actions.
+quatre actions — moins sur un appareil EcoleDirecte, où n'est proposé que ce
+que la source peut produire (§ [14.3](#143-les-automatisations-dappareil)).
 
 **Les quatorze déclencheurs** (« Quand… ») :
 
@@ -2127,12 +2128,15 @@ passe du compte dans PRONOTE.
 ### 12.5 Retirer un seul enfant, sans tout désinstaller
 
 Disons-le franchement : **l'intégration ne sait pas encore le faire proprement.**
-La sélection des enfants se fait à l'installation, il n'y a pas d'étape de
-reconfiguration, et la fiche d'un appareil enfant n'offre aucun bouton
-« Supprimer l'appareil » qui fonctionne — l'intégration ne déclare pas le point
-d'entrée que Home Assistant exigerait pour cela. Supprimer un appareil enfant du
-registre, si vous y parvenez par un autre moyen, le verrait recréé au prochain
-chargement.
+La sélection des enfants se fait à l'installation, et rien ne la modifie
+ensuite. **Reconfigurer** (§ [10.4](#104-comment-recharger-ou-reconfigurer))
+change la façon dont l'entrée se connecte — adresse, identifiant, portail ENT,
+mode de connexion — mais conserve telle quelle la liste des enfants suivis ; les
+options ne la proposent pas non plus. Quant au bouton « Supprimer l'appareil »
+de la fiche d'un enfant, il retire bien l'appareil, mais un enfant toujours
+suivi est recréé au prochain chargement : il sert à effacer un appareil figé
+(§ [10.5](#105-deux-appareils-pour-un-seul-enfant)), pas à cesser de suivre un
+enfant.
 
 La seule manœuvre qui marche aujourd'hui, celle qu'annonce déjà le
 § [3](#3-comptes-parents-et-plusieurs-enfants) :
@@ -2333,7 +2337,7 @@ l'action… ». Le détail de chaque service est au § [5](#5-les-services).
 
 | Brique | PRONOTE | EcoleDirecte |
 | --- | --- | --- |
-| **Déclencheurs** (§ [9.2](#92-construire-soi-même--les-briques-disponibles)) | Les quatorze | Les quatorze sont proposés ; « Une actualité a été publiée », « Un message a été reçu » et « Une évaluation a été ajoutée » ne se déclenchent jamais (§ [15.2](#152-ecoledirecte)) |
+| **Déclencheurs** (§ [9.2](#92-construire-soi-même--les-briques-disponibles)) | Les quatorze | Onze : les deux sur les notes et les devoirs, les six sur les cours, et l'absence, le retard et la punition. « Une actualité a été publiée », « Un message a été reçu » et « Une évaluation a été ajoutée » ne sont pas proposés, faute de catégorie pour les produire, et une automatisation écrite à la main qui en utilise un est refusée à la validation, avec un message qui le dit |
 | **Conditions** | Les dix, selon les entités présentes sur l'appareil | Sept : « Un contrôle est prévu aujourd'hui », « C'est les vacances » et « Ce ne sont pas les vacances » ne sont pas proposées, faute d'entité |
 | **Actions** | « Tout rafraîchir », « Rafraîchir les notes » ; « Marquer une actualité comme lue » si l'écriture est activée ; « Cocher un devoir » si, en plus, le compte est un compte élève | « Tout rafraîchir » et « Rafraîchir les notes » |
 
@@ -2398,11 +2402,12 @@ cause côté serveur ne se lèvent pas côté Home Assistant.
 - **Aucune écriture**, et seulement deux services : `refresh` et
   `get_rate_limit_status`. La liste « Devoirs » est en lecture seule ; les
   autres services sont refusés avant tout envoi.
-- **Trois déclencheurs d'appareil sont proposés sans pouvoir se déclencher** :
-  « Une actualité a été publiée », « Un message a été reçu », « Une évaluation
-  a été ajoutée ». L'éditeur propose les quatorze déclencheurs sur tout
-  appareil d'enfant, quelle que soit la source. *Que faire :* ne pas les
-  utiliser sur un appareil EcoleDirecte.
+- **Onze déclencheurs d'appareil sur quatorze.** Sans actualités, messagerie
+  ni évaluations, « Une actualité a été publiée », « Un message a été reçu » et
+  « Une évaluation a été ajoutée » n'ont rien pour les produire : l'éditeur ne
+  les propose pas, et une automatisation qui les reprend — écrite à la main,
+  copiée d'une installation PRONOTE ou issue d'un blueprint — est refusée à la
+  validation au lieu d'attendre en silence (§ [14.3](#143-les-automatisations-dappareil)).
 - **Le mot de passe est toujours conservé**, EcoleDirecte ne délivrant aucun
   jeton d'appareil durable (§ [2.6](#26-ecoledirecte)).
 

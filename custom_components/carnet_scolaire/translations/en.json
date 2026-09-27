@@ -846,6 +846,9 @@
     },
     "trigger_device_not_followed": {
       "message": "Device {device_id} is not a child this account currently follows, so this trigger can never fire. Select the device again in the automation, or delete the stale one."
+    },
+    "trigger_type_unsupported": {
+      "message": "The {source} source never produces the {type} change, so this trigger on device {device_id} could never fire. Choose another trigger, or delete this one."
     }
   },
   "issues": {
