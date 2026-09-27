@@ -42,19 +42,19 @@ rules:
 
   # Silver
   action-exceptions:
-    status: todo
+    status: done
     comment: >
-      Service failures are not yet all mapped to ServiceValidationError
-      (bad input) or HomeAssistantError (server or limiter refusal). Being
-      fixed separately.
+      Every service and the to-do tick reach the session through
+      service_errors.async_run_gesture, which turns each session failure
+      family into a translated HomeAssistantError with fixed text; bad input
+      and unsupported sources raise a translated ServiceValidationError.
   config-entry-unloading: done
   docs-configuration-parameters: done
   docs-installation-parameters:
-    status: todo
+    status: done
     comment: >
-      The user guide does not yet describe each field of each config-flow step
-      (address, login mode, ENT, QR code, EcoleDirecte QCM, children). Being
-      fixed separately.
+      docs/GUIDE-UTILISATEUR.md section 2 describes every field of the three
+      PRONOTE modes and of the EcoleDirecte step, security question included.
   entity-unavailable: done
   integration-owner: done
   log-when-unavailable: done

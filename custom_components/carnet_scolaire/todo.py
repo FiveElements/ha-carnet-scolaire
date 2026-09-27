@@ -31,7 +31,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from .const import DOMAIN, Priority, Tier
 from .entity import PronoteEntity, async_add_per_student
 from .gateway import ItemNotFound, WriteNotApplied
-from .ratelimit import TierDeferred
+from .service_errors import async_run_gesture
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -147,8 +147,11 @@ class PronoteHomeworkTodoList(PronoteEntity, TodoListEntity):
         extras = account.extras
         if extras is None:
             raise ServiceValidationError(
-                f"{account.connector.capabilities.source} does not support "
-                "homework writes"
+                translation_domain=DOMAIN,
+                translation_key="homework_tick_not_supported",
+                translation_placeholders={
+                    "source": str(account.connector.capabilities.source)
+                },
             )
         if not account.can_tick_homework:
             raise ServiceValidationError(
@@ -182,19 +185,22 @@ class PronoteHomeworkTodoList(PronoteEntity, TodoListEntity):
             return extras.gateway.set_homework_done(client, homework_id, done=done)
 
         try:
-            await extras.session.run(
-                str(Tier.HOMEWORK),
-                # A human just tapped a checkbox: a gesture, so it crosses quiet
-                # hours -- but it still goes through the limiter, and it is
-                # never CRITICAL: nothing done by hand may pre-empt the session
-                # tier (annexe B §2.4).
-                Priority.GESTURE,
+            await async_run_gesture(
+                extras,
+                Tier.HOMEWORK,
+                self.student.id,
                 work,
-                student_id=self.student.id,
                 # The list is read before the post, because the item's `N` is
                 # only valid in the session that read it, and again after it,
                 # because only that shows the tick landed (`set_homework_done`).
                 cost=3,
+                # A human just tapped a checkbox: a gesture, so it crosses quiet
+                # hours -- but it still goes through the limiter, and it is
+                # never CRITICAL: nothing done by hand may pre-empt the session
+                # tier (annexe B §2.4). A deferral, a refused login or an
+                # unreachable server is translated there, the same way as for
+                # every service, so the card puts the box back with a sentence.
+                priority=Priority.GESTURE,
             )
         except ItemNotFound as missing:
             # Raised, not swallowed: PRONOTE would have accepted a stale `N` and
@@ -208,17 +214,6 @@ class PronoteHomeworkTodoList(PronoteEntity, TodoListEntity):
                 translation_domain=DOMAIN,
                 translation_key="write_not_applied",
             ) from ignored
-        except TierDeferred as deferred:
-            # A tick that was silently postponed reads as a tick that did not
-            # work, so this fails visibly instead.
-            raise ServiceValidationError(
-                translation_domain=DOMAIN,
-                translation_key="service_deferred",
-                translation_placeholders={
-                    "reason": str(deferred.reason),
-                    "seconds": str(int(deferred.retry_after)),
-                },
-            ) from deferred
 
         account.scheduler.request([Tier.HOMEWORK])
         self.async_write_ha_state()

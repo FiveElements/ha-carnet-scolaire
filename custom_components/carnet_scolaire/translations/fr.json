@@ -785,6 +785,30 @@
     "item_not_found": {
       "message": "Cet élément n'est plus sur PRONOTE tel qu'il a été lu : il a été retiré ou modifié depuis. Rien n'a été envoyé. Actualisez, puis réessayez."
     },
+    "service_login_refused": {
+      "message": "PRONOTE n'a pas été contacté : le limiteur retient les connexions ({reason}). Rien n'a été envoyé. Réessayez plus tard ; réessayer plus tôt prolonge l'attente."
+    },
+    "service_reauth_required": {
+      "message": "PRONOTE a refusé les identifiants du compte, ou demande le code PIN de double authentification. Réauthentifiez l'intégration depuis sa page dans Paramètres, puis réessayez."
+    },
+    "service_unreachable": {
+      "message": "PRONOTE est injoignable, ou n'a pas répondu à temps. La demande n'a peut-être pas été reçue. Réessayez dans quelques minutes."
+    },
+    "service_refused": {
+      "message": "PRONOTE a refusé la demande. L'intégration espace ses appels ; réessayez plus tard."
+    },
+    "service_unreadable": {
+      "message": "PRONOTE a répondu, mais sa réponse est illisible. Cela signifie généralement que le PRONOTE de l'établissement a changé ; signalez-le en joignant les diagnostics de l'intégration."
+    },
+    "service_internal_error": {
+      "message": "La demande n'a pas pu aboutir à cause d'un défaut de cette intégration. Le journal de Home Assistant en dit plus ; signalez-le."
+    },
+    "service_not_supported": {
+      "message": "La source {source} ne prend pas en charge l'action {service}."
+    },
+    "homework_tick_not_supported": {
+      "message": "La source {source} ne permet pas de cocher un devoir."
+    },
     "todo_item_owned_by_pronote": {
       "message": "Seule la coche peut changer. La matière, l'énoncé et l'échéance d'un devoir appartiennent au professeur, dans PRONOTE."
     }

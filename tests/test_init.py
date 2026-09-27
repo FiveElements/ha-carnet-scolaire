@@ -2386,7 +2386,11 @@ async def test_a_service_the_source_does_not_declare_is_refused_by_name(
             return_response=True,
         )
 
-    assert "ecoledirecte" in str(raised.value).lower()
+    assert raised.value.translation_key == "service_not_supported"
+    assert raised.value.translation_placeholders == {
+        "source": "ecoledirecte",
+        "service": SERVICE_GET_ICAL_URL,
+    }
 
 
 async def test_an_ecoledirecte_homework_list_refuses_a_tick(
@@ -2431,7 +2435,8 @@ async def test_an_ecoledirecte_homework_list_refuses_a_tick(
             )
         )
 
-    assert "does not support" in str(raised.value)
+    assert raised.value.translation_key == "homework_tick_not_supported"
+    assert raised.value.translation_placeholders == {"source": "ecoledirecte"}
 
 
 def _ed_account_device(hass: HomeAssistant, entry: Any) -> str:

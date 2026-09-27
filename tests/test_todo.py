@@ -35,6 +35,7 @@ from homeassistant.components.todo import (
 )
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 import pytest
+import requests
 
 from custom_components.carnet_scolaire.const import (
     OPT_WRITE_OPERATIONS_ENABLED,
@@ -840,7 +841,7 @@ async def test_a_tick_that_was_deferred_fails_visibly(
 
     with (
         patch.object(account.extras.session, "run", _deferred),
-        pytest.raises(ServiceValidationError) as raised,
+        pytest.raises(HomeAssistantError) as raised,
     ):
         await hass.services.async_call(
             "todo",
@@ -854,11 +855,51 @@ async def test_a_tick_that_was_deferred_fails_visibly(
         )
 
     assert raised.value.translation_key == "service_deferred"
+    # Not the validation class: the tap was correct, the integration chose not
+    # to send it yet. It used to be raised as one here and as a plain error by
+    # the services, for the same deferral; both now come from one chokepoint.
+    assert not isinstance(raised.value, ServiceValidationError)
     assert raised.value.translation_placeholders == {
         "reason": "daily_cap",
         # Whole seconds: "try again in about 42 seconds" is advice, and 42.7
         # would read as a measurement.
         "seconds": "42",
     }
+    assert "SaisieTAFFaitEleve" not in client.posted_names
+    assert account.scheduler.diagnostics()[str(Tier.HOMEWORK)]["boosted"] is False
+
+
+@writes_on
+async def test_a_tick_that_cannot_reach_pronote_puts_the_box_back_with_a_sentence(
+    hass: HomeAssistant, account: PronoteAccount, client: FakeClient
+) -> None:
+    """The checkbox meets the same outages as a script, and says so the same way.
+
+    The tick used to translate only its own three errors; a school down for
+    the evening reached the card as a raw ``ConnectionError`` quoting the page
+    address. It now goes through the chokepoint every service uses, so the
+    card gets a translated sentence and the box springs back -- and nothing
+    else happens: the post that would follow the failed read is never sent,
+    and the tier is not boosted as it would be after a tick that landed.
+    """
+
+    def _unreachable(_body: Any) -> dict[str, Any]:
+        raise requests.ConnectionError(
+            "https://demo.example.invalid/pronote/eleve.html?identifiant=NOT-A-REAL-TOKEN"
+        )
+
+    item = key_of(account, "HOMEWORK-1")
+    client.responses["PageCahierDeTexte"] = _unreachable
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await hass.services.async_call(
+            "todo",
+            "update_item",
+            {"entity_id": _list_id("Enfant Un"), "item": item, "status": "completed"},
+            blocking=True,
+        )
+
+    assert raised.value.translation_key == "service_unreachable"
+    assert "NOT-A-REAL-TOKEN" not in str(raised.value)
     assert "SaisieTAFFaitEleve" not in client.posted_names
     assert account.scheduler.diagnostics()[str(Tier.HOMEWORK)]["boosted"] is False
