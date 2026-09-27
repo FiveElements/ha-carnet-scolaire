@@ -1520,6 +1520,94 @@ EXCEPTIONS: list[tuple[str, str, str]] = [
             "réessayez."
         ),
     ),
+    # The failures `service_errors.async_run_gesture` translates for every
+    # service and for the to-do checkbox. Fixed sentences on purpose: the
+    # exceptions behind them can quote a URL carrying session parameters, so
+    # their text never reaches the user -- the only placeholders are the
+    # limiter's own reason codes.
+    (
+        "service_login_refused",
+        (
+            "PRONOTE was not contacted: the rate limiter is holding back "
+            "logins ({reason}). Nothing was sent. Try again later; retrying "
+            "sooner makes it last longer."
+        ),
+        (
+            "PRONOTE n'a pas été contacté : le limiteur retient les connexions "
+            "({reason}). Rien n'a été envoyé. Réessayez plus tard ; réessayer "
+            "plus tôt prolonge l'attente."
+        ),
+    ),
+    (
+        "service_reauth_required",
+        (
+            "PRONOTE refused the account's credentials, or asked for the "
+            "two-factor PIN. Re-authenticate the integration from its page in "
+            "Settings, then try again."
+        ),
+        (
+            "PRONOTE a refusé les identifiants du compte, ou demande le code "
+            "PIN de double authentification. Réauthentifiez l'intégration "
+            "depuis sa page dans Paramètres, puis réessayez."
+        ),
+    ),
+    (
+        "service_unreachable",
+        (
+            "PRONOTE could not be reached, or did not answer in time. The "
+            "request may not have been received. Try again in a few minutes."
+        ),
+        (
+            "PRONOTE est injoignable, ou n'a pas répondu à temps. La demande "
+            "n'a peut-être pas été reçue. Réessayez dans quelques minutes."
+        ),
+    ),
+    (
+        "service_refused",
+        (
+            "PRONOTE refused the request. The integration is backing off; try "
+            "again later."
+        ),
+        (
+            "PRONOTE a refusé la demande. L'intégration espace ses appels ; "
+            "réessayez plus tard."
+        ),
+    ),
+    (
+        "service_unreadable",
+        (
+            "PRONOTE answered, but the answer could not be read. This usually "
+            "means the establishment's PRONOTE changed; please report it with "
+            "the integration's diagnostics."
+        ),
+        (
+            "PRONOTE a répondu, mais sa réponse est illisible. Cela signifie "
+            "généralement que le PRONOTE de l'établissement a changé ; "
+            "signalez-le en joignant les diagnostics de l'intégration."
+        ),
+    ),
+    (
+        "service_internal_error",
+        (
+            "The request could not be completed because of a fault in this "
+            "integration. The Home Assistant log says more; please report it."
+        ),
+        (
+            "La demande n'a pas pu aboutir à cause d'un défaut de cette "
+            "intégration. Le journal de Home Assistant en dit plus ; "
+            "signalez-le."
+        ),
+    ),
+    (
+        "service_not_supported",
+        "The {source} source does not support the {service} action.",
+        "La source {source} ne prend pas en charge l'action {service}.",
+    ),
+    (
+        "homework_tick_not_supported",
+        "The {source} source does not support ticking homework.",
+        "La source {source} ne permet pas de cocher un devoir.",
+    ),
     (
         "todo_item_owned_by_pronote",
         (

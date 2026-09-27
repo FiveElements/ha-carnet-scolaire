@@ -785,6 +785,30 @@
     "item_not_found": {
       "message": "That item is no longer on PRONOTE as it was last read: it was withdrawn or changed since. Nothing was sent. Refresh, then try again."
     },
+    "service_login_refused": {
+      "message": "PRONOTE was not contacted: the rate limiter is holding back logins ({reason}). Nothing was sent. Try again later; retrying sooner makes it last longer."
+    },
+    "service_reauth_required": {
+      "message": "PRONOTE refused the account's credentials, or asked for the two-factor PIN. Re-authenticate the integration from its page in Settings, then try again."
+    },
+    "service_unreachable": {
+      "message": "PRONOTE could not be reached, or did not answer in time. The request may not have been received. Try again in a few minutes."
+    },
+    "service_refused": {
+      "message": "PRONOTE refused the request. The integration is backing off; try again later."
+    },
+    "service_unreadable": {
+      "message": "PRONOTE answered, but the answer could not be read. This usually means the establishment's PRONOTE changed; please report it with the integration's diagnostics."
+    },
+    "service_internal_error": {
+      "message": "The request could not be completed because of a fault in this integration. The Home Assistant log says more; please report it."
+    },
+    "service_not_supported": {
+      "message": "The {source} source does not support the {service} action."
+    },
+    "homework_tick_not_supported": {
+      "message": "The {source} source does not support ticking homework."
+    },
     "todo_item_owned_by_pronote": {
       "message": "Only the tick can be changed. The subject, the wording and the due date of a homework item belong to the teacher, in PRONOTE."
     }

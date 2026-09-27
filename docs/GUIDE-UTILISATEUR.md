@@ -48,6 +48,7 @@ section de ce guide, lisez celle-là.
 | L'adresse de l'espace PRONOTE de l'établissement | Une adresse terminée par `eleve.html` ou `parent.html`. Nécessaire pour les modes « identifiants » et « ENT ». |
 | L'application mobile PRONOTE, installée et connectée | Nécessaire pour le mode QR code, qui est le mode recommandé. |
 | Le code PIN à deux facteurs du compte, s'il en a un | Il est demandé au moment de la connexion et **n'est jamais conservé**. Gardez-le accessible : il sera redemandé si PRONOTE l'exige de nouveau. |
+| *Pour EcoleDirecte* : l'identifiant et le mot de passe du compte | Ceux que vous saisissez sur le site EcoleDirecte. Aucune adresse n'est à fournir. Voir § [2.6](#26-ecoledirecte). |
 
 L'intégration cohabite sans conflit avec une autre intégration PRONOTE déjà
 installée : elle occupe un domaine différent, `carnet_scolaire`, précisément pour
@@ -69,7 +70,7 @@ l'ajouter comme dépôt personnalisé une fois.
 4. **Redémarrez Home Assistant.** L'intégration n'apparaît pas avant le
    redémarrage.
 5. Allez dans **Paramètres → Appareils et services → Ajouter une intégration**,
-   cherchez **PRONOTE** et suivez la section suivante de ce guide.
+   cherchez **Carnet scolaire** et suivez la section suivante de ce guide.
 
 ### 1.3 Manuellement
 
@@ -79,7 +80,7 @@ Si vous n'utilisez pas HACS :
    dans le dossier `custom_components/` de votre configuration Home Assistant.
    Vous devez obtenir `config/custom_components/carnet_scolaire/manifest.json`.
 2. Redémarrez Home Assistant.
-3. **Paramètres → Appareils et services → Ajouter une intégration → PRONOTE**.
+3. **Paramètres → Appareils et services → Ajouter une intégration → Carnet scolaire**.
 
 Dans les deux cas, l'intégration installe automatiquement la bibliothèque dont
 elle dépend au premier démarrage ; il n'y a rien à installer à la main, et rien
@@ -89,7 +90,12 @@ elle dépend au premier démarrage ; il n'y a rien à installer à la main, et r
 
 ## 2. Se connecter : les trois modes
 
-Au premier écran, l'intégration vous propose un choix :
+Au premier écran, l'intégration demande sur quelle plateforme se trouve le
+compte : **PRONOTE** ou **EcoleDirecte**. Un compte EcoleDirecte n'a qu'une
+façon de se connecter, décrite au § [2.6](#26-ecoledirecte) ; les sections 2.1
+à 2.4 concernent PRONOTE seul.
+
+Pour PRONOTE, l'écran suivant propose trois modes :
 
 > **PRONOTE**
 > Choisissez le mode de connexion. Le QR code de l'application mobile PRONOTE
@@ -219,6 +225,8 @@ compte, et c'est exactement ce que PRONOTE sanctionne.
 
 ### 2.5 Ce qui se passe ensuite
 
+*Valable pour PRONOTE comme pour EcoleDirecte.*
+
 Après une connexion réussie :
 
 - si le compte ne suit qu'un enfant (ou s'il s'agit d'un compte élève),
@@ -230,6 +238,71 @@ L'intégration crée alors ses appareils et ses entités. Les premières valeurs
 apparaissent au fil des minutes qui suivent : chaque catégorie de données a son
 propre rythme, et certaines — les menus, l'équipe pédagogique, les périodes
 closes — ne sont relues qu'une fois par jour.
+
+### 2.6 EcoleDirecte
+
+À choisir au premier écran quand l'établissement utilise EcoleDirecte plutôt
+que PRONOTE. Il n'y a ici qu'un mode de connexion, et aucune adresse à fournir :
+EcoleDirecte est un service unique, pas un espace par établissement.
+
+> **Se connecter à EcoleDirecte**
+> Saisissez les identifiants utilisés pour EcoleDirecte. Le mot de passe est
+> conservé, car EcoleDirecte ne fournit pas de jeton d'appareil durable.
+
+| Champ | Ce qu'il attend |
+| --- | --- |
+| **Identifiant** | Votre identifiant EcoleDirecte, celui que vous saisissez sur le site — par exemple `parent.exemple`. |
+| **Mot de passe** | Votre mot de passe EcoleDirecte. Il est conservé dans Home Assistant avec les autres identifiants d'intégrations : contrairement au QR code de PRONOTE, EcoleDirecte ne délivre aucun jeton d'appareil qui permettrait de s'en passer. |
+
+**La question de sécurité.** Lors d'une connexion depuis un appareil qu'il ne
+connaît pas encore, EcoleDirecte pose une question à choix multiple sur une
+information du compte. L'intégration affiche alors un second écran :
+
+> **Question de sécurité EcoleDirecte**
+> EcoleDirecte demande : *Quelle est votre année de naissance ?*
+> Choisissez la réponse mémorisée. Aucun compte n'est créé avant la réussite de
+> la connexion.
+
+Choisissez la bonne réponse dans la liste proposée, exactement comme sur le
+site. La réponse est **mémorisée** avec l'entrée, pour qu'EcoleDirecte ne vous
+la redemande pas à chaque connexion : quand la même question revient,
+l'intégration y répond seule. Si EcoleDirecte pose une autre question, ou si la
+réponse enregistrée ne convient plus, Home Assistant vous demande de vous
+reconnecter (voir ci-dessous). Tant que la connexion n'a pas abouti, rien n'est
+créé : abandonner à cet écran ne laisse pas d'entrée à moitié configurée.
+
+Un même compte ne peut être ajouté qu'une fois : l'identifiant EcoleDirecte
+sert à reconnaître l'entrée. Si le compte suit plusieurs enfants, l'écran de
+sélection du § [3](#3-comptes-parents-et-plusieurs-enfants) apparaît ensuite,
+comme pour PRONOTE.
+
+**La reconnexion.** Quand EcoleDirecte refuse les identifiants enregistrés —
+mot de passe changé, question de sécurité à laquelle la réponse mémorisée ne
+correspond plus —, Home Assistant ouvre le formulaire de reconnexion. Pour un
+compte EcoleDirecte, c'est le même formulaire qu'à l'ajout : identifiant et mot
+de passe, puis la question de sécurité si EcoleDirecte la pose de nouveau. La
+réponse mémorisée est alors remplacée par celle que vous choisissez. Les
+compteurs d'échec de connexion sont remis à zéro avant la tentative : une
+personne qui retape son mot de passe n'est pas une relance automatique. Les
+enfants suivis, les réglages et l'historique sont conservés.
+
+**Ce qui diffère de PRONOTE.**
+
+| | PRONOTE | EcoleDirecte |
+| --- | --- | --- |
+| Ce qui est saisi | Selon le mode : QR code, identifiants PRONOTE ou identifiants du portail ENT, et l'adresse de l'espace | Identifiant et mot de passe, sans adresse |
+| Mot de passe conservé | Non en mode QR code, oui sinon | Oui, toujours |
+| Double authentification | Code PIN, jamais conservé, redemandé chaque fois que PRONOTE l'exige | Question à choix multiple, dont la réponse est mémorisée |
+| Données collectées | Emploi du temps, devoirs, notes, absences, actualités, messagerie, menus, bulletins, équipe pédagogique… | Emploi du temps, devoirs, notes et vie scolaire (absences, retards, punitions) uniquement |
+| Écriture | Cocher un devoir, marquer une actualité lue, envoyer un message, si l'option est activée (§ [7](#7-écrire-dans-pronote)) | Aucune : la liste de devoirs reste en lecture seule |
+| Services | Tous ceux du § [5](#5-les-services) | Seulement `refresh` et `get_rate_limit_status` ; les autres répondent que la source EcoleDirecte ne prend pas en charge l'action |
+
+Les entités sans objet pour un compte EcoleDirecte ne sont simplement pas
+créées : pas de capteur de menu, pas de bouton de rafraîchissement des menus,
+rien qui resterait indisponible pour toujours. EcoleDirecte a son propre
+limiteur, réglé par les mêmes options de cadence que PRONOTE
+(§ [8](#8-réglages-et-cadence)) ; rien n'est partagé entre les deux sources,
+même dans un foyer qui a une entrée de chaque.
 
 ---
 
@@ -1578,6 +1651,12 @@ Ces messages apparaissent dans **Paramètres → Système → Réparations**.
 | **Une case cochée dans la liste de devoirs revient toute seule.** | L'écriture n'est pas activée, l'appel a été refusé par le limiteur, ou PRONOTE a accepté la coche sans l'enregistrer. | Vérifiez « Autoriser l'écriture dans PRONOTE » dans les options. Une écriture reportée, ou relue inchangée, affiche une erreur explicite plutôt que d'échouer en silence. |
 | **La liste de devoirs n'a pas de case à cocher, alors que l'écriture est activée.** | Le compte est un compte parent. | C'est voulu : PRONOTE n'enregistre pas une coche envoyée depuis un compte parent. Seul le compte de l'élève peut cocher un devoir. |
 | **Un service répond « Reporté par le limiteur ».** | Le budget est momentanément épuisé. | Le message donne le délai à attendre. Contrairement à une collecte programmée, un service reporté échoue visiblement : c'est délibéré, pour que vous sachiez qu'il n'a rien fait. |
+| **Un service, ou une case de la liste de devoirs, répond « PRONOTE est injoignable, ou n'a pas répondu à temps ».** | Le serveur de l'établissement est en maintenance, la connexion internet de Home Assistant est coupée, ou la réponse a dépassé le délai. | Réessayez dans quelques minutes. La demande n'a peut-être pas été reçue : pour une écriture, vérifiez dans PRONOTE avant de la renvoyer. Ce message ne cite jamais l'adresse appelée, qui peut porter des paramètres de session. |
+| **Un service répond « PRONOTE n'a pas été contacté : le limiteur retient les connexions ».** | Le plafond de connexions du jour est atteint, ou les connexions sont suspendues après des échecs. Rien n'a été envoyé. | **Attendez.** Réessayer plus tôt prolonge l'attente. « État du limiteur » donne l'heure de reprise. |
+| **Un service répond « PRONOTE a refusé les identifiants du compte, ou demande le code PIN ».** | Mot de passe changé, jeton d'appareil caduc, ou PIN à deux facteurs exigé. | Suivez le formulaire de reconnexion (§ [10.4](#104-comment-recharger-ou-reconfigurer)), puis relancez le service. |
+| **Un service répond « PRONOTE a refusé la demande ».** | Un refus du serveur que l'intégration ne sait pas lever en se reconnectant, par exemple après trop de demandes. L'intégration espace ses appels d'elle-même. | Réessayez plus tard. Si cela dure, joignez le fichier de diagnostic à un signalement. |
+| **Un service répond « PRONOTE a répondu, mais sa réponse est illisible », ou parle d'un défaut de cette intégration.** | La réponse de l'établissement sort de ce que l'intégration sait lire, ou l'intégration elle-même est en défaut. | Rien à corriger de votre côté : signalez-le avec le fichier de diagnostic. Pour plus de détails dans le journal, activez `custom_components.carnet_scolaire: debug`, et celui-là seulement (§ [11.3](#113-nactivez-jamais-le-mode-debug-du-journaliseur-pronotepy)). |
+| **Un service répond « La source ecoledirecte ne prend pas en charge l'action… ».** | Ce service est propre à PRONOTE. | C'est attendu : voir le tableau du § [2.6](#26-ecoledirecte). |
 | **Un service refuse d'agir sur le compte.** | *« Ce compte suit plusieurs enfants… Ciblez l'appareil de l'enfant plutôt que celui du compte. »* | Choisissez l'appareil de l'enfant. L'appareil du compte n'est accepté comme raccourci que s'il n'y a qu'un enfant. |
 | **Un déclencheur d'appareil ne se déclenche jamais.** | Vous avez ciblé l'appareil du compte au lieu de celui de l'enfant. Ou la catégorie concernée est désactivée. Ou l'établissement ne publie pas cette donnée. | Ciblez l'appareil de l'enfant : le compte ne propose aucun déclencheur. Vérifiez que la catégorie est activée dans « Intervalles de collecte ». |
 | **Une automatisation s'est déclenchée en masse après un redémarrage.** | Ce ne devrait pas arriver : aucun évènement n'est émis lors de la première collecte après un démarrage. | Si cela se produit, signalez-le. |

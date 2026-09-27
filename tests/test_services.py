@@ -32,7 +32,9 @@ from unittest.mock import patch
 
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
+from pronotepy.exceptions import DataError, PronoteAPIError
 import pytest
+import requests
 import voluptuous as vol
 
 from custom_components.carnet_scolaire.const import (
@@ -50,7 +52,16 @@ from custom_components.carnet_scolaire.const import (
     Priority,
     Tier,
 )
+from custom_components.carnet_scolaire.gateway import ProtocolChanged
 from custom_components.carnet_scolaire.ratelimit import DeferReason, TierDeferred
+from custom_components.carnet_scolaire.session import (
+    AccountUnreadable,
+    BootstrapFailed,
+    IntegrationFault,
+    InvalidCredentials,
+    LoginRefused,
+    MfaRequired,
+)
 
 from .conftest import CHILDREN, REQUIRES_HASS, child_key
 from .fixtures import protocol
@@ -121,6 +132,13 @@ async def writes_on_fixture(
     reloaded: PronoteAccount = mock_entry.runtime_data
     assert reloaded.write_enabled
     return reloaded
+
+
+#: The homework tick is only recorded from a student's own session, so every
+#: test that expects it to land logs in as one.
+on_a_student_account = pytest.mark.parametrize(
+    "account_client", ["student"], indirect=True, ids=["student-account"]
+)
 
 
 # ---------------------------------------------------------------------------
@@ -316,9 +334,9 @@ async def test_a_service_that_was_deferred_fails_visibly(
     would report success for an action that never reached the school.
 
     So it is translated into an error that names the reason and roughly how
-    long to wait. `todo.py` does this conversion for the checkbox and
-    `services.py` for every service -- two call sites, one behaviour, and this
-    is the test for the second one.
+    long to wait. `service_errors.async_run_gesture` does this conversion for
+    the checkbox and for every service -- one chokepoint, two callers, and this
+    is the test for the services.
     """
 
     async def _deferred(*_args: Any, **_kwargs: Any) -> Any:
@@ -404,6 +422,214 @@ async def test_a_service_reaches_pronote_as_a_gesture(
         )
 
     assert seen == [Priority.GESTURE]
+
+
+# ---------------------------------------------------------------------------
+# Failures on the way to PRONOTE -- Silver `action-exceptions`
+# ---------------------------------------------------------------------------
+
+#: Planted in every injected failure's text, to prove none of it reaches the
+#: caller. Visibly fictional, as every value in this suite must be, and shaped
+#: like what a real ``requests`` error quotes: the address it failed on.
+_LEAKY_TEXT = (
+    "https://demo.example.invalid/pronote/eleve.html?identifiant=NOT-A-REAL-TOKEN"
+)
+
+
+def _timed_out() -> IntegrationFault:
+    """What the session raises for a call that outlived its deadline."""
+    fault = IntegrationFault(_LEAKY_TEXT)
+    fault.__cause__ = TimeoutError(_LEAKY_TEXT)
+    return fault
+
+
+@pytest.mark.parametrize(
+    ("failure", "key", "placeholders"),
+    [
+        pytest.param(
+            LoginRefused(str(DeferReason.LOGIN_CAP)),
+            "service_login_refused",
+            {"reason": "login_cap"},
+            id="login-refused-by-the-limiter",
+        ),
+        pytest.param(
+            InvalidCredentials(_LEAKY_TEXT),
+            "service_reauth_required",
+            None,
+            id="invalid-credentials",
+        ),
+        pytest.param(
+            MfaRequired(_LEAKY_TEXT), "service_reauth_required", None, id="mfa-required"
+        ),
+        pytest.param(
+            BootstrapFailed(_LEAKY_TEXT),
+            "service_unreachable",
+            None,
+            id="bootstrap-failed",
+        ),
+        pytest.param(
+            requests.ConnectionError(_LEAKY_TEXT),
+            "service_unreachable",
+            None,
+            id="transport-error",
+        ),
+        pytest.param(
+            TimeoutError(_LEAKY_TEXT), "service_unreachable", None, id="timeout"
+        ),
+        pytest.param(
+            _timed_out(),
+            "service_unreachable",
+            None,
+            id="call-past-its-deadline",
+        ),
+        pytest.param(
+            IntegrationFault(_LEAKY_TEXT),
+            "service_internal_error",
+            None,
+            id="integration-fault",
+        ),
+        pytest.param(
+            AccountUnreadable(_LEAKY_TEXT),
+            "service_unreadable",
+            None,
+            id="account-unreadable",
+        ),
+        pytest.param(
+            ProtocolChanged("identity", _LEAKY_TEXT),
+            "service_unreadable",
+            None,
+            id="protocol-changed",
+        ),
+        pytest.param(
+            DataError(_LEAKY_TEXT), "service_unreadable", None, id="undecodable"
+        ),
+        pytest.param(
+            PronoteAPIError(_LEAKY_TEXT),
+            "service_refused",
+            None,
+            id="protocol-refusal",
+        ),
+    ],
+)
+async def test_a_failure_on_the_way_to_pronote_reaches_the_caller_as_a_sentence(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    account: PronoteAccount,
+    parent_client: FakeClient,
+    failure: Exception,
+    key: str,
+    placeholders: dict[str, str] | None,
+) -> None:
+    """Every family the session raises becomes a translated error, and only that.
+
+    Before this, ``_run`` translated ``TierDeferred`` and let everything else
+    through raw: a school down for the evening reached a script as
+    ``ConnectionError`` with the page address in it, and a refused login as a
+    class name. Home Assistant shows either as an unexplained failure, and the
+    raw text is the one piece of the error that must not travel -- a
+    ``requests`` message quotes the URL, and an ENT bounce puts session
+    parameters in it.
+
+    So the assertion is threefold: the key names the family, the class is the
+    plain ``HomeAssistantError`` (none of these says the *call* was wrong), and
+    the planted text appears nowhere the caller can read it.
+    """
+
+    async def _fails(*_args: Any, **_kwargs: Any) -> Any:
+        raise failure
+
+    with (
+        patch.object(account.extras.session, "run", _fails),
+        pytest.raises(HomeAssistantError) as raised,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_GET_ICAL_URL,
+            {"device_id": _child_device(hass, mock_entry, STUDENT_ONE)},
+            blocking=True,
+            return_response=True,
+        )
+
+    assert raised.value.translation_key == key
+    assert raised.value.translation_placeholders == placeholders
+    assert not isinstance(raised.value, ServiceValidationError)
+    assert raised.value.__cause__ is failure
+    assert "NOT-A-REAL-TOKEN" not in str(raised.value)
+    assert "NOT-A-REAL-TOKEN" not in json.dumps(raised.value.translation_placeholders)
+    assert parent_client.ical_calls == 0
+
+
+async def test_an_unreachable_school_is_reported_through_the_real_session(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    account: PronoteAccount,
+    parent_client: FakeClient,
+) -> None:
+    """The same translation, with nothing doubled between the service and the wire.
+
+    The parametrised test above replaces ``session.run``; this one lets the
+    real session, limiter and executor classify a ``requests`` failure raised
+    by the client itself, which is the path a school down for maintenance
+    actually takes. ``OSError`` is re-raised by the session after it has
+    charged the backoff, and that re-raise is what used to reach the caller.
+    """
+
+    def _unreachable() -> str:
+        raise requests.ConnectionError(_LEAKY_TEXT)
+
+    with (
+        patch.object(parent_client, "export_ical", _unreachable),
+        pytest.raises(HomeAssistantError) as raised,
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_GET_ICAL_URL,
+            {"device_id": _child_device(hass, mock_entry, STUDENT_ONE)},
+            blocking=True,
+            return_response=True,
+        )
+
+    assert raised.value.translation_key == "service_unreachable"
+    assert isinstance(raised.value.__cause__, requests.ConnectionError)
+    assert "NOT-A-REAL-TOKEN" not in str(raised.value)
+
+
+@on_a_student_account
+async def test_a_tick_that_cannot_reach_pronote_sends_nothing_and_boosts_nothing(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    writes_on: PronoteAccount,
+    client: FakeClient,
+) -> None:
+    """A failed write must not look, afterwards, like one that went through.
+
+    The tick reads the homework list first, in the session that posts. When
+    that read fails the post must not follow, and the tier must not be
+    boosted: a boost is what a *successful* write asks for, and armed after a
+    failure it would spend a collection announcing nothing new.
+    """
+
+    def _unreachable(_body: Any) -> dict[str, Any]:
+        raise requests.ConnectionError(_LEAKY_TEXT)
+
+    homework_id = key_of(writes_on, "HOMEWORK-1")
+    client.responses["PageCahierDeTexte"] = _unreachable
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_MARK_HOMEWORK_DONE,
+            {
+                "device_id": _child_device(hass, mock_entry, protocol.STUDENT_ID),
+                "homework_id": homework_id,
+                "done": True,
+            },
+            blocking=True,
+        )
+
+    assert raised.value.translation_key == "service_unreachable"
+    assert "SaisieTAFFaitEleve" not in client.posted_names
+    assert writes_on.scheduler.diagnostics()[str(Tier.HOMEWORK)]["boosted"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -602,13 +828,6 @@ async def test_a_write_is_refused_with_a_reason_by_default(
 
     assert raised.value.translation_key == "writes_disabled"
     assert len(parent_client.posts) == before
-
-
-#: The homework tick is only recorded from a student's own session, so every
-#: test that expects it to land logs in as one.
-on_a_student_account = pytest.mark.parametrize(
-    "account_client", ["student"], indirect=True, ids=["student-account"]
-)
 
 
 @on_a_student_account

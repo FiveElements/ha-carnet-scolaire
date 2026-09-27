@@ -61,7 +61,7 @@ from .gateway import (
     RecipientNotFound,
     WriteNotApplied,
 )
-from .ratelimit import TierDeferred
+from .service_errors import async_run_gesture
 
 if TYPE_CHECKING:
     from datetime import date
@@ -298,17 +298,31 @@ def _require_service(account: PronoteAccount, service: str) -> None:
         return
     if service not in account.connector.capabilities.services:
         raise ServiceValidationError(
-            f"{account.connector.capabilities.source} does not support "
-            f"service {service}"
+            translation_domain=DOMAIN,
+            translation_key="service_not_supported",
+            translation_placeholders={
+                "source": str(account.connector.capabilities.source),
+                "service": service,
+            },
         )
 
 
-def _require_pronote_extras(account: PronoteAccount) -> PronoteExtras:
-    """Refuse callers that need the PRONOTE session façade."""
+def _require_pronote_extras(account: PronoteAccount, service: str) -> PronoteExtras:
+    """Refuse callers that need the PRONOTE session façade.
+
+    Refused with the same sentence as :func:`_require_service`: from the
+    caller's side both say that this source cannot do this, and which layer
+    noticed is not something an automation author can act on.
+    """
     extras = account.extras
     if extras is None:
         raise ServiceValidationError(
-            f"{account.connector.capabilities.source} does not support PRONOTE extras"
+            translation_domain=DOMAIN,
+            translation_key="service_not_supported",
+            translation_placeholders={
+                "source": str(account.connector.capabilities.source),
+                "service": service,
+            },
         )
     return extras
 
@@ -322,25 +336,16 @@ async def _run(
     cost: int,
     priority: Priority = Priority.GESTURE,
 ) -> Any:
-    """Run one gateway call, translating a deferral into a clear error.
+    """Run one gateway call, translating every session failure into a sentence.
 
-    A service that is silently postponed looks like a service that did nothing,
-    so unlike a scheduled collection a deferred service *fails* -- loudly, and
-    saying when to try again.
+    The translation itself lives in :func:`.service_errors.async_run_gesture`,
+    shared with the to-do checkbox, so the two write paths cannot drift apart:
+    a deferral, a refused login, an unreachable server all read the same from
+    a script as from a tap.
     """
-    try:
-        return await extras.session.run(
-            str(tier), priority, fn, student_id=student_id, cost=cost
-        )
-    except TierDeferred as deferred:
-        raise HomeAssistantError(
-            translation_domain=DOMAIN,
-            translation_key="service_deferred",
-            translation_placeholders={
-                "reason": str(deferred.reason),
-                "seconds": str(int(deferred.retry_after)),
-            },
-        ) from deferred
+    return await async_run_gesture(
+        extras, tier, student_id, fn, cost=cost, priority=priority
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -386,7 +391,7 @@ async def _async_get_ical_url(call: ServiceCall) -> ServiceResponse:
     """
     account, student_id = _resolve_student(call.hass, call)
     _require_service(account, SERVICE_GET_ICAL_URL)
-    extras = _require_pronote_extras(account)
+    extras = _require_pronote_extras(account, SERVICE_GET_ICAL_URL)
 
     def work(client: Any) -> tuple[str, int]:
         return extras.gateway.ical_url(client)
@@ -403,7 +408,7 @@ async def _async_get_identity(call: ServiceCall) -> ServiceResponse:
     """
     account, student_id = _resolve_student(call.hass, call)
     _require_service(account, SERVICE_GET_IDENTITY)
-    extras = _require_pronote_extras(account)
+    extras = _require_pronote_extras(account, SERVICE_GET_IDENTITY)
 
     def work(client: Any) -> tuple[Identity, int]:
         return extras.gateway.identity(client)
@@ -456,7 +461,7 @@ async def _async_mark_homework_done(call: ServiceCall) -> None:
     account, student_id = _resolve_student(call.hass, call)
     _require_service(account, SERVICE_MARK_HOMEWORK_DONE)
     _require_writes(account)
-    extras = _require_pronote_extras(account)
+    extras = _require_pronote_extras(account, SERVICE_MARK_HOMEWORK_DONE)
     _require_homework_ticks(account)
     homework_id = call.data[ATTR_HOMEWORK_ID]
     done = call.data[ATTR_DONE]
@@ -477,7 +482,7 @@ async def _async_mark_information_read(call: ServiceCall) -> None:
     account, student_id = _resolve_student(call.hass, call)
     _require_service(account, SERVICE_MARK_INFORMATION_READ)
     _require_writes(account)
-    extras = _require_pronote_extras(account)
+    extras = _require_pronote_extras(account, SERVICE_MARK_INFORMATION_READ)
     information_id = call.data[ATTR_INFORMATION_ID]
 
     def work(client: Any) -> int:
@@ -498,7 +503,7 @@ async def _async_send_message(call: ServiceCall) -> None:
     account, student_id = _resolve_student(call.hass, call)
     _require_service(account, SERVICE_SEND_MESSAGE)
     _require_writes(account)
-    extras = _require_pronote_extras(account)
+    extras = _require_pronote_extras(account, SERVICE_SEND_MESSAGE)
     message = call.data[ATTR_MESSAGE]
     discussion_id = call.data.get(ATTR_DISCUSSION_ID)
     recipients = call.data.get(ATTR_RECIPIENTS)
@@ -552,7 +557,7 @@ async def _async_generate_timetable_pdf(call: ServiceCall) -> ServiceResponse:
     """
     account, student_id = _resolve_student(call.hass, call)
     _require_service(account, SERVICE_GENERATE_TIMETABLE_PDF)
-    extras = _require_pronote_extras(account)
+    extras = _require_pronote_extras(account, SERVICE_GENERATE_TIMETABLE_PDF)
     day: date | None = call.data.get(ATTR_DAY)
     portrait = call.data[ATTR_ORIENTATION] == ORIENTATION_PORTRAIT
 
