@@ -49,6 +49,10 @@ from .conftest import CHILDREN, HAS_HASS_HARNESS, REQUIRES_HASS
 from .fixtures import protocol
 from .fixtures.client import FakeClient
 from .keys import key_of
+from .test_options_flow import (
+    _form_defaults as form_defaults,
+    _open as open_options_section,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -457,9 +461,13 @@ async def test_turning_writes_on_re_declares_the_feature(
     assert state is not None
     assert state.attributes["supported_features"] == TodoListEntityFeature(0)
 
-    hass.config_entries.async_update_entry(
-        mock_entry,
-        options={**mock_entry.options, OPT_WRITE_OPERATIONS_ENABLED: True},
+    # Through the options page, which is what reloads: a bare
+    # `async_update_entry` on the options no longer does (see
+    # `PronoteOptionsFlow`).
+    form = await open_options_section(hass, mock_entry, "general")
+    await hass.config_entries.options.async_configure(
+        form["flow_id"],
+        {**form_defaults(form["data_schema"]), OPT_WRITE_OPERATIONS_ENABLED: True},
     )
     await hass.async_block_till_done()
 

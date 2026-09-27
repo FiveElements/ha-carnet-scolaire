@@ -259,7 +259,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
     # `PronoteAccount.async_start_first_collection`.
     account.async_start_first_collection()
 
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    # No update listener, deliberately. An options save is reloaded by the
+    # options flow itself (`PronoteOptionsFlow`, an `OptionsFlowWithReload`),
+    # and a listener here would make Home Assistant report every
+    # re-authentication and reconfiguration of a loaded entry as a mistake --
+    # see `PronoteConfigFlow._async_finish_reauth`.
     return True
 
 
@@ -304,22 +308,3 @@ async def async_remove_config_entry_device(
     the next restart.
     """
     return (DOMAIN, entry.entry_id) not in device.identifiers
-
-
-async def async_reload_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> None:
-    """Apply an options change by reloading, without a restart (§7.3).
-
-    The schedule survives: intervals are re-read but each tier's deadline is
-    recomputed from its last collection, so shortening an interval does not fire
-    an immediate batch. Otherwise tuning the cadence would cost a full round of
-    requests every time the options page is saved.
-
-    A write to ``entry.data`` is not an options change and must not reload.
-    Home Assistant fires this listener on *any* update, so the guard is here:
-    pairing a child that appeared mid-tick persists the key table, and
-    reloading on that write would restart the account instead of adding the
-    child's entities in place.
-    """
-    if dict(entry.options) == entry.runtime_data.applied_options:
-        return
-    await hass.config_entries.async_reload(entry.entry_id)

@@ -307,8 +307,14 @@ fil de travail depuis la boucle d'événements : le transport `pronotepy` peut
 fuit vaut mieux qu'une instance figée.
 
 Un changement d'options provoque un **rechargement** de l'entrée
-(`async_reload_entry`, `__init__.py`) et non une reconfiguration en
-place. C'est le comportement de Home Assistant, et c'est pourquoi la
+(`PronoteOptionsFlow`, `config_flow.py`, un `OptionsFlowWithReload`) et non une
+reconfiguration en place. L'intégration n'enregistre **aucun** écouteur de mise
+à jour : Home Assistant 2026.9 signale comme une erreur, cassante en 2026.12,
+tout `async_update_reload_and_abort` sur une entrée qui en porte un, c'est-à-dire
+chaque réauthentification et chaque reconfiguration d'un compte chargé. Le
+formulaire ne recharge qu'une entrée **chargée**, comme l'écouteur, qui n'existait
+qu'entre une mise en place réussie et le déchargement. C'est le comportement de
+Home Assistant, et c'est pourquoi la
 préservation des échéances passe par `export_state` / `import_state` et non
 par `FetchScheduler.reconfigure` — voir §4.4.
 
@@ -1207,10 +1213,12 @@ de lot, hors du verrou de session que le lot tenait. Trois choix méritent d'êt
   serait inatteignable. Mais cette liste a été choisie parmi les enfants qui
   existaient *alors* : celui qui n'existait pas n'a jamais été décliné. Il est
   donc ajouté à la sélection, qui est réécrite dans l'entrée.
-* **Une écriture de donnée ne recharge plus.**
-  (`async_reload_entry`, `__init__.py`) ne réagit qu'à un changement d'options, comparé à
-  `PronoteAccount.applied_options`. Sans cette garde, appairer l'enfant
-  rechargeait l'entrée — exactement ce que la manœuvre cherche à éviter.
+* **Une écriture de donnée ne recharge plus.** Seul le formulaire d'options
+  recharge (`PronoteOptionsFlow`, `config_flow.py`), et il ne voit que les
+  options : une écriture dans `entry.data` ne réveille plus rien. Du temps de
+  l'écouteur de mise à jour, qui se déclenchait à toute écriture, il fallait une
+  garde ; sans elle, appairer l'enfant rechargeait l'entrée — exactement ce que
+  la manœuvre cherche à éviter.
 
 Côté entités, (`async_add_per_student`, `entity.py`) garde le rappel
 `async_add_entities` vivant et rejoue la différence à chaque publication du
@@ -1785,7 +1793,7 @@ flowchart TD
 
   OPTS["PronoteOptionsFlow · init, general, tiers, rate_limit"]
   OPTS --> EST["estimate_daily_requests affiche a chaque etape"]
-  EST --> RELOAD["sauvegarde puis async_reload_entry"]
+  EST --> RELOAD["sauvegarde · OptionsFlowWithReload recharge une entree chargee"]
 ```
 
 Quatre choses sont porteuses dans ce flow.
