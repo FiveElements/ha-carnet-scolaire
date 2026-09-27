@@ -36,6 +36,7 @@ from custom_components.carnet_scolaire.gateway import (
     DiscussionIsClosed,
     DiscussionNotFound,
     ItemNotFound,
+    PeriodNotInSession,
     PronoteGateway,
     ProtocolChanged,
     RecipientNotFound,
@@ -1326,6 +1327,70 @@ def test_the_report_card_rides_along_when_asked(
     assert client.posted_names == ["DernieresNotes", "PageBulletins"]
     assert result.facts.report is not None
     assert result.facts.report.subjects[0].name == "Mathématiques"
+
+
+def _posted_period_ids(client: FakeClient) -> list[str]:
+    """The period ``N`` every posted body named, whatever its spelling."""
+    ids: list[str] = []
+    for _name, _tab, body in client.posts:
+        named = body.get("Periode") or body.get("periode")
+        ids.append(str(named["N"]))
+    return ids
+
+
+def test_every_period_scoped_call_posts_the_n_of_the_session_it_runs_in(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """A period read in one session is posted under the next session's ``N``.
+
+    The defect: the session facts are read at set-up and not at every login,
+    so after a reconnection the marks, report, attendance and evaluations
+    requests all carried the ``N`` the *previous* session had encrypted --
+    for ever on a student account, whose facts were never read again. The
+    period is re-resolved on the client that places the call, by position,
+    and at no cost.
+    """
+    stale = gateway.session_facts(client).facts.current_period  # type: ignore[arg-type]
+    assert stale is not None
+    client.rotate_identifiers()
+    live = gateway.session_facts(client).facts.current_period  # type: ignore[arg-type]
+    assert live is not None
+    assert live.id != stale.id
+    assert live.index == stale.index
+    client.posts.clear()
+
+    marks = gateway.marks(client, stale, with_report=True)  # type: ignore[arg-type]
+    attendance = gateway.attendance(client, stale)  # type: ignore[arg-type]
+    evaluations = gateway.evaluations(client, stale)  # type: ignore[arg-type]
+
+    assert _posted_period_ids(client) == [live.id] * 4
+    assert marks.calls + attendance.calls + evaluations.calls == len(client.posts)
+    assert marks.facts.period_id == live.id
+    assert attendance.facts.period_id == live.id
+    assert evaluations.facts.period_id == live.id
+    assert marks.facts.period_index == live.index
+
+
+def test_a_period_the_session_does_not_list_fails_rather_than_posting_a_stale_n(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """No fallback on the ``N`` the caller holds, and no empty success.
+
+    The ``N`` a caller holds is by construction the one that may be stale, so
+    posting it when the position is gone would reintroduce the defect by the
+    back door; answering "no grades" would publish a believable lie. The tier
+    fails and keeps its snapshot, and nothing reaches the wire.
+    """
+    period = gateway.session_facts(client).facts.current_period  # type: ignore[arg-type]
+    assert period is not None
+    gone = dataclasses.replace(period, index=99)
+    client.posts.clear()
+
+    with pytest.raises(PeriodNotInSession) as raised:
+        gateway.marks(client, gone, with_report=True)  # type: ignore[arg-type]
+
+    assert raised.value.index == 99
+    assert client.posts == []
 
 
 def test_a_grade_holds_a_value_or_a_status_never_both(

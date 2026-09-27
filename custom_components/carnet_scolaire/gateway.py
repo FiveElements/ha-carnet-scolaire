@@ -153,6 +153,23 @@ class ProtocolChanged(Exception):  # noqa: N818 -- fails a tier, never a service
         self.path = path
 
 
+class PeriodNotInSession(Exception):  # noqa: N818 -- fails a tier, never a service
+    """The session in hand lists no period at the position a caller asked for.
+
+    A period is identified across sessions by its position, never by its
+    ``N``: every ``N`` is re-encrypted at each login. Raised rather than
+    falling back on the ``N`` the caller holds, because that ``N`` belongs to
+    an earlier session and posting it is the very defect
+    :meth:`PronoteGateway.in_this_session` prevents; and rather than returning
+    an empty collection, which would publish "no grades this term" as a
+    success. The tier fails and keeps its previous snapshot.
+    """
+
+    def __init__(self, index: int) -> None:
+        super().__init__(f"this session lists no period at position {index}")
+        self.index = index
+
+
 class DiscussionNotFound(Exception):  # noqa: N818 -- surfaced as a ServiceValidationError
     """No thread with that identifier is visible to this account."""
 
@@ -805,6 +822,24 @@ class PronoteGateway:
             has_photo=bool(info.raw_resource.get("avecPhoto")),
         )
 
+        periods = self._periods(client)
+        return GatewayResult(
+            SessionFacts(
+                student=student,
+                periods=periods,
+                current_period=self._current_period(client, periods),
+            ),
+            calls=0,
+        )
+
+    def _periods(self, client: HardenedClient) -> tuple[Period, ...]:
+        """The periods as *this* session names them. Zero calls.
+
+        ``ListePeriodes`` belongs to ``FonctionParametres``, which the login
+        already delivered, so reading it again is free -- and it has to be
+        read on the client in hand, because each period's ``N`` is encrypted
+        for one session only.
+        """
         periods: list[Period] = []
         raw_periods = _get(
             client.func_options, "dataSec", "data", "General", "ListePeriodes"
@@ -823,15 +858,28 @@ class PronoteGateway:
                     index=index,
                 )
             )
+        return tuple(periods)
 
-        return GatewayResult(
-            SessionFacts(
-                student=student,
-                periods=tuple(periods),
-                current_period=self._current_period(client, periods),
-            ),
-            calls=0,
-        )
+    def in_this_session(self, client: HardenedClient, period: Period) -> Period:
+        """The same period, under the ``N`` the client in hand knows it by.
+
+        A caller holds a :class:`Period` taken from the session facts, and the
+        session facts are read at set-up and when the roster changes -- not at
+        every login. A login can happen inside any call (the session expired,
+        or ``per_batch`` opened a new one), and that call then carried the
+        previous session's ``N`` onto the wire: on a parent account until the
+        end of the batch, on a student account -- whose roster never changes,
+        so whose facts were never read again -- for as long as Home Assistant
+        ran. Resolved here, inside the call and on the client that places it,
+        so no login anywhere upstream can come between the two.
+
+        By position, the one handle on a period that survives a login
+        (:attr:`Period.index`). Free: no request is placed.
+        """
+        for live in self._periods(client):
+            if live.index == period.index:
+                return live
+        raise PeriodNotInSession(period.index)
 
     def _current_period(
         self, client: HardenedClient, periods: Sequence[Period]
@@ -1284,6 +1332,7 @@ class PronoteGateway:
         re-post ``DernieresNotes`` with the same body
         (dataClasses.py:525/534/548/578).
         """
+        period = self.in_this_session(client, period)
         payload = {"Periode": {"N": period.id, "L": period.name}}
         raw = client.post(FUNC_MARKS[0], FUNC_MARKS[1], payload)
         data = _get(raw, "dataSec", "data") or {}
@@ -1476,6 +1525,7 @@ class PronoteGateway:
         filtering on ``G`` being 13, 14 or 41 (dataClasses.py:606/621/636). One
         request, one filter, three tuples.
         """
+        period = self.in_this_session(client, period)
         payload = {
             "periode": {"N": period.id, "L": period.name, "G": 2},
             "DateDebut": {
@@ -1607,6 +1657,7 @@ class PronoteGateway:
         self, client: HardenedClient, period: Period
     ) -> GatewayResult[EvaluationsFacts]:
         """Competency evaluations for one period, in one request."""
+        period = self.in_this_session(client, period)
         payload = {"periode": {"N": period.id, "L": period.name, "G": 2}}
         raw = client.post(FUNC_EVALUATIONS[0], FUNC_EVALUATIONS[1], payload)
         entries = _required_list(
