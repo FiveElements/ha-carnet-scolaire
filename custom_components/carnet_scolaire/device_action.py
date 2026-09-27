@@ -1,9 +1,9 @@
 """Device actions: what an automation can *do* to a child.
 
 Only the refresh actions are unconditional. Everything that writes to PRONOTE
-is offered only when the user turned write operations on, because a greyed-out
-action a user can pick and that then fails is worse than an action that is
-simply not there (§8.3).
+is offered only when the user turned write operations on *and* the source
+advertises the service behind it, because a greyed-out action a user can pick
+and that then fails is worse than an action that is simply not there (§8.3).
 
 Each action is a thin call onto the domain service of the same name, so there
 is exactly one implementation of "tick a homework item" and the automation
@@ -43,6 +43,15 @@ ACTION_MARK_INFORMATION_READ: Final = "mark_information_read"
 #: Actions that reach PRONOTE with a write. Gated on the option.
 WRITE_ACTIONS: Final = (ACTION_MARK_HOMEWORK_DONE, ACTION_MARK_INFORMATION_READ)
 
+#: The domain service each write action calls. A write is offered only if the
+#: source advertises that service: EcoleDirecte advertises none, and the
+#: option alone left "mark information read" in its editor -- an action whose
+#: every run the service then refused.
+WRITE_ACTION_SERVICE: Final[dict[str, str]] = {
+    ACTION_MARK_HOMEWORK_DONE: SERVICE_MARK_HOMEWORK_DONE,
+    ACTION_MARK_INFORMATION_READ: SERVICE_MARK_INFORMATION_READ,
+}
+
 ACTION_TYPES: Final = (
     ACTION_REFRESH,
     ACTION_REFRESH_MARKS,
@@ -67,9 +76,16 @@ async def async_get_actions(
     if account is None:
         return []
 
+    capabilities = account.connector.capabilities
     types = list(ACTION_TYPES)
     if not account.write_enabled:
         types = [name for name in types if name not in WRITE_ACTIONS]
+    types = [
+        name
+        for name in types
+        if name not in WRITE_ACTION_SERVICE
+        or WRITE_ACTION_SERVICE[name] in capabilities.services
+    ]
     if not account.can_tick_homework:
         # PRONOTE records nothing a parent session ticks, so the editor does
         # not offer an action whose every run would fail.

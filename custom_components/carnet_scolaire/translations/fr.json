@@ -846,6 +846,9 @@
     },
     "trigger_device_not_followed": {
       "message": "L'appareil {device_id} n'est pas un enfant que ce compte suit actuellement : ce déclencheur ne peut donc jamais se produire. Sélectionnez à nouveau l'appareil dans l'automatisation, ou supprimez l'ancien."
+    },
+    "trigger_type_unsupported": {
+      "message": "La source {source} ne produit jamais le changement {type} : ce déclencheur sur l'appareil {device_id} ne pourrait donc jamais se produire. Choisissez un autre déclencheur, ou supprimez celui-ci."
     }
   },
   "issues": {

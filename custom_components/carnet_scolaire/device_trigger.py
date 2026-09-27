@@ -11,6 +11,12 @@ published. This module simply exposes that signal through the device-automation
 contract, filtered on the entry, the child and the event type -- so the trigger
 fires once, for the right child, and its ``trigger.event.data.attributes``
 carries the change (annexe A §4).
+
+What is offered depends on the source. A trigger fires only if some tier the
+connector collects can produce its change, and an EcoleDirecte entry collects
+no news, discussions or evaluations tier -- so "a message arrived" there is a
+card that attaches cleanly and never fires. Such a trigger is neither listed
+nor accepted (`_producible`).
 """
 
 from __future__ import annotations
@@ -32,6 +38,7 @@ from homeassistant.helpers import device_registry as dr
 import voluptuous as vol
 
 from .account import SIGNAL_DELTA
+from .connectors.factory import capabilities_for_source, source_from_entry_data
 from .const import (
     DOMAIN,
     EVENT_ABSENCE_ADDED,
@@ -48,12 +55,16 @@ from .const import (
     EVENT_PUNISHMENT_ADDED,
     EVENT_ROOM_CHANGED,
     EVENT_TEACHER_CHANGED,
+    Tier,
 )
+from .event import EVENTS
 
 if TYPE_CHECKING:
     from homeassistant.core import CALLBACK_TYPE, HomeAssistant
     from homeassistant.helpers.trigger import TriggerActionType, TriggerInfo
     from homeassistant.helpers.typing import ConfigType
+
+    from .connectors.protocol import ConnectorCapabilities
 
 #: One trigger per event type, not per entity. A user thinking "a room
 #: changed" should not have to know that six different changes share one
@@ -81,11 +92,22 @@ TRIGGER_SCHEMA: Final = DEVICE_TRIGGER_BASE_SCHEMA.extend(
     {vol.Required(CONF_TYPE): vol.In(TRIGGER_TYPES)}
 )
 
+#: The tier whose collection produces each change, read off the ``event``
+#: entities rather than restated: an entity and a trigger for the same change
+#: are the same bus signal, and the entity is already created only when the
+#: connector collects its tier. Restating the mapping here is how the two
+#: would one day disagree.
+TRIGGER_TIER: Final[dict[str, Tier]] = {
+    event_type: description.tier
+    for description in EVENTS
+    for event_type in description.event_types or ()
+}
+
 
 async def async_get_triggers(
     hass: HomeAssistant, device_id: str
 ) -> list[dict[str, Any]]:
-    """Offer every change type, for a child's device only.
+    """Offer every change the source can produce, for a child's device only.
 
     The account device is deliberately excluded: it carries the budget
     diagnostics, and "a grade arrived" is not something that happens to an
@@ -93,6 +115,7 @@ async def async_get_triggers(
     """
     if _student_id(hass, device_id) is None:
         return []
+    capabilities = _capabilities(hass, device_id)
     return [
         {
             CONF_PLATFORM: "device",
@@ -101,7 +124,24 @@ async def async_get_triggers(
             CONF_TYPE: trigger_type,
         }
         for trigger_type in TRIGGER_TYPES
+        if _producible(capabilities, trigger_type)
     ]
+
+
+async def async_validate_trigger_config(
+    hass: HomeAssistant, config: ConfigType
+) -> ConfigType:
+    """Refuse a change the device's source can never produce.
+
+    The editor no longer offers one, but an automation written by hand, pasted
+    from a forum or imported in a blueprint is not built from that list. Home
+    Assistant calls this once the integration is set up, which does not mean
+    the entry is: one still retrying has no connector yet, which is why
+    `_capabilities` falls back to the source named in the entry's data.
+    """
+    validated: ConfigType = TRIGGER_SCHEMA(config)
+    _refuse_unproducible(hass, validated)
+    return validated
 
 
 async def async_attach_trigger(
@@ -137,6 +177,10 @@ async def async_attach_trigger(
             translation_key="trigger_device_not_followed",
             translation_placeholders={"device_id": device_id},
         )
+    # Checked again at attach: Home Assistant skips the dynamic validation
+    # when the integration could not be set up, and attaching is the last
+    # point at which an impossible trigger can still be refused.
+    _refuse_unproducible(hass, config)
 
     event_config = event_trigger.TRIGGER_SCHEMA(
         {
@@ -168,6 +212,53 @@ async def async_get_trigger_capabilities(
     fire-or-not invisible in a trace.
     """
     return {"extra_fields": vol.Schema({})}
+
+
+def _capabilities(hass: HomeAssistant, device_id: str) -> ConnectorCapabilities | None:
+    """What the device's source can produce, or ``None`` if nothing says.
+
+    The loaded connector answers when there is one; otherwise the entry's own
+    data names its source, so a disabled EcoleDirecte entry is not suddenly
+    offered PRONOTE's triggers.
+    """
+    entry_id = _entry_id(hass, device_id)
+    if entry_id is None:
+        return None
+    account = hass.data.get(DOMAIN, {}).get(entry_id)
+    if account is not None:
+        loaded: ConnectorCapabilities = account.connector.capabilities
+        return loaded
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if entry is None:
+        return None
+    return capabilities_for_source(source_from_entry_data(dict(entry.data)))
+
+
+def _producible(capabilities: ConnectorCapabilities | None, trigger_type: str) -> bool:
+    """Whether some tier the source collects can produce this change.
+
+    Unknown capabilities read as "yes": refusing then would hide triggers for
+    a reason nobody could see, and nothing can fire on such a device anyway.
+    """
+    return capabilities is None or TRIGGER_TIER[trigger_type] in capabilities.tiers
+
+
+def _refuse_unproducible(hass: HomeAssistant, config: ConfigType) -> None:
+    """Raise the translated refusal for a change the source cannot produce."""
+    device_id = config[CONF_DEVICE_ID]
+    trigger_type = config[CONF_TYPE]
+    capabilities = _capabilities(hass, device_id)
+    if capabilities is None or _producible(capabilities, trigger_type):
+        return
+    raise InvalidDeviceAutomationConfig(
+        translation_domain=DOMAIN,
+        translation_key="trigger_type_unsupported",
+        translation_placeholders={
+            "type": trigger_type,
+            "source": str(capabilities.source),
+            "device_id": device_id,
+        },
+    )
 
 
 def _identifier(hass: HomeAssistant, device_id: str) -> str | None:

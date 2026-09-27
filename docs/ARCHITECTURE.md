@@ -2327,7 +2327,11 @@ désormais tous — avec, au passage, les douze attributs de contexte réellemen
   (`const.py`).
 
 Corollaire côté automatisations : `TRIGGER_TYPES` (`device_trigger.py`) expose **quatorze**
-types de déclencheur, dont ces deux-là.
+types de déclencheur, dont ces deux-là. Chacun n'est proposé — et accepté à la
+validation — que si la source collecte le palier qui le produit : `TRIGGER_TIER`
+lit ce palier sur les entités `event` (`EVENTS`, `event.py`) plutôt que de le
+redire, si bien qu'une entrée EcoleDirecte, sans actualités, messagerie ni
+évaluations, en reçoit onze.
 
 Ce qui reste à surveiller n'est plus l'annexe mais la **duplication** : la même
 liste vit maintenant dans `const.py`, dans le tableau du § 4.10 du guide et dans

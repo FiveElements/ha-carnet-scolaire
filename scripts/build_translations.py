@@ -1781,6 +1781,19 @@ EXCEPTIONS: list[tuple[str, str, str]] = [
             "supprimez l'ancien."
         ),
     ),
+    (
+        "trigger_type_unsupported",
+        (
+            "The {source} source never produces the {type} change, so this "
+            "trigger on device {device_id} could never fire. Choose another "
+            "trigger, or delete this one."
+        ),
+        (
+            "La source {source} ne produit jamais le changement {type} : ce "
+            "déclencheur sur l'appareil {device_id} ne pourrait donc jamais se "
+            "produire. Choisissez un autre déclencheur, ou supprimez celui-ci."
+        ),
+    ),
 ]
 
 ISSUES: list[tuple[str, str, str, str, str]] = [
