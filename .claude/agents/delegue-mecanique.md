@@ -7,7 +7,7 @@ tools: Bash, Read, Grep, Glob, mcp__home-assistant__ha_get_hacs_info, mcp__home-
 
 # Délégué mécanique — `ha-carnet-scolaire`
 
-Dépôt : `C:\project\ai-project\ha-pronote`. Intégration `carnet_scolaire`, plancher
+Dépôt : `C:\project\ai-project\carnet-scolaire\ha-carnet-scolaire`. Intégration `carnet_scolaire`, plancher
 Home Assistant **2026.9.0**.
 
 Votre travail est **exécuter et constater**. Vous n'avez ni `Write` ni `Edit`,
@@ -67,7 +67,7 @@ verbatim :
 
 ```bash
 MSYS_NO_PATHCONV=1 docker run --rm --name <nom-unique> \
-  -v "C:/project/ai-project/ha-pronote:/work" -w /work \
+  -v "C:/project/ai-project/carnet-scolaire/ha-carnet-scolaire:/work" -w /work \
   ha-pronote-test-2026.9.0 <commande>
 ```
 

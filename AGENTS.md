@@ -111,7 +111,7 @@ and `pytest` are not.
 Use a prebuilt Docker image (build once — the HA test stack is large):
 
 ```bash
-MSYS_NO_PATHCONV=1 docker run --rm -v "C:/project/ai-project/ha-pronote:/work" -w /work \
+MSYS_NO_PATHCONV=1 docker run --rm -v "C:/project/ai-project/carnet-scolaire/ha-carnet-scolaire:/work" -w /work \
   ha-pronote-test-2026.9.0 python -m pytest tests -q --no-header --show-capture=no
 ```
 
