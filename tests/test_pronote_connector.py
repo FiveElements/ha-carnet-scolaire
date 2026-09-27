@@ -90,7 +90,7 @@ def test_a_pupils_own_account_announces_itself_as_its_only_child(
     that announces nobody collects nothing -- which is how a pupil's own
     account would present: loaded, no error, no entities.
     """
-    from custom_components.carnet_scolaire.connectors.pronote import _client_student_ids
+    from custom_components.carnet_scolaire.connectors.pronote import _client_children
 
     assert not client.is_parent_account
-    assert _client_student_ids(client) == (str(client.info.id),)
+    assert _client_children(client) == ((str(client.info.id), str(client.info.name)),)

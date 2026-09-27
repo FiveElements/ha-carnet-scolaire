@@ -17,12 +17,16 @@ adoption class below is skipped for want of the harness.
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 from unittest.mock import patch
 
 import pytest
 
-from custom_components.carnet_scolaire.child_keys import pair
+from custom_components.carnet_scolaire.child_keys import (
+    followed,
+    is_legacy_selection,
+    pair,
+)
 from custom_components.carnet_scolaire.const import (
     CHILD_KEY,
     CHILD_NAME,
@@ -185,6 +189,107 @@ class TestPairingChildren:
 
         assert list(keys) == ["46#aaa"]
         assert keys["46#aaa"].startswith("child-")
+
+
+class TestFollowingTheSelection:
+    """`followed` reads the stored choice through the table, never the roster.
+
+    The selection used to be stored as PRONOTE resource identifiers, and each
+    login that renamed a child appended the new one: a one-child account was
+    measured holding eleven, none of them current, warning at every restart
+    that its selection had lapsed and re-following any child it had declined.
+    """
+
+    #: Two siblings, both known, as the table holds them after a set-up.
+    STORED: Final = (
+        _record("child-1", "46#one-before", "Enfant Un"),
+        _record("child-2", "46#two-before", "Enfant Deux"),
+    )
+
+    def _rotated(
+        self, *extra: tuple[str, str]
+    ) -> tuple[list[dict[str, str]], dict[str, str]]:
+        """What `pair` makes of the same two children renamed, plus ``extra``."""
+        keys, table, _ = pair(
+            self.STORED,
+            [("46#one-after", "Enfant Un"), ("46#two-after", "Enfant Deux"), *extra],
+        )
+        return table, keys
+
+    def test_a_declined_child_stays_declined_across_a_rotation(self) -> None:
+        """The choice survives the one event that always happens.
+
+        Keyed by identifier, the selection matched nothing after a rotation and
+        the fallback followed both children -- the one the parent had unticked
+        included, with its whole request budget.
+        """
+        table, keys = self._rotated()
+
+        assert followed(self.STORED, table, ["child-1"], keys) == ["child-1"]
+
+    def test_a_child_the_table_never_saw_is_followed(self) -> None:
+        """Unknown is not refused: nobody was ever asked about this child."""
+        table, keys = self._rotated(("46#three", "Enfant Trois"))
+
+        assert followed(self.STORED, table, ["child-1"], keys) == [
+            "child-1",
+            "child-3",
+        ]
+
+    def test_an_empty_selection_follows_every_child(self) -> None:
+        """What an entry with no stored choice has always meant."""
+        table, keys = self._rotated()
+
+        assert followed(self.STORED, table, [], keys) == ["child-1", "child-2"]
+
+    def test_a_legacy_selection_is_translated_through_the_stored_identifier(
+        self,
+    ) -> None:
+        """The identifier the record held *before* this pairing replaced it.
+
+        That is the only place a legacy value can still be recognised once
+        PRONOTE has rotated it: the roster no longer carries it.
+        """
+        table, keys = self._rotated()
+
+        assert followed(self.STORED, table, ["46#two-before"], keys) == ["child-2"]
+
+    def test_a_legacy_selection_is_translated_through_the_roster_too(self) -> None:
+        """A flow-fresh entry: nothing has rotated and nothing is paired yet.
+
+        The child left out of the selection was unticked in the flow, so its
+        freshly minted key is declined rather than adopted as a newcomer.
+        """
+        keys, table, _ = pair(
+            [], [("46#one-now", "Enfant Un"), ("46#two-now", "Enfant Deux")]
+        )
+
+        assert followed([], table, ["46#one-now"], keys) == [keys["46#one-now"]]
+
+    def test_a_bloated_legacy_selection_keeps_what_it_followed(self) -> None:
+        """The measured entry: eleven dead identifiers for one child.
+
+        Nothing can be placed, so the account was following every child to
+        recover; it keeps following exactly those, and nothing the user sees
+        changes.
+        """
+        stored = [_record("child-1", "46#latest", "Enfant Un")]
+        keys, table, _ = pair(stored, [("46#fresh", "Enfant Un")])
+        bloated = [f"46#dead-{index}" for index in range(11)]
+
+        assert followed(stored, table, bloated, keys) == ["child-1"]
+
+    def test_a_key_in_a_mixed_selection_is_read_as_a_key(self) -> None:
+        """A half-written list is still read for what it holds."""
+        table, keys = self._rotated()
+
+        assert followed(self.STORED, table, ["child-2", "46#dead"], keys) == ["child-2"]
+
+    def test_only_a_value_that_is_not_ours_makes_a_selection_legacy(self) -> None:
+        """The form is told apart by the key format, not by a version flag."""
+        assert not is_legacy_selection(["child-1", "child-2"])
+        assert is_legacy_selection(["child-1", "46#NOT-A-REAL-N"])
+        assert not is_legacy_selection([])
 
 
 # `importorskip` was wrong here and the mistake is worth naming: on Windows

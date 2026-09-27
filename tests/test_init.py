@@ -1356,7 +1356,7 @@ async def test_no_tab_call_happens_outside_the_selection_it_belongs_to(
         assert snapshot.student_id == student_id
 
 
-async def test_a_stale_child_selection_says_so_instead_of_recovering_quietly(
+async def test_a_stale_child_selection_is_recovered_and_rewritten_as_keys(
     hass: HomeAssistant,
     mock_entry: MockConfigEntry,
     parent_client: FakeClient,
@@ -1364,31 +1364,23 @@ async def test_a_stale_child_selection_says_so_instead_of_recovering_quietly(
     no_spacing: None,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """The silence that hid the worst defect this integration has had.
+    """A selection stored as identifiers that no longer exist is not an error.
 
     A PRONOTE resource identifier is written ``46#<signature>``, and that
-    signature is **not stable between sessions**. So the identifiers stored in
-    ``entry.data["children"]`` at configuration time eventually match nothing
-    the account announces, and following every child instead is the right
-    recovery -- refusing to collect because a stored string went stale would
-    take the whole integration down.
+    signature is **not stable between sessions**, so a selection stored as
+    identifiers eventually matches nothing. Following every child is the right
+    recovery -- refusing to collect would take the whole integration down --
+    and it used to be announced by a WARNING at every restart, telling the
+    reader to re-select, which only stored the next identifier to go stale.
 
-    Recovering *quietly* is what cost. An entity's ``unique_id`` embeds the
-    identifier, so a changed one creates a new device and a full set of new
-    entities while the previous generation is orphaned in the registry:
-    every dashboard, automation and helper pointing at it dead, and nothing
-    logged anywhere. On a live instance three generations accumulated before
-    anybody noticed, and only because a dashboard read the dead set.
-
-    ``config_flow._account_identity`` already learned this lesson for the
-    account identifier -- it drops the signature before comparing, and its
-    docstring explains why. Nobody carried it here.
+    Now the recovery is permanent: the selection is rewritten as the minted
+    keys of the children followed, said once at INFO, and never again.
     """
     hass.config_entries.async_update_entry(
         mock_entry,
         data={**mock_entry.data, CONF_CHILDREN: ["46#a-signature-from-last-session"]},
     )
-    caplog.set_level(logging.WARNING)
+    caplog.set_level(logging.INFO)
 
     with patch(
         "custom_components.carnet_scolaire.session.build_client",
@@ -1398,14 +1390,19 @@ async def test_a_stale_child_selection_says_so_instead_of_recovering_quietly(
         await hass.async_block_till_done()
 
         account = mock_entry.runtime_data
-        # Recovered: every announced child is followed, so the account works.
         assert {student.id for student in account.students} == {
             child_id for child_id, _name in CHILDREN
         }
-        # And said so, naming both counts so the reader can see it is a
-        # mismatch and not an empty account.
-        assert "selected children match" in caplog.text
-        assert "not stable between sessions" in caplog.text
+        assert mock_entry.data[CONF_CHILDREN] == [
+            account.stable_key(child_id) for child_id, _name in CHILDREN
+        ]
+        assert "now stored as the 2 minted key(s)" in caplog.text
+        assert not [
+            r
+            for r in caplog.records
+            if r.levelno >= logging.WARNING
+            and r.name.startswith("custom_components.carnet_scolaire")
+        ]
 
         await hass.config_entries.async_unload(mock_entry.entry_id)
         await hass.async_block_till_done()

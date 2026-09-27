@@ -120,6 +120,8 @@ class SchoolConnector(Protocol):
 
     def student_ids(self) -> tuple[str, ...]: ...
 
+    def announced_children(self) -> tuple[tuple[str, str], ...]: ...
+
     async def async_collect(
         self,
         tier: Tier,

@@ -1202,17 +1202,24 @@ connexion — cinq à sept requêtes sur un plafond de vingt-quatre par jour —
 pour un évènement qui survient une ou deux fois dans une scolarité.
 
 (`PronoteAccount._async_adopt_announced_children`, `account.py`) compare en fin
-de lot, hors du verrou de session que le lot tenait. Trois choix méritent d'être énoncés :
+de lot, hors du verrou de session que le lot tenait. Un identifiant qu'il n'a
+pas encore vu relance l'appairage de
+(`PronoteAccount._async_pair_children`, `account.py`), qui seul décide. Trois
+choix méritent d'être énoncés :
 
-* **Le repère est la liste annoncée au démarrage**, ni les enfants suivis ni les
-  clés déjà frappées. Ces deux-là excluent un enfant que l'utilisateur a
-  décoché dans le flow, qui deviendrait alors un nouveau venu au premier lot et
-  verrait son choix défait.
-* **Inconnu n'est pas refusé.** Toute entrée réelle porte une sélection
-  d'enfants, donc un enfant inscrit plus tard en serait filtré et la règle
-  serait inatteignable. Mais cette liste a été choisie parmi les enfants qui
-  existaient *alors* : celui qui n'existait pas n'a jamais été décliné. Il est
-  donc ajouté à la sélection, qui est réécrite dans l'entrée.
+* **La sélection est rangée en clés frappées**, jamais en identifiants de
+  ressource. Rangée en identifiants, elle suivait la valeur même que PRONOTE
+  renouvelle : chaque connexion qui renommait l'enfant en faisait un « nouveau
+  venu », son identifiant était ajouté, et un compte à un enfant en a compté
+  onze, dont aucun ne correspondait plus. La table des clés garde maintenant
+  *chaque* enfant annoncé, suivi ou non : un enfant décoché dans le flow y a
+  sa fiche et reste hors de la sélection, si bien qu'une rotation, reconnue
+  par la fiche, ne le fait jamais revenir. Une sélection encore en
+  identifiants est traduite une fois, par (`followed`, `child_keys.py`).
+* **Inconnu n'est pas refusé.** Un enfant que la table n'a jamais vu n'a
+  jamais été décliné — la sélection a été choisie parmi les enfants qui
+  existaient *alors*. Il reçoit une clé, est suivi, et sa clé rejoint la
+  sélection, réécrite dans l'entrée.
 * **Une écriture de donnée ne recharge plus.** Seul le formulaire d'options
   recharge (`PronoteOptionsFlow`, `config_flow.py`), et il ne voit que les
   options : une écriture dans `entry.data` ne réveille plus rien. Du temps de

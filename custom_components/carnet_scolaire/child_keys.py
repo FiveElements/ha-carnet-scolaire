@@ -154,3 +154,69 @@ def pair(
         keys[resource_id] = match[CHILD_KEY]
 
     return keys, records, notes
+
+
+def is_legacy_selection(selection: Sequence[str]) -> bool:
+    """Whether a stored selection still names PRONOTE identifiers.
+
+    The followed children used to be stored as the resource identifiers
+    PRONOTE announced at configuration time -- the very values that rotate. A
+    selection holding any value that is not one of our keys is in that form,
+    and :func:`followed` translates it once.
+    """
+    return any(not is_minted(value) for value in selection)
+
+
+def followed(
+    stored: Sequence[Mapping[str, str]],
+    table: Sequence[Mapping[str, str]],
+    selection: Sequence[str],
+    keys: Mapping[str, str],
+) -> list[str]:
+    """The minted keys of the children to follow, in table order.
+
+    ``stored`` is the key table before this pairing; ``table`` and ``keys``
+    are what :func:`pair` returned for *every* announced child, followed or
+    not -- a child the user chose not to follow must still be recognised after
+    a rotation, or it would look new and be adopted. ``selection`` is the
+    stored choice.
+
+    The table records every child the account ever announced, so the choice
+    reads in two parts: a key in ``selection`` is followed, a key in the table
+    but not in ``selection`` was declined. A key this pairing has just minted
+    is a child nobody was ever asked about, and *unknown is not refused*: it
+    is followed. An empty selection follows everybody, as it always has.
+
+    A selection still in the legacy form -- resource identifiers -- is
+    translated through the identifier each record held *before* this pairing
+    replaced it, or directly through the roster when nothing has rotated since
+    it was written. In that form a child absent from the selection was
+    declined in the flow, so a key minted now is *not* followed. The one
+    exception is a selection of which nothing can be placed at all: the list
+    had gone stale, the account was already following every child to recover,
+    and it keeps doing so. That is an entry whose list grew by one identifier
+    per login; its choice cannot be read back out of identifiers that no
+    longer exist, and following what it already followed is the only answer
+    that changes nothing the user can see.
+    """
+    every = [record[CHILD_KEY] for record in table]
+    if not selection:
+        return every
+    if not is_legacy_selection(selection):
+        known = {record[CHILD_KEY] for record in stored}
+        chosen = set(selection) | {key for key in every if key not in known}
+        return [key for key in every if key in chosen]
+
+    by_resource = {
+        record[CHILD_RESOURCE_ID]: record[CHILD_KEY]
+        for record in stored
+        if record.get(CHILD_RESOURCE_ID)
+    }
+    placed: set[str] = set()
+    for value in selection:
+        key = value if is_minted(value) else keys.get(value) or by_resource.get(value)
+        if key is not None:
+            placed.add(key)
+    if not placed:
+        return every
+    return [key for key in every if key in placed]

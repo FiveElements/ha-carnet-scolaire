@@ -114,6 +114,7 @@ class PronoteConnector:
         )
         self._history_periods = history_periods
         self._student_ids: tuple[str, ...] = ()
+        self._children: tuple[tuple[str, str], ...] = ()
         self._session_facts: dict[str, SessionFacts] = {}
         self._unread_by_student: dict[str, dict[str, int]] = {}
 
@@ -143,12 +144,13 @@ class PronoteConnector:
 
     async def async_open(self) -> None:
         """Open the session and discover its children without reading their facts."""
-        self._student_ids = await self.session.run(
+        self._children = await self.session.run(
             str(Tier.SESSION),
             Priority.CRITICAL,
-            _client_student_ids,
+            _client_children,
             cost=0,
         )
+        self._student_ids = tuple(child_id for child_id, _ in self._children)
         self._session_facts.clear()
 
     async def async_load_session_facts(self, student_ids: Sequence[str]) -> None:
@@ -166,6 +168,17 @@ class PronoteConnector:
     def student_ids(self) -> tuple[str, ...]:
         """Return every child announced by the opened session."""
         return self._student_ids
+
+    def announced_children(self) -> tuple[tuple[str, str], ...]:
+        """Every child the last ``async_open`` announced, as ``(id, name)``.
+
+        What the account pairs against its key table *before* choosing whom
+        to follow, so it can recognise a child whose identifier PRONOTE
+        rotated without decoding that child's facts -- a child the user chose
+        not to follow is never selected on the client, whatever its payload
+        holds.
+        """
+        return self._children
 
     def session_facts(self, student_id: str) -> SessionFacts:
         """Return the bootstrap facts cached while opening the session."""
@@ -383,12 +396,18 @@ class PronoteConnector:
         }
 
 
-def _client_student_ids(client: Any) -> tuple[str, ...]:
-    """Return child identifiers without leaking the client to the event loop."""
-    children: tuple[str, ...] = tuple(str(child.id) for child in client.children)
+def _client_children(client: Any) -> tuple[tuple[str, str], ...]:
+    """Return ``(id, name)`` per child without leaking the client to the loop.
+
+    Both are plain reads of the resource the handshake already delivered
+    (``N`` and ``L``), so this places no request and selects no child.
+    """
+    children: tuple[tuple[str, str], ...] = tuple(
+        (str(child.id), str(child.name)) for child in client.children
+    )
     if children:
         return children
-    return (str(client.info.id),)
+    return ((str(client.info.id), str(client.info.name)),)
 
 
 def _empty_marks() -> MarksFacts:

@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.components.diagnostics import async_redact_data
 
+from .child_keys import is_minted
 from .const import (
     CHILD_KEY,
     CHILD_NAME,
@@ -85,10 +86,17 @@ async def async_get_config_entry_diagnostics(
     # docstring gives: "both children show the same tier failing" stays legible
     # if the ids are comparable, and the fingerprints match the `students`
     # block, so the two can be read against each other.
+    #
+    # Once paired, the selection holds minted keys instead, which stay in clear
+    # for the reason the key table below gives; only a value still in the old
+    # identifier form is fingerprinted.
     if CONF_CHILDREN in data:
         selection = data[CONF_CHILDREN]
         if isinstance(selection, list):
-            data[CONF_CHILDREN] = [_short_hash(str(child)) for child in selection]
+            data[CONF_CHILDREN] = [
+                str(child) if is_minted(str(child)) else _short_hash(str(child))
+                for child in selection
+            ]
 
     # The child key table, reduced the same way and for a stronger reason: it
     # is the one structure in the entry that holds a child's **name**, which
