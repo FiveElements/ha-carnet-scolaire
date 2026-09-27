@@ -1877,9 +1877,25 @@ class PronoteClockSensor(ClockDrivenMixin, PronoteSensor):
 
 
 class PronoteHistorySensor(PronoteEntity, SensorEntity):
-    """A sensor for one closed period, keyed by period index."""
+    """A sensor for one closed period, keyed by period index.
+
+    Disabled by default (quality scale, ``entity-disabled-by-default``). Eight
+    of these appear per closed period and the count grows through the year --
+    an establishment publishing trimesters *and* semesters reaches dozens per
+    child -- each written to the recorder on every daily refresh, for figures
+    that no longer change. They exist to be read, not to trigger anything (no
+    blueprint, device trigger, device condition or dashboard card reads them),
+    so a household that wants one enables it. Only newly registered entities
+    are affected: a registry entry that already exists keeps its state.
+
+    Disabling does not stop the ``history`` tier collecting: the tier does not
+    know which of its entities are enabled, so its requests are still spent.
+    Switching the tier off in the options (``tier_enabled``) is what saves
+    them.
+    """
 
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self,

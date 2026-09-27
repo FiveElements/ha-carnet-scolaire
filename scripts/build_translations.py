@@ -11,6 +11,9 @@ is its copy, and ``translations/fr.json`` carries the French. Nothing
 user-visible is hard-coded anywhere in ``custom_components/`` -- that is what
 the accompanying test verifies.
 
+``services.yaml`` and ``icons.json`` come from here too, for the same reason:
+one table, and a test that asserts each file is its output.
+
 Run: ``python scripts/build_translations.py``
 """
 
@@ -1619,6 +1622,105 @@ EXCEPTIONS: list[tuple[str, str, str]] = [
             "d'un devoir appartiennent au professeur, dans PRONOTE."
         ),
     ),
+    # Set-up failures (`__init__.py`). Home Assistant shows these on the
+    # integration card, and they replace `str(error)`, which could quote a
+    # server page or an address carrying session parameters. The only
+    # placeholder is `failures.describe_failure`: class names and a fixed
+    # category, useful in a bug report, and never anything the server sent.
+    (
+        "setup_auth_failed",
+        (
+            "The school platform refused the saved login, or asks for a "
+            "confirmation [{error_type}]. Re-authenticate the integration."
+        ),
+        (
+            "La plateforme scolaire a refusé la connexion enregistrée, ou "
+            "demande une confirmation [{error_type}]. Réauthentifiez "
+            "l'intégration."
+        ),
+    ),
+    (
+        "setup_unreachable",
+        (
+            "The school platform's login page could not be read "
+            "[{error_type}]. The integration will try again."
+        ),
+        (
+            "La page de connexion de la plateforme scolaire est illisible "
+            "[{error_type}]. L'intégration réessaiera."
+        ),
+    ),
+    (
+        "setup_login_postponed",
+        (
+            "The login was refused or postponed [{error_type}]. The "
+            "integration will try again."
+        ),
+        (
+            "La connexion a été refusée ou différée [{error_type}]. "
+            "L'intégration réessaiera."
+        ),
+    ),
+    (
+        "setup_unreadable",
+        (
+            "The school platform answered with data this integration cannot "
+            "read [{error_type}]. The integration will try again."
+        ),
+        (
+            "La plateforme scolaire a répondu par des données que cette "
+            "intégration ne sait pas lire [{error_type}]. L'intégration "
+            "réessaiera."
+        ),
+    ),
+    (
+        "setup_server_refused",
+        (
+            "The school platform refused the request [{error_type}]. The "
+            "integration will try again."
+        ),
+        (
+            "La plateforme scolaire a refusé la requête [{error_type}]. "
+            "L'intégration réessaiera."
+        ),
+    ),
+    (
+        "setup_network_error",
+        (
+            "The school platform could not be reached [{error_type}]. The "
+            "integration will try again."
+        ),
+        (
+            "La plateforme scolaire est injoignable [{error_type}]. "
+            "L'intégration réessaiera."
+        ),
+    ),
+    # Device automations (`device_condition.py`, `device_trigger.py`).
+    (
+        "condition_entity_missing",
+        (
+            "There is no {key} entity on device {device_id}: this "
+            "establishment does not publish the data this condition reads."
+        ),
+        (
+            "L'appareil {device_id} n'a pas d'entité {key} : cet "
+            "établissement ne publie pas la donnée que lit cette condition."
+        ),
+    ),
+    (
+        "trigger_device_not_followed",
+        (
+            "Device {device_id} is not a child this account currently "
+            "follows, so this trigger can never fire. Select the device again "
+            "in the automation, or delete the stale one."
+        ),
+        (
+            "L'appareil {device_id} n'est pas un enfant que ce compte suit "
+            "actuellement : ce déclencheur ne peut donc jamais se produire. "
+            "Sélectionnez à nouveau l'appareil dans l'automatisation, ou "
+            "supprimez l'ancien."
+        ),
+    ),
 ]
 
 ISSUES: list[tuple[str, str, str, str, str]] = [
@@ -1802,6 +1904,169 @@ EVENT_TYPES_BY_ENTITY: dict[str, tuple[str, ...]] = {
     "new_punishment": ("punishment_added",),
     "new_message": ("message_received",),
     "new_evaluation": ("evaluation_added",),
+}
+
+# ---------------------------------------------------------------------------
+# Icons (`icons.json`), per platform and translation key
+#
+# Keyed exactly like the entity tables above, and `_icons` refuses to build a
+# file in which one of them has no icon: an entity added to a table without an
+# icon fails the generator, and the test comparing `icons.json` to this output,
+# rather than shipping with whatever its device class happens to draw.
+#
+# A value is either a bare icon (the `default`) or a mapping. For a binary
+# sensor the default is the `on` picture and `state.off` the other one; the
+# limiter's ENUM sensor has one icon per state. hassfest rejects a state icon
+# identical to its default, so the tables never repeat it.
+# ---------------------------------------------------------------------------
+
+ENTITY_ICONS: dict[str, dict[str, str | dict[str, Any]]] = {
+    "sensor": {
+        "next_lesson": "mdi:book-clock",
+        "end_of_lessons": "mdi:bell-ring-outline",
+        "morning_end": "mdi:clock-end",
+        "next_cancellation": "mdi:calendar-remove",
+        "next_wake_up": "mdi:alarm",
+        "next_test": "mdi:clipboard-text-clock",
+        "lessons_today": "mdi:book-open-page-variant",
+        "homework_todo": "mdi:notebook-edit",
+        "homework_tomorrow": "mdi:bag-personal",
+        "latest_grade": "mdi:star-box",
+        "overall_average": "mdi:chart-line",
+        "class_average": "mdi:account-group",
+        "next_punishment": "mdi:gavel",
+        "unjustified_absences": "mdi:account-question",
+        "unread_information": "mdi:newspaper-variant",
+        "unread_messages": "mdi:email-alert",
+        "current_period": "mdi:calendar-range",
+        "timetable_tomorrow": "mdi:calendar-arrow-right",
+        "timetable_week": "mdi:calendar-week",
+        "homework": "mdi:notebook",
+        "grades": "mdi:format-list-numbered",
+        "averages": "mdi:chart-bar",
+        "report_card": "mdi:file-certificate",
+        "absences": "mdi:account-off",
+        "delays": "mdi:clock-alert",
+        "punishments": "mdi:alert-octagon",
+        "evaluations": "mdi:check-decagram",
+        "information": "mdi:newspaper",
+        "discussions": "mdi:forum",
+        "menu_today": "mdi:silverware-fork-knife",
+        "menu_tomorrow": "mdi:food",
+        "teaching_staff": "mdi:human-male-board",
+        "class_name": "mdi:google-classroom",
+        "periods": "mdi:calendar-multiple",
+        # A closed period reads like its current-period sibling.
+        "grades_period": "mdi:format-list-numbered",
+        "averages_period": "mdi:chart-bar",
+        "overall_average_period": "mdi:chart-line",
+        "report_card_period": "mdi:file-certificate",
+        "absences_period": "mdi:account-off",
+        "delays_period": "mdi:clock-alert",
+        "punishments_period": "mdi:alert-octagon",
+        "evaluations_period": "mdi:check-decagram",
+        "calls_today": "mdi:counter",
+        "remaining_budget": "mdi:gauge",
+        "last_collection": "mdi:cloud-download",
+        "next_collection": "mdi:timer-sand",
+        "session_age": "mdi:timer-outline",
+        "session_lifetime": "mdi:history",
+        "logins_today": "mdi:login",
+        "limiter_state": {
+            "default": "mdi:speedometer",
+            "state": {
+                "nominal": "mdi:check-circle",
+                "throttled": "mdi:speedometer-slow",
+                "backoff": "mdi:pause-circle",
+                "quiet_hours": "mdi:weather-night",
+                "credentials_hold": "mdi:account-lock",
+                "bootstrap_failed": "mdi:web-off",
+            },
+        },
+    },
+    "binary_sensor": {
+        "school_day": {"default": "mdi:school", "state": {"off": "mdi:home"}},
+        "in_class": {
+            "default": "mdi:account-school",
+            "state": {"off": "mdi:account-school-outline"},
+        },
+        "lessons_canceled": {
+            "default": "mdi:calendar-remove",
+            "state": {"off": "mdi:calendar-check"},
+        },
+        "outing_today": {
+            "default": "mdi:bus-school",
+            "state": {"off": "mdi:school-outline"},
+        },
+        "test_today": {
+            "default": "mdi:clipboard-text",
+            "state": {"off": "mdi:clipboard-outline"},
+        },
+        "holidays": {"default": "mdi:beach", "state": {"off": "mdi:school"}},
+        "homework_overdue": {
+            "default": "mdi:book-alert",
+            "state": {"off": "mdi:book-check"},
+        },
+        "absence_in_progress": {
+            "default": "mdi:account-alert",
+            "state": {"off": "mdi:account-check"},
+        },
+        "punishment_upcoming": {
+            "default": "mdi:gavel",
+            "state": {"off": "mdi:check"},
+        },
+        "throttled": {
+            "default": "mdi:speedometer-slow",
+            "state": {"off": "mdi:speedometer"},
+        },
+    },
+    "calendar": {
+        "timetable": "mdi:calendar-clock",
+        "homework": "mdi:calendar-edit",
+        "punishments": "mdi:calendar-alert",
+    },
+    "todo": {"homework": "mdi:clipboard-check-outline"},
+    "button": {"refresh": "mdi:refresh", "refresh_marks": "mdi:sync"},
+    "event": {
+        "new_grade": "mdi:star-plus",
+        "new_homework": "mdi:notebook-plus",
+        # An event entity's state is the type of its last event, so the icon
+        # can say which aspect of the lesson changed.
+        "lesson_changed": {
+            "default": "mdi:calendar-sync",
+            "state_attributes": {
+                "event_type": {
+                    "state": {
+                        "lesson_canceled": "mdi:calendar-remove",
+                        "lesson_restored": "mdi:calendar-check",
+                        "lesson_moved": "mdi:calendar-arrow-right",
+                        "room_changed": "mdi:door",
+                        "teacher_changed": "mdi:human-male-board",
+                        "lesson_status_changed": "mdi:information-outline",
+                    }
+                }
+            },
+        },
+        "new_information": "mdi:newspaper-plus",
+        "new_absence": "mdi:account-alert",
+        "new_delay": "mdi:clock-alert",
+        "new_punishment": "mdi:gavel",
+        "new_message": "mdi:email-plus",
+        "new_evaluation": "mdi:check-decagram",
+    },
+    "image": {"photo": "mdi:account-box"},
+}
+
+SERVICE_ICONS: dict[str, str] = {
+    "refresh": "mdi:refresh",
+    "get_ical_url": "mdi:calendar-export",
+    "get_identity": "mdi:card-account-details",
+    "mark_homework_done": "mdi:notebook-check",
+    "mark_information_read": "mdi:email-open",
+    "send_message": "mdi:send",
+    "generate_timetable_pdf": "mdi:file-pdf-box",
+    "get_rate_limit_status": "mdi:speedometer",
+    "get_attachment_url": "mdi:paperclip",
 }
 
 
@@ -2057,6 +2322,36 @@ def _catalogue(index: int) -> dict[str, Any]:
     }
 
 
+def _icons() -> dict[str, Any]:
+    """``icons.json``: one icon per entity translation key and per service.
+
+    Raises rather than builds when a table and ``ENTITY_ICONS`` disagree, so a
+    new entity cannot ship without an icon and a removed one cannot leave a
+    stale entry behind.
+    """
+    entity: dict[str, Any] = {}
+    for platform, names in _entities(1).items():
+        icons = ENTITY_ICONS.get(platform, {})
+        if set(icons) != set(names):
+            missing = sorted(set(names) - set(icons))
+            stale = sorted(set(icons) - set(names))
+            message = f"{platform}: no icon for {missing}, stale icon for {stale}"
+            raise ValueError(message)
+        entity[platform] = {
+            key: (value if isinstance(value, dict) else {"default": value})
+            for key, value in icons.items()
+        }
+    services = [str(service["key"]) for service in SERVICES]
+    if set(SERVICE_ICONS) != set(services):
+        disagreement = sorted(set(SERVICE_ICONS) ^ set(services))
+        message = f"service icons disagree with SERVICES: {disagreement}"
+        raise ValueError(message)
+    return {
+        "entity": entity,
+        "services": {key: {"service": SERVICE_ICONS[key]} for key in services},
+    }
+
+
 def _services_yaml() -> str:
     """``services.yaml``: structure only, no user-visible text.
 
@@ -2130,7 +2425,7 @@ def _services_yaml() -> str:
 
 
 def main() -> None:
-    """Write the three catalogues and ``services.yaml``."""
+    """Write the three catalogues, ``services.yaml`` and ``icons.json``."""
     english = _catalogue(1)
     french = _catalogue(2)
 
@@ -2151,6 +2446,13 @@ def main() -> None:
     services_path = COMPONENT / "services.yaml"
     services_path.write_text(_services_yaml(), encoding="utf-8")
     print(f"wrote {services_path.relative_to(ROOT)}")
+
+    icons_path = COMPONENT / "icons.json"
+    icons_path.write_text(
+        json.dumps(_icons(), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    print(f"wrote {icons_path.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

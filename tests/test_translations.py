@@ -18,6 +18,7 @@ against the code that references them, and against each other.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 from pathlib import Path
@@ -110,6 +111,212 @@ def test_the_catalogues_are_what_the_generator_produces() -> None:
     assert (COMPONENT / "services.yaml").read_text(
         encoding="utf-8"
     ) == module._services_yaml()
+    assert _catalogue("icons.json") == module._icons()
+
+
+# ---------------------------------------------------------------------------
+# icons.json (quality scale `icon-translations`)
+# ---------------------------------------------------------------------------
+
+
+def _icon_values(payload: Any) -> list[str]:
+    """Every icon string in ``icons.json``, wherever it sits."""
+    return list(_flatten(payload).values())
+
+
+def test_every_icon_is_a_material_design_icon() -> None:
+    """hassfest's ``icon_value_validator``: an ``mdi:`` name and nothing else."""
+    icons = _catalogue("icons.json")
+
+    values = _icon_values(icons)
+    assert values
+    assert all(value.startswith("mdi:") for value in values), values
+
+
+def test_no_state_icon_repeats_its_default() -> None:
+    """hassfest rejects it (``ensure_not_same_as_default``), and it adds nothing.
+
+    Checked for the entity's own states and for its state attributes, since a
+    binary sensor's ``off`` and an event type's picture are both states.
+    """
+    for platform, keys in _catalogue("icons.json")["entity"].items():
+        for key, spec in keys.items():
+            assert spec.get("default"), f"{platform}.{key} has no default icon"
+            for state, icon in (spec.get("state") or {}).items():
+                assert icon != spec["default"], f"{platform}.{key}.{state}"
+            for attribute, sub in (spec.get("state_attributes") or {}).items():
+                default = sub.get("default")
+                for state, icon in (sub.get("state") or {}).items():
+                    assert icon != default, f"{platform}.{key}.{attribute}.{state}"
+
+
+def test_the_state_icons_name_only_states_the_entity_can_take() -> None:
+    """An icon for a state that never occurs is a typo nobody will see.
+
+    A binary sensor is ``on`` or ``off``; the limiter's states are the
+    ``LimiterState`` values, all of them, so a new state cannot appear with the
+    generic picture; and the lesson entity's event types are the six it
+    declares.
+    """
+    from custom_components.carnet_scolaire.const import (
+        LESSON_EVENT_TYPES,
+        LimiterState,
+    )
+
+    entity = _catalogue("icons.json")["entity"]
+
+    for key, spec in entity["binary_sensor"].items():
+        assert set(spec.get("state") or {}) <= {"on", "off"}, key
+    assert set(entity["sensor"]["limiter_state"]["state"]) == {
+        str(state) for state in LimiterState
+    }
+    lesson_types = entity["event"]["lesson_changed"]["state_attributes"]["event_type"]
+    assert set(lesson_types["state"]) == set(LESSON_EVENT_TYPES)
+
+
+def test_every_service_has_an_icon() -> None:
+    """The actions list draws a blank square for a service with no icon."""
+    services = _catalogue("icons.json")["services"]
+
+    assert set(services) == {key for key, *_rest in _SERVICES}
+    assert all(spec.get("service") for spec in services.values())
+
+
+def test_every_translated_entity_key_has_an_icon() -> None:
+    """The static half: a key in the entity catalogue must have an icon.
+
+    ``_icons`` already refuses to build otherwise; this says so in the test
+    report rather than as a traceback from the generator.
+    """
+    names = _catalogue("strings.json")["entity"]
+    icons = _catalogue("icons.json")["entity"]
+
+    assert set(names) == set(icons)
+    for platform, keys in names.items():
+        assert set(keys) == set(icons[platform]), platform
+
+
+@REQUIRES_HASS
+async def test_every_entity_that_was_created_has_an_icon(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    account: PronoteAccount,
+) -> None:
+    """The dynamic half, against the registry, as for the names above.
+
+    A platform can build an entity whose translation key sits in no table of
+    the generator; only setting the integration up shows what was *built*.
+    Disabled entities are in the registry too, so the closed-period sensors are
+    checked although they have no state.
+    """
+    icons = _catalogue("icons.json")["entity"]
+    registry = er.async_get(hass)
+    entries = er.async_entries_for_config_entry(registry, mock_entry.entry_id)
+    assert entries
+
+    missing = [
+        f"{entry.domain}.{entry.translation_key}"
+        for entry in entries
+        if not icons.get(entry.domain, {}).get(entry.translation_key or "", {})
+    ]
+    assert not missing, f"no icon: {sorted(set(missing))}"
+
+
+# ---------------------------------------------------------------------------
+# Raised errors (quality scale `exception-translations`)
+# ---------------------------------------------------------------------------
+
+#: The Home Assistant exception family a user can see: on the integrations
+#: page, in an automation trace, in the answer to an action.
+_USER_FACING_ERRORS = frozenset(
+    {
+        "HomeAssistantError",
+        "ServiceValidationError",
+        "ConfigEntryNotReady",
+        "ConfigEntryAuthFailed",
+        "ConfigEntryError",
+        "IntegrationError",
+        "InvalidDeviceAutomationConfig",
+        "UpdateFailed",
+    }
+)
+
+
+def _untranslated_raises(tree: ast.AST) -> list[int]:
+    """Lines raising a user-facing error without a ``translation_key``."""
+    lines: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+        if name not in _USER_FACING_ERRORS:
+            continue
+        if not any(keyword.arg == "translation_key" for keyword in node.keywords):
+            lines.append(node.lineno)
+    return lines
+
+
+def test_no_user_facing_error_is_built_from_a_plain_message() -> None:
+    """Every ``HomeAssistantError`` of this package names a translation key.
+
+    Scanned over the source rather than listed, because the defect is a new
+    ``raise HomeAssistantError(f"...")`` in a file nobody thought to check:
+    English on every install, and -- for an f-string over an exception -- text
+    the integration does not control, such as an address with its session
+    parameters. The set-up helper ``_setup_error`` passes the class as an
+    argument and is therefore covered by its own call.
+    """
+    offenders: dict[str, list[int]] = {}
+    for path in sorted(COMPONENT.rglob("*.py")):
+        lines = _untranslated_raises(ast.parse(path.read_text(encoding="utf-8")))
+        if lines:
+            offenders[str(path.relative_to(COMPONENT))] = lines
+
+    assert offenders == {}
+
+
+def test_the_raise_scanner_sees_a_plain_message() -> None:
+    """A scanner that finds nothing must be shown to find something."""
+    tree = ast.parse(
+        "raise HomeAssistantError('plain')\n"
+        "raise exceptions.ConfigEntryNotReady(str(error))\n"
+        "raise ServiceValidationError(translation_domain=D, translation_key='k')\n"
+    )
+
+    assert _untranslated_raises(tree) == [1, 2]
+
+
+def test_every_translation_key_the_code_raises_is_in_the_catalogue() -> None:
+    """A key with no entry renders as the key itself: ``setup_unreachable``.
+
+    Read from the source: every string literal passed as ``translation_key``
+    to an exception, and every key handed to ``_setup_error`` or to the
+    gesture helper's ``_fail``, must have a message in both languages.
+    """
+    raised: set[str] = set()
+    for path in sorted(COMPONENT.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+            if name in _USER_FACING_ERRORS:
+                for keyword in node.keywords:
+                    if keyword.arg == "translation_key" and isinstance(
+                        keyword.value, ast.Constant
+                    ):
+                        raised.add(str(keyword.value.value))
+            elif name in {"_setup_error", "_fail"}:
+                for arg in node.args:
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        raised.add(arg.value)
+    assert {"setup_auth_failed", "condition_entity_missing"} <= raised
+
+    for language in LANGUAGES:
+        exceptions = _catalogue(language)["exceptions"]
+        missing = sorted(key for key in raised if key not in exceptions)
+        assert not missing, f"{language}: {missing}"
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,325 @@
+{
+  "entity": {
+    "sensor": {
+      "next_lesson": {
+        "default": "mdi:book-clock"
+      },
+      "end_of_lessons": {
+        "default": "mdi:bell-ring-outline"
+      },
+      "morning_end": {
+        "default": "mdi:clock-end"
+      },
+      "next_cancellation": {
+        "default": "mdi:calendar-remove"
+      },
+      "next_wake_up": {
+        "default": "mdi:alarm"
+      },
+      "next_test": {
+        "default": "mdi:clipboard-text-clock"
+      },
+      "lessons_today": {
+        "default": "mdi:book-open-page-variant"
+      },
+      "homework_todo": {
+        "default": "mdi:notebook-edit"
+      },
+      "homework_tomorrow": {
+        "default": "mdi:bag-personal"
+      },
+      "latest_grade": {
+        "default": "mdi:star-box"
+      },
+      "overall_average": {
+        "default": "mdi:chart-line"
+      },
+      "class_average": {
+        "default": "mdi:account-group"
+      },
+      "next_punishment": {
+        "default": "mdi:gavel"
+      },
+      "unjustified_absences": {
+        "default": "mdi:account-question"
+      },
+      "unread_information": {
+        "default": "mdi:newspaper-variant"
+      },
+      "unread_messages": {
+        "default": "mdi:email-alert"
+      },
+      "current_period": {
+        "default": "mdi:calendar-range"
+      },
+      "timetable_tomorrow": {
+        "default": "mdi:calendar-arrow-right"
+      },
+      "timetable_week": {
+        "default": "mdi:calendar-week"
+      },
+      "homework": {
+        "default": "mdi:notebook"
+      },
+      "grades": {
+        "default": "mdi:format-list-numbered"
+      },
+      "averages": {
+        "default": "mdi:chart-bar"
+      },
+      "report_card": {
+        "default": "mdi:file-certificate"
+      },
+      "absences": {
+        "default": "mdi:account-off"
+      },
+      "delays": {
+        "default": "mdi:clock-alert"
+      },
+      "punishments": {
+        "default": "mdi:alert-octagon"
+      },
+      "evaluations": {
+        "default": "mdi:check-decagram"
+      },
+      "information": {
+        "default": "mdi:newspaper"
+      },
+      "discussions": {
+        "default": "mdi:forum"
+      },
+      "menu_today": {
+        "default": "mdi:silverware-fork-knife"
+      },
+      "menu_tomorrow": {
+        "default": "mdi:food"
+      },
+      "teaching_staff": {
+        "default": "mdi:human-male-board"
+      },
+      "class_name": {
+        "default": "mdi:google-classroom"
+      },
+      "periods": {
+        "default": "mdi:calendar-multiple"
+      },
+      "grades_period": {
+        "default": "mdi:format-list-numbered"
+      },
+      "averages_period": {
+        "default": "mdi:chart-bar"
+      },
+      "overall_average_period": {
+        "default": "mdi:chart-line"
+      },
+      "report_card_period": {
+        "default": "mdi:file-certificate"
+      },
+      "absences_period": {
+        "default": "mdi:account-off"
+      },
+      "delays_period": {
+        "default": "mdi:clock-alert"
+      },
+      "punishments_period": {
+        "default": "mdi:alert-octagon"
+      },
+      "evaluations_period": {
+        "default": "mdi:check-decagram"
+      },
+      "calls_today": {
+        "default": "mdi:counter"
+      },
+      "remaining_budget": {
+        "default": "mdi:gauge"
+      },
+      "last_collection": {
+        "default": "mdi:cloud-download"
+      },
+      "next_collection": {
+        "default": "mdi:timer-sand"
+      },
+      "session_age": {
+        "default": "mdi:timer-outline"
+      },
+      "session_lifetime": {
+        "default": "mdi:history"
+      },
+      "logins_today": {
+        "default": "mdi:login"
+      },
+      "limiter_state": {
+        "default": "mdi:speedometer",
+        "state": {
+          "nominal": "mdi:check-circle",
+          "throttled": "mdi:speedometer-slow",
+          "backoff": "mdi:pause-circle",
+          "quiet_hours": "mdi:weather-night",
+          "credentials_hold": "mdi:account-lock",
+          "bootstrap_failed": "mdi:web-off"
+        }
+      }
+    },
+    "binary_sensor": {
+      "school_day": {
+        "default": "mdi:school",
+        "state": {
+          "off": "mdi:home"
+        }
+      },
+      "in_class": {
+        "default": "mdi:account-school",
+        "state": {
+          "off": "mdi:account-school-outline"
+        }
+      },
+      "lessons_canceled": {
+        "default": "mdi:calendar-remove",
+        "state": {
+          "off": "mdi:calendar-check"
+        }
+      },
+      "outing_today": {
+        "default": "mdi:bus-school",
+        "state": {
+          "off": "mdi:school-outline"
+        }
+      },
+      "test_today": {
+        "default": "mdi:clipboard-text",
+        "state": {
+          "off": "mdi:clipboard-outline"
+        }
+      },
+      "holidays": {
+        "default": "mdi:beach",
+        "state": {
+          "off": "mdi:school"
+        }
+      },
+      "homework_overdue": {
+        "default": "mdi:book-alert",
+        "state": {
+          "off": "mdi:book-check"
+        }
+      },
+      "absence_in_progress": {
+        "default": "mdi:account-alert",
+        "state": {
+          "off": "mdi:account-check"
+        }
+      },
+      "punishment_upcoming": {
+        "default": "mdi:gavel",
+        "state": {
+          "off": "mdi:check"
+        }
+      },
+      "throttled": {
+        "default": "mdi:speedometer-slow",
+        "state": {
+          "off": "mdi:speedometer"
+        }
+      }
+    },
+    "calendar": {
+      "timetable": {
+        "default": "mdi:calendar-clock"
+      },
+      "homework": {
+        "default": "mdi:calendar-edit"
+      },
+      "punishments": {
+        "default": "mdi:calendar-alert"
+      }
+    },
+    "todo": {
+      "homework": {
+        "default": "mdi:clipboard-check-outline"
+      }
+    },
+    "button": {
+      "refresh": {
+        "default": "mdi:refresh"
+      },
+      "refresh_marks": {
+        "default": "mdi:sync"
+      }
+    },
+    "event": {
+      "new_grade": {
+        "default": "mdi:star-plus"
+      },
+      "new_homework": {
+        "default": "mdi:notebook-plus"
+      },
+      "lesson_changed": {
+        "default": "mdi:calendar-sync",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "lesson_canceled": "mdi:calendar-remove",
+              "lesson_restored": "mdi:calendar-check",
+              "lesson_moved": "mdi:calendar-arrow-right",
+              "room_changed": "mdi:door",
+              "teacher_changed": "mdi:human-male-board",
+              "lesson_status_changed": "mdi:information-outline"
+            }
+          }
+        }
+      },
+      "new_information": {
+        "default": "mdi:newspaper-plus"
+      },
+      "new_absence": {
+        "default": "mdi:account-alert"
+      },
+      "new_delay": {
+        "default": "mdi:clock-alert"
+      },
+      "new_punishment": {
+        "default": "mdi:gavel"
+      },
+      "new_message": {
+        "default": "mdi:email-plus"
+      },
+      "new_evaluation": {
+        "default": "mdi:check-decagram"
+      }
+    },
+    "image": {
+      "photo": {
+        "default": "mdi:account-box"
+      }
+    }
+  },
+  "services": {
+    "refresh": {
+      "service": "mdi:refresh"
+    },
+    "get_ical_url": {
+      "service": "mdi:calendar-export"
+    },
+    "get_identity": {
+      "service": "mdi:card-account-details"
+    },
+    "mark_homework_done": {
+      "service": "mdi:notebook-check"
+    },
+    "mark_information_read": {
+      "service": "mdi:email-open"
+    },
+    "send_message": {
+      "service": "mdi:send"
+    },
+    "generate_timetable_pdf": {
+      "service": "mdi:file-pdf-box"
+    },
+    "get_rate_limit_status": {
+      "service": "mdi:speedometer"
+    },
+    "get_attachment_url": {
+      "service": "mdi:paperclip"
+    }
+  }
+}

@@ -811,6 +811,30 @@
     },
     "todo_item_owned_by_pronote": {
       "message": "Seule la coche peut changer. La matière, l'énoncé et l'échéance d'un devoir appartiennent au professeur, dans PRONOTE."
+    },
+    "setup_auth_failed": {
+      "message": "La plateforme scolaire a refusé la connexion enregistrée, ou demande une confirmation [{error_type}]. Réauthentifiez l'intégration."
+    },
+    "setup_unreachable": {
+      "message": "La page de connexion de la plateforme scolaire est illisible [{error_type}]. L'intégration réessaiera."
+    },
+    "setup_login_postponed": {
+      "message": "La connexion a été refusée ou différée [{error_type}]. L'intégration réessaiera."
+    },
+    "setup_unreadable": {
+      "message": "La plateforme scolaire a répondu par des données que cette intégration ne sait pas lire [{error_type}]. L'intégration réessaiera."
+    },
+    "setup_server_refused": {
+      "message": "La plateforme scolaire a refusé la requête [{error_type}]. L'intégration réessaiera."
+    },
+    "setup_network_error": {
+      "message": "La plateforme scolaire est injoignable [{error_type}]. L'intégration réessaiera."
+    },
+    "condition_entity_missing": {
+      "message": "L'appareil {device_id} n'a pas d'entité {key} : cet établissement ne publie pas la donnée que lit cette condition."
+    },
+    "trigger_device_not_followed": {
+      "message": "L'appareil {device_id} n'est pas un enfant que ce compte suit actuellement : ce déclencheur ne peut donc jamais se produire. Sélectionnez à nouveau l'appareil dans l'automatisation, ou supprimez l'ancien."
     }
   },
   "issues": {

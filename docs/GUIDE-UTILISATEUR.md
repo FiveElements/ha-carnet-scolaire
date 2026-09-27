@@ -580,6 +580,16 @@ Ces entités permettent de garder la trace d'un trimestre après sa clôture, qu
 les entités de la période en cours sont passées au trimestre suivant. Elles ne
 sont relues qu'une fois par jour : une période close ne change plus.
 
+**Elles sont créées désactivées.** Ce sont les seules de l'intégration dans ce
+cas : elles se multiplient au fil de l'année et ne servent qu'à être lues. Pour
+en activer une : *Paramètres → Appareils et services → Carnet scolaire*, ouvrez
+l'appareil de l'enfant, dépliez les entités masquées, choisissez l'entité, puis
+dans ses paramètres (roue dentée) cochez **Activé** ; Home Assistant recharge
+l'intégration une trentaine de secondes plus tard et l'entité reçoit sa valeur.
+Une entité qui existait déjà avant cette version garde son état. Désactivée,
+une entité reste collectée : pour économiser les requêtes, c'est le palier
+« Périodes closes » qu'il faut couper dans les options.
+
 **« Dernière note » n'a pas de sœur close, et c'est voulu.** La dernière note
 d'un trimestre terminé est un fait figé sur lequel il n'y a rien à déclencher :
 ces entités-là existent pour être lues, pas pour armer un automatisme. Si vous

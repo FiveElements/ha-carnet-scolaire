@@ -21,7 +21,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
 
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
@@ -1005,3 +1007,115 @@ def test_a_period_with_no_report_card_publishes_no_report_attributes() -> None:
         state = type("S", (), {"periods": ()})()
 
     assert _report_attributes(marks(), _NoPeriods()) == {}  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# Disabled by default (quality scale `entity-disabled-by-default`)
+# ---------------------------------------------------------------------------
+
+#: The translation keys whose entities are created disabled, and nothing else.
+#: Written out rather than read off the code, so moving an entity in or out of
+#: this set is a visible decision in a diff: disabling one that a blueprint, a
+#: device automation or a dashboard card reads breaks it on every new install
+#: without any error, since Home Assistant does not reject an entity id that
+#: merely has no state.
+DISABLED_BY_DEFAULT = frozenset(
+    {
+        ("sensor", "grades_period"),
+        ("sensor", "averages_period"),
+        ("sensor", "overall_average_period"),
+        ("sensor", "report_card_period"),
+        ("sensor", "absences_period"),
+        ("sensor", "delays_period"),
+        ("sensor", "punishments_period"),
+        ("sensor", "evaluations_period"),
+    }
+)
+
+
+async def test_only_the_closed_period_sensors_are_created_disabled(
+    hass: HomeAssistant, account: PronoteAccount
+) -> None:
+    """The exact set, so the choice cannot drift in either direction.
+
+    The closed-period sensors are eight per closed period, a number that grows
+    through the year, for figures that no longer change and that nothing
+    triggers on. Everything else stays enabled -- the limiter's diagnostics
+    included, because the limiter card reads every one of them.
+    """
+    entries = er.async_entries_for_config_entry(
+        er.async_get(hass), account.entry.entry_id
+    )
+    disabled = {
+        (entry.domain, entry.translation_key)
+        for entry in entries
+        if entry.disabled_by is not None
+    }
+    assert disabled == DISABLED_BY_DEFAULT
+    assert all(
+        entry.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        for entry in entries
+        if entry.disabled_by is not None
+    )
+    # Every closed-period entity, not merely one per key: two children, and
+    # at least one closed period each.
+    history = [
+        entry
+        for entry in entries
+        if (entry.domain, entry.translation_key) in DISABLED_BY_DEFAULT
+    ]
+    assert len(history) > len(DISABLED_BY_DEFAULT)
+    assert all(entry.disabled_by is not None for entry in history)
+    assert all(hass.states.get(entry.entity_id) is None for entry in history)
+
+
+async def test_the_closed_period_sensors_the_user_enables_publish_their_period(
+    hass: HomeAssistant,
+    account: PronoteAccount,
+    account_client: FakeClient,
+    school_day: FrozenDateTimeFactory,
+) -> None:
+    """Disabled by default must still mean *working* once enabled.
+
+    Enabling is now the only way a household reaches these sensors, and it
+    goes through a registry update followed by the reload Home Assistant
+    schedules by itself -- exactly what the entity settings dialog does.
+    """
+    registry = er.async_get(hass)
+    entry = account.entry
+    # All of them, not one: each key has its own extractor, and a disabled
+    # entity is never rendered, so an extractor nobody enables in a test is an
+    # extractor nobody runs.
+    targets = [
+        candidate
+        for candidate in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if (candidate.domain, candidate.translation_key) in DISABLED_BY_DEFAULT
+    ]
+    assert {candidate.translation_key for candidate in targets} == {
+        key for _domain, key in DISABLED_BY_DEFAULT
+    }
+
+    with patch(
+        "custom_components.carnet_scolaire.session.build_client",
+        return_value=account_client,
+    ):
+        for target in targets:
+            registry.async_update_entity(target.entity_id, disabled_by=None)
+        # `config_entries` reloads the entry thirty seconds after an
+        # enablement (`RELOAD_AFTER_UPDATE_DELAY`).
+        school_day.tick(timedelta(seconds=31))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+        reloaded: PronoteAccount = entry.runtime_data
+        assert reloaded is not account
+        for _ in range(50):
+            if reloaded.completed_ticks and not reloaded._tick_lock.locked():
+                break
+            await hass.async_block_till_done()
+
+    for target in targets:
+        state = hass.states.get(target.entity_id)
+        assert state is not None, target.entity_id
+        assert state.state != "unavailable", target.entity_id
+        assert "period" in state.attributes
+        assert "period_index" in state.attributes

@@ -811,6 +811,30 @@
     },
     "todo_item_owned_by_pronote": {
       "message": "Only the tick can be changed. The subject, the wording and the due date of a homework item belong to the teacher, in PRONOTE."
+    },
+    "setup_auth_failed": {
+      "message": "The school platform refused the saved login, or asks for a confirmation [{error_type}]. Re-authenticate the integration."
+    },
+    "setup_unreachable": {
+      "message": "The school platform's login page could not be read [{error_type}]. The integration will try again."
+    },
+    "setup_login_postponed": {
+      "message": "The login was refused or postponed [{error_type}]. The integration will try again."
+    },
+    "setup_unreadable": {
+      "message": "The school platform answered with data this integration cannot read [{error_type}]. The integration will try again."
+    },
+    "setup_server_refused": {
+      "message": "The school platform refused the request [{error_type}]. The integration will try again."
+    },
+    "setup_network_error": {
+      "message": "The school platform could not be reached [{error_type}]. The integration will try again."
+    },
+    "condition_entity_missing": {
+      "message": "There is no {key} entity on device {device_id}: this establishment does not publish the data this condition reads."
+    },
+    "trigger_device_not_followed": {
+      "message": "Device {device_id} is not a child this account currently follows, so this trigger can never fire. Select the device again in the automation, or delete the stale one."
     }
   },
   "issues": {

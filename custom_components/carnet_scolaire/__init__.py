@@ -17,7 +17,11 @@ import logging
 from typing import TYPE_CHECKING, Final, cast
 
 from homeassistant.const import Platform
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+)
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from pronotepy.exceptions import PronoteAPIError
@@ -119,6 +123,27 @@ def _chain_for_log(error: Exception) -> Exception | None:
     return None if is_transport_failure(error) else error
 
 
+def _setup_error[E: HomeAssistantError](
+    kind: type[E], key: str, error: BaseException
+) -> E:
+    """A set-up failure Home Assistant can show in the user's language.
+
+    It replaces ``kind(str(error))``, which put the underlying exception's text
+    on the integration card and in the log. That text is not ours: a
+    ``pronotepy`` or transport error can quote a server page, or an address the
+    user pasted with its session parameters still on it (`urls.py` exists for
+    exactly that). The only placeholder is `describe_failure`: class names and
+    a fixed category, never a message, which still tells a bug report which
+    arm was taken and why. Whether the cause is chained is the caller's
+    decision, through `_chain_for_log`.
+    """
+    return kind(
+        translation_domain=DOMAIN,
+        translation_key=key,
+        translation_placeholders={"error_type": describe_failure(error)},
+    )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> bool:
     """Set up one PRONOTE account."""
     connector_client = (
@@ -145,7 +170,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
         # MFA specifically the flow has to *ask for the PIN*: a secret we refuse
         # to store is a secret we must know how to request again (§8.1).
         await account.async_unload()
-        raise ConfigEntryAuthFailed(str(error)) from error
+        raise _setup_error(ConfigEntryAuthFailed, "setup_auth_failed", error) from error
     except (BootstrapFailed, ConnectorTransportError) as error:
         # Deliberately does not claim a cause. pronotepy decides an address is
         # suspended with `if "IP" in html` -- two capitals anywhere in the page
@@ -157,7 +182,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
         # The message is ours and fixed; the chain is not. Home Assistant logs
         # the "Full exception" at DEBUG on this integration's logger, and the
         # traceback prints the `aiohttp` or `requests` cause, host and path.
-        raise ConfigEntryNotReady(str(error)) from _chain_for_log(error)
+        raise _setup_error(
+            ConfigEntryNotReady, "setup_unreachable", error
+        ) from _chain_for_log(error)
     except (
         LoginRefused,
         LoginRefusedByLimiter,
@@ -172,7 +199,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
         # for a condition that fixed itself on the next attempt, and no code
         # path ever closes that card again.
         await account.async_unload()
-        raise ConfigEntryNotReady(str(error)) from error
+        raise _setup_error(
+            ConfigEntryNotReady, "setup_login_postponed", error
+        ) from error
     except (AccountUnreadable, ConnectorUndecodableError, ConnectorError) as error:
         # The server answered and the credentials were fine; what came back is
         # outside the declared contract. Retrying is right -- establishments do
@@ -184,20 +213,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
         # repair as `AccountUnreadable`, never `ConfigEntryAuthFailed`.
         account.async_open_unreadable_issue()
         await account.async_unload()
-        raise ConfigEntryNotReady(str(error)) from error
+        raise _setup_error(ConfigEntryNotReady, "setup_unreadable", error) from error
     except PronoteAPIError as error:
         # A protocol-level refusal with no `Erreur.G` we recognise. It is the
         # server's answer, so "not ready" and retry -- never "auth failed",
         # which would send the user to re-enter credentials that are correct.
         await account.async_unload()
-        raise ConfigEntryNotReady(str(error)) from error
+        raise _setup_error(
+            ConfigEntryNotReady, "setup_server_refused", error
+        ) from error
     except (TimeoutError, OSError) as error:
         # Classified, not quoted, and not chained. Home Assistant logs this
         # message and shows it as the entry's state, then logs the "Full
         # exception" at DEBUG -- and the text of a `requests` error names the
         # establishment's host and the path it failed on.
         await account.async_unload()
-        raise ConfigEntryNotReady(describe_failure(error)) from None
+        raise _setup_error(ConfigEntryNotReady, "setup_network_error", error) from None
 
     entry.runtime_data = account
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = account

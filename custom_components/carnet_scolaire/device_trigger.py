@@ -133,9 +133,9 @@ async def async_attach_trigger(
     # announces that child. For those, saying so is the only useful answer.
     if student_id is None or entry_id is None:
         raise InvalidDeviceAutomationConfig(
-            f"device {device_id} is not a child this account currently "
-            f"follows, so this trigger can never fire; re-select the device "
-            f"in the automation, or delete the stale one"
+            translation_domain=DOMAIN,
+            translation_key="trigger_device_not_followed",
+            translation_placeholders={"device_id": device_id},
         )
 
     event_config = event_trigger.TRIGGER_SCHEMA(
