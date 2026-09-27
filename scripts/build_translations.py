@@ -225,6 +225,11 @@ CONFIG_EN: dict[str, Any] = {
                 "account_pin": "Two-factor PIN (if your account uses one)",
             },
             "data_description": {
+                "qr_payload": (
+                    "The text a QR code reader returns when it scans the code "
+                    "the app draws: a JSON object with login, jeton and url. "
+                    "Paste it whole, not a photo or a link to the picture."
+                ),
                 "device_name": (
                     "The name PRONOTE shows for this Home Assistant in the "
                     "list of devices connected to the account -- only there. "
@@ -257,6 +262,21 @@ CONFIG_EN: dict[str, Any] = {
                 "account_pin": "Two-factor PIN (if your account uses one)",
             },
             "data_description": {
+                "pronote_url": (
+                    "The address of the establishment's PRONOTE page as your "
+                    "browser shows it, ending in parent.html for a parent "
+                    "account or eleve.html for a pupil's. Anything after .html "
+                    "is dropped before it is stored."
+                ),
+                "username": (
+                    "The username typed on the PRONOTE login page itself -- not "
+                    "the one of a regional portal (ENT)."
+                ),
+                "password": (
+                    "The PRONOTE password of that account. It is stored, since "
+                    "this method has no other way to log in again; the QR code "
+                    "method avoids that."
+                ),
                 "account_pin": (
                     "Used for this login only and never stored. You will be "
                     "asked for it again if PRONOTE requires it."
@@ -275,6 +295,26 @@ CONFIG_EN: dict[str, Any] = {
                 "password": "Password",
                 "ent": "Portal",
             },
+            "data_description": {
+                "pronote_url": (
+                    "The address of the establishment's PRONOTE page, ending in "
+                    "parent.html or eleve.html: the page the portal opens once "
+                    "you are logged in, not the portal's own address."
+                ),
+                "username": (
+                    "The username typed on the regional portal (ENT), not a "
+                    "PRONOTE one."
+                ),
+                "password": (
+                    "The password of that portal account. It is stored, since a "
+                    "federated login goes through the portal again every time."
+                ),
+                "ent": (
+                    "The portal your establishment signs you in through. Pick it "
+                    "from the list rather than typing a name: an unknown name is "
+                    "refused."
+                ),
+            },
         },
         "ecoledirecte": {
             "title": "Connect to EcoleDirecte",
@@ -287,6 +327,16 @@ CONFIG_EN: dict[str, Any] = {
                 "username": "Username",
                 "password": "Password",
             },
+            "data_description": {
+                "username": (
+                    "The username typed on the EcoleDirecte login page, for a "
+                    "parent or a pupil account."
+                ),
+                "password": (
+                    "The EcoleDirecte password of that account. It is stored, "
+                    "since EcoleDirecte issues no durable device token."
+                ),
+            },
         },
         "ecoledirecte_qcm": {
             "title": "EcoleDirecte security question",
@@ -296,6 +346,13 @@ CONFIG_EN: dict[str, Any] = {
                 "the login succeeds."
             ),
             "data": {"choice": "Answer"},
+            "data_description": {
+                "choice": (
+                    "The answer EcoleDirecte expects for this account, as its "
+                    "own site asks it on a new device. It is remembered, so "
+                    "the question is not asked at every login."
+                ),
+            },
         },
         "children": {
             "title": "Which children to follow",
@@ -304,6 +361,13 @@ CONFIG_EN: dict[str, Any] = {
                 "to the server, so select only the ones you want."
             ),
             "data": {"children": "Children"},
+            "data_description": {
+                "children": (
+                    "Each ticked child gets its own device and entities. Untick "
+                    "a child you do not need: every child adds the same number "
+                    "of requests a day."
+                ),
+            },
         },
         "reauth_confirm": {
             "title": "Reconnect to PRONOTE",
@@ -315,6 +379,17 @@ CONFIG_EN: dict[str, Any] = {
             "data": {
                 "password": "Password",
                 "account_pin": "Two-factor PIN",
+            },
+            "data_description": {
+                "password": (
+                    "Leave empty to keep the stored password, for instance "
+                    "when PRONOTE is only asking for the two-factor PIN."
+                ),
+                "account_pin": (
+                    "The two-factor PIN set on the PRONOTE account, when "
+                    "PRONOTE asks for it. Used for this login only and never "
+                    "stored."
+                ),
             },
         },
         "reauth_qr": {
@@ -337,6 +412,11 @@ CONFIG_EN: dict[str, Any] = {
                 "account_pin": "Two-factor PIN (if your account uses one)",
             },
             "data_description": {
+                "qr_payload": (
+                    "The text a QR code reader returns when it scans the code "
+                    "the app draws: a JSON object with login, jeton and url. "
+                    "Paste it whole, not a photo or a link to the picture."
+                ),
                 "device_name": (
                     "The name PRONOTE shows for this Home Assistant in the "
                     "list of devices connected to the account -- only there. "
@@ -487,6 +567,12 @@ CONFIG_FR: dict[str, Any] = {
                 "account_pin": "Code PIN à deux facteurs (si votre compte en a un)",
             },
             "data_description": {
+                "qr_payload": (
+                    "Le texte que renvoie un lecteur de QR code en scannant le "
+                    "code affiché par l'application : un objet JSON avec login, "
+                    "jeton et url. Collez-le en entier, pas une photo ni un lien "
+                    "vers l'image."
+                ),
                 "device_name": (
                     "Le nom sous lequel PRONOTE affiche ce Home Assistant dans "
                     "la liste des appareils connectés au compte, et seulement "
@@ -521,6 +607,21 @@ CONFIG_FR: dict[str, Any] = {
                 "account_pin": "Code PIN à deux facteurs (si votre compte en a un)",
             },
             "data_description": {
+                "pronote_url": (
+                    "L'adresse de la page PRONOTE de l'établissement telle que "
+                    "votre navigateur l'affiche, terminée par parent.html pour "
+                    "un compte parent ou eleve.html pour un compte élève. Tout "
+                    "ce qui suit .html est retiré avant d'être conservé."
+                ),
+                "username": (
+                    "L'identifiant saisi sur la page de connexion de PRONOTE "
+                    "elle-même, et non celui d'un portail académique (ENT)."
+                ),
+                "password": (
+                    "Le mot de passe PRONOTE de ce compte. Il est conservé, car "
+                    "ce mode n'a pas d'autre moyen de se reconnecter ; le QR "
+                    "code évite cela."
+                ),
                 "account_pin": (
                     "Utilisé pour cette connexion uniquement et jamais "
                     "conservé. Il vous sera redemandé si PRONOTE l'exige."
@@ -539,6 +640,27 @@ CONFIG_FR: dict[str, Any] = {
                 "password": "Mot de passe",
                 "ent": "Portail",
             },
+            "data_description": {
+                "pronote_url": (
+                    "L'adresse de la page PRONOTE de l'établissement, terminée "
+                    "par parent.html ou eleve.html : la page que le portail "
+                    "ouvre une fois connecté, pas l'adresse du portail."
+                ),
+                "username": (
+                    "L'identifiant saisi sur le portail académique (ENT), pas "
+                    "un identifiant PRONOTE."
+                ),
+                "password": (
+                    "Le mot de passe de ce compte de portail. Il est conservé, "
+                    "car une connexion fédérée repasse par le portail à chaque "
+                    "fois."
+                ),
+                "ent": (
+                    "Le portail par lequel votre établissement vous connecte. "
+                    "Choisissez-le dans la liste plutôt que de saisir un nom : "
+                    "un nom inconnu est refusé."
+                ),
+            },
         },
         "ecoledirecte": {
             "title": "Se connecter à EcoleDirecte",
@@ -551,6 +673,17 @@ CONFIG_FR: dict[str, Any] = {
                 "username": "Identifiant",
                 "password": "Mot de passe",
             },
+            "data_description": {
+                "username": (
+                    "L'identifiant saisi sur la page de connexion "
+                    "d'EcoleDirecte, pour un compte parent ou élève."
+                ),
+                "password": (
+                    "Le mot de passe EcoleDirecte de ce compte. Il est "
+                    "conservé, car EcoleDirecte ne délivre pas de jeton "
+                    "d'appareil durable."
+                ),
+            },
         },
         "ecoledirecte_qcm": {
             "title": "Question de sécurité EcoleDirecte",
@@ -560,6 +693,14 @@ CONFIG_FR: dict[str, Any] = {
                 "avant la réussite de la connexion."
             ),
             "data": {"choice": "Réponse"},
+            "data_description": {
+                "choice": (
+                    "La réponse qu'EcoleDirecte attend pour ce compte, comme son "
+                    "propre site la demande sur un nouvel appareil. Elle est "
+                    "mémorisée : la question n'est pas reposée à chaque "
+                    "connexion."
+                ),
+            },
         },
         "children": {
             "title": "Enfants à suivre",
@@ -568,6 +709,13 @@ CONFIG_FR: dict[str, Any] = {
                 "au serveur : ne sélectionnez que ceux qui vous intéressent."
             ),
             "data": {"children": "Enfants"},
+            "data_description": {
+                "children": (
+                    "Chaque enfant coché a son propre appareil et ses propres "
+                    "entités. Décochez un enfant inutile : chacun ajoute le "
+                    "même nombre d'appels par jour."
+                ),
+            },
         },
         "reauth_confirm": {
             "title": "Se reconnecter à PRONOTE",
@@ -579,6 +727,18 @@ CONFIG_FR: dict[str, Any] = {
             "data": {
                 "password": "Mot de passe",
                 "account_pin": "Code PIN à deux facteurs",
+            },
+            "data_description": {
+                "password": (
+                    "Laissez vide pour garder le mot de passe conservé, par "
+                    "exemple quand PRONOTE ne demande que le code PIN à deux "
+                    "facteurs."
+                ),
+                "account_pin": (
+                    "Le code PIN à deux facteurs défini sur le compte PRONOTE, "
+                    "quand PRONOTE le demande. Utilisé pour cette connexion "
+                    "uniquement et jamais conservé."
+                ),
             },
         },
         "reauth_qr": {
@@ -601,6 +761,12 @@ CONFIG_FR: dict[str, Any] = {
                 "account_pin": "Code PIN à deux facteurs (si votre compte en a un)",
             },
             "data_description": {
+                "qr_payload": (
+                    "Le texte que renvoie un lecteur de QR code en scannant le "
+                    "code affiché par l'application : un objet JSON avec login, "
+                    "jeton et url. Collez-le en entier, pas une photo ni un lien "
+                    "vers l'image."
+                ),
                 "device_name": (
                     "Le nom sous lequel PRONOTE affiche ce Home Assistant dans "
                     "la liste des appareils connectés au compte, et seulement "
@@ -975,10 +1141,23 @@ RATE_LIMIT_OPTIONS: list[tuple[str, str, str, str, str]] = [
         "quiet_start",
         "Quiet hours start",
         "Début des heures calmes",
-        "",
-        "",
+        (
+            "When scheduled collection pauses each evening. A button press, a "
+            "service call and the refill after a restart still go through."
+        ),
+        (
+            "Heure à laquelle la collecte programmée s'arrête le soir. Un appui "
+            "sur un bouton, un appel de service et le remplissage après un "
+            "redémarrage passent quand même."
+        ),
     ),
-    ("quiet_end", "Quiet hours end", "Fin des heures calmes", "", ""),
+    (
+        "quiet_end",
+        "Quiet hours end",
+        "Fin des heures calmes",
+        "When scheduled collection resumes in the morning.",
+        "Heure à laquelle la collecte programmée reprend le matin.",
+    ),
 ]
 
 OPTIONS_INIT_DESCRIPTION_EN = (
@@ -1589,7 +1768,32 @@ def _options(index: int) -> dict[str, Any]:
     limit_help = {row[0]: row[3 + pick] for row in RATE_LIMIT_OPTIONS if row[3 + pick]}
 
     tier_data: dict[str, str] = {}
+    tier_help: dict[str, str] = {}
+    interval_help, enabled_help = (
+        (
+            (
+                "Minutes between two collections of this category. Shorter means "
+                "fresher data and more requests a day."
+            ),
+            (
+                "Off stops collecting this category altogether and saves its "
+                "requests; its entities stay unavailable."
+            ),
+        ),
+        (
+            (
+                "Minutes entre deux collectes de cette catégorie. Plus court, "
+                "c'est une donnée plus fraîche et plus d'appels par jour."
+            ),
+            (
+                "Désactivé, la catégorie n'est plus collectée du tout et ses "
+                "appels sont économisés ; ses entités restent indisponibles."
+            ),
+        ),
+    )[pick]
     for key, en, fr in TIERS:
+        tier_help[f"interval_{key}"] = interval_help
+        tier_help[f"enabled_{key}"] = enabled_help
         label = (en, fr)[pick]
         tier_data[f"interval_{key}"] = (
             f"{label} - interval" if pick == 0 else f"{label} - intervalle"
@@ -1683,6 +1887,7 @@ def _options(index: int) -> dict[str, Any]:
                 "title": titles["tiers"],
                 "description": f"{description}\n\n{tiers_description}",
                 "data": tier_data,
+                "data_description": tier_help,
             },
             "rate_limit": {
                 "title": titles["rate_limit"],

@@ -28,6 +28,7 @@
           "account_pin": "Code PIN à deux facteurs (si votre compte en a un)"
         },
         "data_description": {
+          "qr_payload": "Le texte que renvoie un lecteur de QR code en scannant le code affiché par l'application : un objet JSON avec login, jeton et url. Collez-le en entier, pas une photo ni un lien vers l'image.",
           "device_name": "Le nom sous lequel PRONOTE affiche ce Home Assistant dans la liste des appareils connectés au compte, et seulement là. Il ne nomme pas l'appareil dans Home Assistant, qui prend le nom de l'élève fourni par PRONOTE.",
           "qr_pin": "Celui que vous avez choisi dans l'application en générant le QR code. Pas le code PIN du compte ci-dessous : les deux font quatre chiffres, et ce sont deux codes différents.",
           "account_pin": "Le code PIN à deux facteurs défini sur le compte PRONOTE lui-même, s'il en a un. Quatre chiffres aussi, et pas celui du dessus. Utilisé pour cette connexion uniquement et jamais conservé. Il vous sera redemandé si PRONOTE l'exige."
@@ -43,6 +44,9 @@
           "account_pin": "Code PIN à deux facteurs (si votre compte en a un)"
         },
         "data_description": {
+          "pronote_url": "L'adresse de la page PRONOTE de l'établissement telle que votre navigateur l'affiche, terminée par parent.html pour un compte parent ou eleve.html pour un compte élève. Tout ce qui suit .html est retiré avant d'être conservé.",
+          "username": "L'identifiant saisi sur la page de connexion de PRONOTE elle-même, et non celui d'un portail académique (ENT).",
+          "password": "Le mot de passe PRONOTE de ce compte. Il est conservé, car ce mode n'a pas d'autre moyen de se reconnecter ; le QR code évite cela.",
           "account_pin": "Utilisé pour cette connexion uniquement et jamais conservé. Il vous sera redemandé si PRONOTE l'exige."
         }
       },
@@ -54,6 +58,12 @@
           "username": "Identifiant",
           "password": "Mot de passe",
           "ent": "Portail"
+        },
+        "data_description": {
+          "pronote_url": "L'adresse de la page PRONOTE de l'établissement, terminée par parent.html ou eleve.html : la page que le portail ouvre une fois connecté, pas l'adresse du portail.",
+          "username": "L'identifiant saisi sur le portail académique (ENT), pas un identifiant PRONOTE.",
+          "password": "Le mot de passe de ce compte de portail. Il est conservé, car une connexion fédérée repasse par le portail à chaque fois.",
+          "ent": "Le portail par lequel votre établissement vous connecte. Choisissez-le dans la liste plutôt que de saisir un nom : un nom inconnu est refusé."
         }
       },
       "ecoledirecte": {
@@ -62,6 +72,10 @@
         "data": {
           "username": "Identifiant",
           "password": "Mot de passe"
+        },
+        "data_description": {
+          "username": "L'identifiant saisi sur la page de connexion d'EcoleDirecte, pour un compte parent ou élève.",
+          "password": "Le mot de passe EcoleDirecte de ce compte. Il est conservé, car EcoleDirecte ne délivre pas de jeton d'appareil durable."
         }
       },
       "ecoledirecte_qcm": {
@@ -69,6 +83,9 @@
         "description": "EcoleDirecte demande : {question}\n\nChoisissez la réponse mémorisée. Aucun compte n'est créé avant la réussite de la connexion.",
         "data": {
           "choice": "Réponse"
+        },
+        "data_description": {
+          "choice": "La réponse qu'EcoleDirecte attend pour ce compte, comme son propre site la demande sur un nouvel appareil. Elle est mémorisée : la question n'est pas reposée à chaque connexion."
         }
       },
       "children": {
@@ -76,6 +93,9 @@
         "description": "Chaque enfant suivi multiplie le nombre d'appels quotidiens au serveur : ne sélectionnez que ceux qui vous intéressent.",
         "data": {
           "children": "Enfants"
+        },
+        "data_description": {
+          "children": "Chaque enfant coché a son propre appareil et ses propres entités. Décochez un enfant inutile : chacun ajoute le même nombre d'appels par jour."
         }
       },
       "reauth_confirm": {
@@ -84,6 +104,10 @@
         "data": {
           "password": "Mot de passe",
           "account_pin": "Code PIN à deux facteurs"
+        },
+        "data_description": {
+          "password": "Laissez vide pour garder le mot de passe conservé, par exemple quand PRONOTE ne demande que le code PIN à deux facteurs.",
+          "account_pin": "Le code PIN à deux facteurs défini sur le compte PRONOTE, quand PRONOTE le demande. Utilisé pour cette connexion uniquement et jamais conservé."
         }
       },
       "reauth_qr": {
@@ -96,6 +120,7 @@
           "account_pin": "Code PIN à deux facteurs (si votre compte en a un)"
         },
         "data_description": {
+          "qr_payload": "Le texte que renvoie un lecteur de QR code en scannant le code affiché par l'application : un objet JSON avec login, jeton et url. Collez-le en entier, pas une photo ni un lien vers l'image.",
           "device_name": "Le nom sous lequel PRONOTE affiche ce Home Assistant dans la liste des appareils connectés au compte, et seulement là. Il ne nomme pas l'appareil dans Home Assistant, qui prend le nom de l'élève fourni par PRONOTE.",
           "qr_pin": "Celui que vous avez choisi dans l'application en générant le QR code. Pas le code PIN du compte ci-dessous : les deux font quatre chiffres, et ce sont deux codes différents.",
           "account_pin": "Le code PIN à deux facteurs défini sur le compte PRONOTE lui-même, s'il en a un. Quatre chiffres aussi, et pas celui du dessus. Utilisé pour cette connexion uniquement et jamais conservé. Il vous sera redemandé si PRONOTE l'exige."
@@ -183,6 +208,28 @@
           "enabled_static": "Données stables - activé",
           "interval_history": "Périodes closes - intervalle",
           "enabled_history": "Périodes closes - activé"
+        },
+        "data_description": {
+          "interval_timetable": "Minutes entre deux collectes de cette catégorie. Plus court, c'est une donnée plus fraîche et plus d'appels par jour.",
+          "enabled_timetable": "Désactivé, la catégorie n'est plus collectée du tout et ses appels sont économisés ; ses entités restent indisponibles.",
+          "interval_homework": "Minutes entre deux collectes de cette catégorie. Plus court, c'est une donnée plus fraîche et plus d'appels par jour.",
+          "enabled_homework": "Désactivé, la catégorie n'est plus collectée du tout et ses appels sont économisés ; ses entités restent indisponibles.",
+          "interval_news": "Minutes entre deux collectes de cette catégorie. Plus court, c'est une donnée plus fraîche et plus d'appels par jour.",
+          "enabled_news": "Désactivé, la catégorie n'est plus collectée du tout et ses appels sont économisés ; ses entités restent indisponibles.",
+          "interval_discussions": "Minutes entre deux collectes de cette catégorie. Plus court, c'est une donnée plus fraîche et plus d'appels par jour.",
+          "enabled_discussions": "Désactivé, la catégorie n'est plus collectée du tout et ses appels sont économisés ; ses entités restent indisponibles.",
+          "interval_marks": "Minutes entre deux collectes de cette catégorie. Plus court, c'est une donnée plus fraîche et plus d'appels par jour.",
+          "enabled_marks": "Désactivé, la catégorie n'est plus collectée du tout et ses appels sont économisés ; ses entités restent indisponibles.",
+          "interval_attendance": "Minutes entre deux collectes de cette catégorie. Plus court, c'est une donnée plus fraîche et plus d'appels par jour.",
+          "enabled_attendance": "Désactivé, la catégorie n'est plus collectée du tout et ses appels sont économisés ; ses entités restent indisponibles.",
+          "interval_evaluations": "Minutes entre deux collectes de cette catégorie. Plus court, c'est une donnée plus fraîche et plus d'appels par jour.",
+          "enabled_evaluations": "Désactivé, la catégorie n'est plus collectée du tout et ses appels sont économisés ; ses entités restent indisponibles.",
+          "interval_menus": "Minutes entre deux collectes de cette catégorie. Plus court, c'est une donnée plus fraîche et plus d'appels par jour.",
+          "enabled_menus": "Désactivé, la catégorie n'est plus collectée du tout et ses appels sont économisés ; ses entités restent indisponibles.",
+          "interval_static": "Minutes entre deux collectes de cette catégorie. Plus court, c'est une donnée plus fraîche et plus d'appels par jour.",
+          "enabled_static": "Désactivé, la catégorie n'est plus collectée du tout et ses appels sont économisés ; ses entités restent indisponibles.",
+          "interval_history": "Minutes entre deux collectes de cette catégorie. Plus court, c'est une donnée plus fraîche et plus d'appels par jour.",
+          "enabled_history": "Désactivé, la catégorie n'est plus collectée du tout et ses appels sont économisés ; ses entités restent indisponibles."
         }
       },
       "rate_limit": {
@@ -220,7 +267,9 @@
           "backoff_max": "Plafond de ce doublement.",
           "connect_timeout": "La bibliothèque amont ne fixe aucun délai : celui-ci est appliqué par cette intégration.",
           "read_timeout": "Durée d'attente d'une réponse avant d'abandonner un appel.",
-          "quiet_hours_enabled": "Arrêter de collecter la nuit. C'est environ un tiers du budget quotidien, dépensé sur des données que personne ne lit en dormant."
+          "quiet_hours_enabled": "Arrêter de collecter la nuit. C'est environ un tiers du budget quotidien, dépensé sur des données que personne ne lit en dormant.",
+          "quiet_start": "Heure à laquelle la collecte programmée s'arrête le soir. Un appui sur un bouton, un appel de service et le remplissage après un redémarrage passent quand même.",
+          "quiet_end": "Heure à laquelle la collecte programmée reprend le matin."
         }
       }
     }

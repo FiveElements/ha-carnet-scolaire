@@ -52,6 +52,7 @@ from custom_components.carnet_scolaire.connectors.ecoledirecte.ed_limiter import
 )
 from custom_components.carnet_scolaire.connectors.errors import (
     ConnectorChallengeRequired,
+    ConnectorCredentialsError,
 )
 from custom_components.carnet_scolaire.connectors.protocol import ChallengeKind
 from custom_components.carnet_scolaire.const import (
@@ -2048,3 +2049,210 @@ async def test_an_unknown_ent_provider_is_reported_on_the_provider_field(
     # The credentials were never submitted to anybody, so the rail that guards
     # the address against refused logins must not have moved.
     assert guard.may_login().allowed
+
+
+# ---------------------------------------------------------------------------
+# Recovering from an error, one mode at a time
+# ---------------------------------------------------------------------------
+#
+# Every other failure test above stops at the re-displayed form. That proves
+# the error is reported and says nothing about the one thing the user does
+# next: correct the field and submit again. A form that re-displays with the
+# right message but loses a piece of the flow's state on the way -- the mode,
+# the provider, the device UUID, the EcoleDirecte source -- fails on the
+# *second* submit, which is exactly the one no test was making.
+
+
+async def test_a_refused_password_can_be_corrected_and_the_entry_is_created(
+    hass: HomeAssistant, no_spacing: None
+) -> None:
+    """The credentials form survives its own error and still creates the entry.
+
+    Bronze ``config-flow-test-coverage`` asks for this path by name: the flow
+    must recover from an error, not merely report it.
+    """
+    flow_id = await _start(hass)
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        side_effect=ProbeInvalidCredentials(),
+    ):
+        refused = await _submit_credentials(hass, flow_id)
+    assert refused["type"] is FlowResultType.FORM
+    assert refused["step_id"] == "credentials"
+    assert refused["errors"] == {"base": "invalid_auth"}
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        return_value=_outcome(("STUDENT-1", "Enfant Un")),
+    ):
+        created = await _submit_credentials(hass, flow_id)
+
+    assert created["type"] is FlowResultType.CREATE_ENTRY
+    assert created["data"][CONF_LOGIN_MODE] == LoginMode.CREDENTIALS.value
+    assert created["data"][CONF_PRONOTE_URL] == TRIMMED_URL
+    assert created["data"][CONF_CHILDREN] == ["STUDENT-1"]
+
+
+async def test_a_refused_ent_login_can_be_retried_and_keeps_its_provider(
+    hass: HomeAssistant, no_spacing: None
+) -> None:
+    """The retry after an ENT refusal is still an ENT login, with its provider.
+
+    ``test_a_failed_ent_login_comes_back_to_the_ent_form`` proves the right
+    form comes back; this one proves the entry that follows is an ENT entry,
+    which is what a lost provider would break -- silently, as a direct login.
+    """
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "pronote"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "ent"}
+    )
+    form = {
+        CONF_PRONOTE_URL: PASTED_URL,
+        "username": "parent-under-test",
+        "password": "not-a-real-password",
+        CONF_ENT: "ac_reunion",
+    }
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        side_effect=ProbeInvalidCredentials("the identity provider refused"),
+    ):
+        refused = await hass.config_entries.flow.async_configure(
+            result["flow_id"], form
+        )
+    assert refused["errors"] == {"base": "invalid_auth"}
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        return_value=_outcome(("STUDENT-1", "Enfant Un")),
+    ) as probe:
+        created = await hass.config_entries.flow.async_configure(
+            result["flow_id"], form
+        )
+
+    assert created["type"] is FlowResultType.CREATE_ENTRY
+    assert created["data"][CONF_LOGIN_MODE] == LoginMode.ENT.value
+    assert created["data"][CONF_ENT] == "ac_reunion"
+    assert probe.call_args.args[0][CONF_ENT] == "ac_reunion"
+
+
+async def test_a_refused_qr_code_can_be_replaced_and_the_entry_is_created(
+    hass: HomeAssistant, no_spacing: None
+) -> None:
+    """A second QR code on the same form enrols, and still keeps no secret.
+
+    The first QR code is spent either way, so a new one on the same form is
+    the ordinary recovery the step's own text prescribes. The retry must not
+    carry the first attempt's payload or four-digit code into the entry.
+    """
+    flow_id = await _start_qr(hass)
+    submitted = {CONF_QR_PAYLOAD: json.dumps(QR_PAYLOAD), CONF_QR_PIN: "1234"}
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        side_effect=ProbeQrInvalid(),
+    ):
+        refused = await hass.config_entries.flow.async_configure(flow_id, submitted)
+    assert refused["type"] is FlowResultType.FORM
+    assert refused["step_id"] == "qr_code"
+    assert refused["errors"] == {"base": "invalid_qr"}
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        return_value=_outcome(("STUDENT-1", "Enfant Un")),
+    ):
+        created = await hass.config_entries.flow.async_configure(flow_id, submitted)
+
+    assert created["type"] is FlowResultType.CREATE_ENTRY
+    data = created["data"]
+    assert data[CONF_LOGIN_MODE] == LoginMode.QR_CODE.value
+    assert data[CONF_UUID]
+    assert CONF_QR_PAYLOAD not in data
+    assert CONF_QR_PIN not in data
+
+
+async def test_a_refused_ecoledirecte_login_can_be_corrected_and_is_created(
+    hass: HomeAssistant, no_spacing: None
+) -> None:
+    """EcoleDirecte re-displays its own form, and the retry creates its entry.
+
+    ``_async_try_ecoledirecte`` rebuilds the form itself on failure, apart from
+    the PRONOTE re-display path, so it needs its own recovery test: an entry
+    created without ``source: ecoledirecte`` would be set up as PRONOTE.
+    """
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "ecoledirecte"}
+    )
+    form = {"username": "demo.example.invalid", "password": "not-a-real-password"}
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe_ecoledirecte",
+        side_effect=ConnectorCredentialsError(),
+    ):
+        refused = await hass.config_entries.flow.async_configure(
+            result["flow_id"], form
+        )
+    assert refused["type"] is FlowResultType.FORM
+    assert refused["step_id"] == "ecoledirecte"
+    assert refused["errors"] == {"base": "ed_invalid_auth"}
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe_ecoledirecte",
+        return_value={"students": (("1", "Enfant Un"),)},
+    ):
+        created = await hass.config_entries.flow.async_configure(
+            result["flow_id"], form
+        )
+
+    assert created["type"] is FlowResultType.CREATE_ENTRY
+    assert created["data"][CONF_SOURCE] == "ecoledirecte"
+    assert created["result"].unique_id == "ecoledirecte:demo.example.invalid"
+
+
+async def test_the_same_ecoledirecte_account_cannot_be_added_twice(
+    hass: HomeAssistant, no_spacing: None
+) -> None:
+    """EcoleDirecte has its own ``unique_id``, so it needs its own duplicate test.
+
+    ``test_the_same_account_cannot_be_added_twice`` covers the PRONOTE
+    identifier. EcoleDirecte's is built differently -- the source and the
+    username -- and a duplicate here would double every entity and every
+    automation just the same.
+    """
+    MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="ecoledirecte:demo.example.invalid",
+        data={
+            CONF_SOURCE: "ecoledirecte",
+            "username": "demo.example.invalid",
+            "password": "not-a-real-password",
+        },
+    ).add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "ecoledirecte"}
+    )
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe_ecoledirecte",
+        return_value={"students": (("1", "Enfant Un"),)},
+    ):
+        aborted = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {"username": "demo.example.invalid", "password": "not-a-real-password"},
+        )
+
+    assert aborted["type"] is FlowResultType.ABORT
+    assert aborted["reason"] == "already_configured"
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
