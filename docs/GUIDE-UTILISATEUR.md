@@ -35,6 +35,9 @@ section de ce guide, lisez celle-là.
 10. [Dépannage](#10-dépannage)
 11. [Vie privée](#11-vie-privée)
 12. [Désinstaller](#12-désinstaller)
+13. [Ce qui est pris en charge](#13-ce-qui-est-pris-en-charge)
+14. [Fonctions fournies, par source](#14-fonctions-fournies-par-source)
+15. [Limites connues](#15-limites-connues)
 
 ---
 
@@ -785,7 +788,7 @@ changements depuis l'éditeur graphique, avec un nom lisible.
 
 ## 5. Les services
 
-Huit services sont disponibles sous le domaine `carnet_scolaire`. Tous se ciblent sur
+Neuf services sont disponibles sous le domaine `carnet_scolaire`. Tous se ciblent sur
 un **appareil** — celui d'un enfant, ou celui du compte pour les deux services
 qui concernent l'ensemble. Dans l'interface graphique, le sélecteur ne vous
 proposera que les appareils PRONOTE ; en YAML, il faut l'identifiant de
@@ -2154,6 +2157,279 @@ après la suppression de l'entrée.**
 
 Le seul résidu en mémoire est le garde-fou de connexion du § 12.5, et il
 disparaît au redémarrage.
+
+---
+
+## 13. Ce qui est pris en charge
+
+Cette section dit, en un seul endroit, sur quels comptes l'intégration
+fonctionne et sur lesquels elle ne fonctionne pas. Ce qu'elle fournit une fois
+connectée est au § [14](#14-fonctions-fournies-par-source), et ce qu'elle ne
+sait pas faire au § [15](#15-limites-connues).
+
+### 13.1 Sources et espaces
+
+Deux services scolaires, et seulement deux : **PRONOTE** et **EcoleDirecte**.
+Le choix se fait au premier écran (§ [2](#2-se-connecter--les-trois-modes)).
+
+| Source | Pris en charge | Non pris en charge |
+| --- | --- | --- |
+| **PRONOTE** | L'**espace Parents** (adresse terminée par `parent.html`), avec un ou plusieurs enfants, et l'**espace Élèves** (adresse terminée par `eleve.html`). | Les autres espaces PRONOTE — Professeurs, Vie scolaire, et tout espace autre que Parents et Élèves. L'espace Vie scolaire est explicitement hors périmètre : il donne accès aux données d'autres élèves et n'a aucun usage domestique. |
+| **EcoleDirecte** | Le **compte famille** (un parent, un ou plusieurs enfants) et le **compte élève**. | Les autres profils EcoleDirecte (personnel de l'établissement, par exemple) : l'intégration n'y trouve aucun élève à suivre. |
+
+Rien, dans le formulaire PRONOTE, ne refuse une adresse d'un autre espace au
+moment de la saisie. Ne la tentez pas pour voir : l'intégration n'est conçue
+que pour les espaces Parents et Élèves, et chaque échec de connexion compte
+dans ce que PRONOTE sanctionne (§ [8](#8-réglages-et-cadence)).
+
+### 13.2 Modes de connexion
+
+| Source | Mode | Ce qui est conservé |
+| --- | --- | --- |
+| PRONOTE | **QR code de l'application mobile** (recommandé, § [2.2](#22-qr-code-de-lapplication-mobile-recommandé)) | Un jeton d'appareil, renouvelé à chaque connexion. Aucun mot de passe. |
+| PRONOTE | **Identifiant et mot de passe** PRONOTE (§ [2.3](#23-identifiant-et-mot-de-passe)) | L'identifiant et le mot de passe. |
+| PRONOTE | **Connexion par l'ENT**, avec les identifiants du portail (§ [2.4](#24-connexion-par-lent)) | L'identifiant et le mot de passe du portail, et le nom du portail. |
+| EcoleDirecte | **Identifiant et mot de passe**, puis la question de sécurité si elle est posée (§ [2.6](#26-ecoledirecte)) | L'identifiant, le mot de passe et la réponse à la question. |
+
+Les formulaires du QR code et des identifiants PRONOTE ont un champ pour le
+code PIN à deux facteurs ; ce code n'est jamais conservé.
+
+**Les portails ENT proposés.** La liste déroulante du formulaire ENT est
+construite au démarrage à partir de la bibliothèque `pronotepy` installée
+(version 2.15.7), plus un portail que l'intégration ajoute elle-même. Avec
+cette version, elle contient les 44 noms suivants :
+
+`ac_orleans_tours`, `ac_poitiers`, `ac_reims`, `ac_rennes`, `ac_reunion`,
+`atrium_sud`, `bordeaux`, `cas_agora06`, `cas_arsene76`, `cas_arsene76_edu`,
+`cas_cybercolleges42_edu`, `cas_ent27`, `cas_kosmos`,
+`cas_seinesaintdenis_edu`, `eclat_bfc`, `ecollege_haute_garonne_edu`,
+`enc_hauts_de_seine`, `ent77`, `ent_94`, `ent_auvergnerhonealpe`,
+`ent_creuse`, `ent_creuse_educonnect`, `ent_ecollege78`, `ent_elyco`,
+`ent_essonne`, `ent_hdf`, `ent_mayotte`, `ent_somme`, `ent_var`,
+`extranet_colleges_somme`, `ile_de_france`, `l_normandie`,
+`laclasse_educonnect`, `laclasse_lyon`, `lyceeconnecte_aquitaine`,
+`lyceeconnecte_edu`, `monbureaunumerique`, `neoconnect_guadeloupe`,
+`occitanie_montpellier`, `occitanie_montpellier_educonnect`,
+`occitanie_toulouse_edu`, `paris_classe_numerique`, `val_de_marne`,
+`val_doise`.
+
+`enc_hauts_de_seine` est celui que l'intégration fournit : la bibliothèque le
+livre désactivé, et l'intégration passe par la page de connexion du portail
+vers laquelle PRONOTE redirige lui-même. Les 43 autres sont ceux de la
+bibliothèque. Cette liste dit **ce qui est installé, pas ce qui fonctionne
+aujourd'hui** avec votre portail : un portail change de page de connexion sans
+prévenir, et la bibliothèque ne garantit plus la maintenance de ces
+connecteurs. Si le vôtre échoue et que l'application mobile PRONOTE fonctionne,
+le QR code ne dépend d'aucun portail.
+
+### 13.3 Comptes, enfants et installations
+
+- **Une entrée de configuration, un compte.** Un compte parent suit un ou
+  plusieurs enfants ; chaque enfant devient un appareil Home Assistant, sous un
+  appareil « compte » qui porte les diagnostics (§ [3](#3-comptes-parents-et-plusieurs-enfants)).
+- **Plusieurs comptes côte à côte** sont possibles — le compte de chaque
+  parent, un compte parent et le compte de l'élève, un compte PRONOTE et un
+  compte EcoleDirecte. Chacun a son propre budget de requêtes.
+- **Un même compte ne s'ajoute qu'une fois** : un second ajout est refusé avec
+  « Ce compte est déjà configuré ».
+- **Home Assistant 2026.9.0 au minimum.**
+
+### 13.4 Ce qui n'est pas pris en charge
+
+- Les espaces PRONOTE autres que Parents et Élèves, et les profils
+  EcoleDirecte sans élève (§ [13.1](#131-sources-et-espaces)).
+- Toute autre plateforme scolaire que PRONOTE et EcoleDirecte.
+- La **lecture du QR code par une caméra** : Home Assistant ne sait pas lire
+  un QR code dans un formulaire de configuration. Il faut coller le texte du
+  QR code (§ [2.2](#22-qr-code-de-lapplication-mobile-recommandé)).
+- Les **données d'autres élèves**, la corbeille et les brouillons de la
+  messagerie, le contenu détaillé des cours : délibérément jamais lus
+  (§ [11.4](#114-autres-bons-réflexes)).
+
+---
+
+## 14. Fonctions fournies, par source
+
+Ce qu'une entrée crée dépend de sa source. Une entité sans objet pour la
+source n'est pas créée du tout, plutôt que de rester indisponible pour
+toujours. Les tableaux ci-dessous donnent les entités par leur **nom affiché
+en français** ; le détail de chacune — état, attributs, palier de collecte —
+est au § [4](#4-catalogue-des-entités) et dans
+[l'annexe A](annexe-a-entites.md).
+
+### 14.1 Les entités, plateforme par plateforme
+
+| Plateforme | Entités | PRONOTE | EcoleDirecte |
+| --- | --- | --- | --- |
+| `sensor` | Emploi du temps : Prochain cours, Fin des cours, Fin de matinée, Prochaine annulation, Prochain réveil, Cours du jour, Emploi du temps de demain, Emploi du temps de la semaine | Oui | Oui |
+| `sensor` | Prochain contrôle | Oui | Non |
+| `sensor` | Devoirs : Devoirs à faire, Devoirs pour demain, Devoirs | Oui | Oui |
+| `sensor` | Notes : Dernière note, Moyenne générale, Moyenne de la classe, Notes, Moyennes par matière, Bulletin | Oui | Oui |
+| `sensor` | Vie scolaire : Prochaine punition, Absences non justifiées, Absences, Retards, Punitions | Oui | Oui |
+| `sensor` | Élève : Période en cours, Classe, Périodes | Oui | Oui |
+| `sensor` | Actualités non lues, Actualités, Messages non lus, Discussions | Oui | Non |
+| `sensor` | Évaluations, Menu du jour, Menu de demain, Équipe pédagogique | Oui | Non |
+| `sensor` | Périodes closes : Notes, Moyennes par matière, Moyenne générale, Bulletin, Absences, Retards, Punitions et Évaluations de chaque période close (§ [4.4](#44-les-périodes-closes)) | Oui | Non |
+| `sensor` | Diagnostic du compte : Appels du jour, Budget restant, Dernière collecte, Prochaine collecte, Connexions du jour, État du limiteur (§ [6](#6-les-entités-de-diagnostic)) | Oui | Oui |
+| `sensor` | Diagnostic du compte : Âge de la session, Durée de vie de la session | Oui | Non |
+| `binary_sensor` | Jour de classe, En cours, Cours annulés, Devoirs en retard, Absence en cours, Punition à venir | Oui | Oui |
+| `binary_sensor` | Sortie pédagogique, Contrôle prévu, Vacances | Oui | Non |
+| `binary_sensor` | Collectes bridées (sur l'appareil du compte) | Oui | Oui |
+| `calendar` | Emploi du temps, Devoirs, Punitions | Oui | Oui |
+| `todo` | Devoirs | Oui — cochable sur un compte élève quand l'écriture est activée (§ [7](#7-écrire-dans-pronote)) | Oui — en lecture seule |
+| `image` | Photo, si l'établissement en déclare une | Oui | Non |
+| `event` | Nouvelle note, Nouveau devoir, Cours modifié, Nouvelle absence, Nouveau retard, Nouvelle punition | Oui | Oui |
+| `event` | Nouvelle actualité, Nouveau message, Nouvelle évaluation | Oui | Non |
+| `button` | Rafraîchir, Rafraîchir les notes | Oui | Oui |
+
+« Oui » veut dire que l'entité est créée, pas que l'établissement publie la
+donnée : un collège qui ne publie pas ses menus aura une entité « Menu du
+jour » qui reste vide (§ [10.3](#103-symptôme--cause--remède)).
+
+### 14.2 Les services
+
+| Service | Rôle | PRONOTE | EcoleDirecte |
+| --- | --- | --- | --- |
+| `carnet_scolaire.refresh` | Demander une collecte prioritaire | Oui | Oui |
+| `carnet_scolaire.get_rate_limit_status` | Lire l'état du budget et du limiteur, sans requête | Oui | Oui |
+| `carnet_scolaire.get_ical_url` | Obtenir l'URL iCal de l'emploi du temps | Oui | Non |
+| `carnet_scolaire.get_identity` | Obtenir l'état civil et les responsables légaux | Oui | Non |
+| `carnet_scolaire.generate_timetable_pdf` | Générer un PDF de l'emploi du temps | Oui | Non |
+| `carnet_scolaire.get_attachment_url` | Obtenir l'adresse d'une pièce jointe de devoir | Oui | Non |
+| `carnet_scolaire.mark_homework_done` | Cocher un devoir | Oui — compte élève, écriture activée | Non |
+| `carnet_scolaire.mark_information_read` | Marquer une actualité comme lue | Oui — écriture activée | Non |
+| `carnet_scolaire.send_message` | Envoyer un message | Oui — écriture activée | Non |
+
+Sur un compte EcoleDirecte, un service marqué « Non » est refusé avant tout
+envoi, avec le message « La source ecoledirecte ne prend pas en charge
+l'action… ». Le détail de chaque service est au § [5](#5-les-services).
+
+### 14.3 Les automatisations d'appareil
+
+| Brique | PRONOTE | EcoleDirecte |
+| --- | --- | --- |
+| **Déclencheurs** (§ [9.2](#92-construire-soi-même--les-briques-disponibles)) | Les quatorze | Les quatorze sont proposés ; « Une actualité a été publiée », « Un message a été reçu » et « Une évaluation a été ajoutée » ne se déclenchent jamais (§ [15.2](#152-ecoledirecte)) |
+| **Conditions** | Les dix, selon les entités présentes sur l'appareil | Sept : « Un contrôle est prévu aujourd'hui », « C'est les vacances » et « Ce ne sont pas les vacances » ne sont pas proposées, faute d'entité |
+| **Actions** | « Tout rafraîchir », « Rafraîchir les notes » ; « Marquer une actualité comme lue » si l'écriture est activée ; « Cocher un devoir » si, en plus, le compte est un compte élève | « Tout rafraîchir » et « Rafraîchir les notes » |
+
+Les huit blueprints livrés reposent sur ces mêmes entités et déclencheurs
+(§ [9.1](#91-les-huit-blueprints-livrés)).
+
+---
+
+## 15. Limites connues
+
+Ce que l'intégration ne fait pas, ou fait avec une réserve, aujourd'hui. Pour
+chaque point : pourquoi, et ce que vous pouvez y faire. Aucune de ces limites
+n'est un défaut en attente de correction silencieuse ; celles qui ont une
+cause côté serveur ne se lèvent pas côté Home Assistant.
+
+### 15.1 PRONOTE
+
+- **Un compte parent ne peut pas cocher un devoir.** PRONOTE répond
+  normalement à une coche envoyée depuis l'espace Parents et ne l'enregistre
+  pas ; l'intégration la refuse donc avant tout envoi, la liste « Devoirs »
+  reste en lecture seule et l'action « Cocher un devoir » n'est pas proposée.
+  *Que faire :* ajouter aussi le compte de l'élève, qui peut cocher
+  (§ [7](#7-écrire-dans-pronote)).
+- **Les heures de fin de cours sont parfois déduites.** Quand PRONOTE ne
+  transmet pas l'heure de fin, ou en transmet une antérieure au début, elle est
+  calculée ou remplacée, et l'attribut `end_inferred` vaut « vrai » — sur
+  certains établissements, pour tous les cours. *Que faire :* afficher un
+  « environ » quand `end_inferred` est vrai ; ne pas s'en servir pour trier les
+  cours fiables des autres (§ [4.1](#41-lemploi-du-temps)).
+- **Les vacances sont une déduction.** PRONOTE ne publie pas de calendrier des
+  vacances : « Vacances » est active quand aucun cours n'est prévu dans les
+  sept jours, y compris quand l'établissement n'a pas encore publié la semaine
+  suivante. *Que faire :* s'en servir pour faire taire une alerte, pas comme
+  calendrier scolaire (§ [4.1](#41-lemploi-du-temps)).
+- **Le texte des actualités n'est pas récupéré**, et les messages d'une
+  discussion ne sont relus que lorsqu'elle reçoit du nouveau. Les lire à chaque
+  collecte coûterait une requête par élément. *Que faire :* ouvrir PRONOTE pour
+  le contenu ; les entités disent qu'il y a du nouveau et de qui
+  (§ [4.6](#46-les-actualités-et-la-messagerie)).
+- **Une installation antérieure à la version 0.0.29 reste en lecture seule.**
+  L'écriture est activée à la création d'une entrée ; une entrée plus ancienne
+  n'a jamais choisi d'écrire, et la mise à jour ne choisit pas à sa place.
+  *Que faire :* activer « Autoriser l'écriture dans PRONOTE » dans les options
+  (§ [7](#7-écrire-dans-pronote)).
+- **Le code PIN à deux facteurs est redemandé** chaque fois que PRONOTE
+  l'exige, parce qu'il n'est jamais conservé. *Que faire :* le saisir dans le
+  formulaire de reconnexion ; le mode QR code, qui enrôle un appareil, évite
+  aussi de conserver un mot de passe (§ [2.1](#21-lequel-choisir)).
+- **Un QR code ne sert qu'une fois.** PRONOTE l'invalide dès qu'un appareil
+  s'en est servi, et le périme vite. *Que faire :* en générer un nouveau à
+  chaque tentative, formulaire déjà ouvert (§ [2.2](#22-qr-code-de-lapplication-mobile-recommandé)).
+- **Les portails ENT dépendent de la bibliothèque `pronotepy`**, qui ne
+  garantit plus leur maintenance. *Que faire :* préférer le QR code quand
+  l'application mobile fonctionne (§ [13.2](#132-modes-de-connexion)).
+
+### 15.2 EcoleDirecte
+
+- **Quatre catégories seulement** : emploi du temps, devoirs, notes et vie
+  scolaire. Pas d'actualités, de messagerie, d'évaluations par compétences, de
+  menus, d'équipe pédagogique, de photo ni de périodes closes. Les entités
+  correspondantes ne sont pas créées (§ [14.1](#141-les-entités-plateforme-par-plateforme)).
+- **Aucune écriture**, et seulement deux services : `refresh` et
+  `get_rate_limit_status`. La liste « Devoirs » est en lecture seule ; les
+  autres services sont refusés avant tout envoi.
+- **Trois déclencheurs d'appareil sont proposés sans pouvoir se déclencher** :
+  « Une actualité a été publiée », « Un message a été reçu », « Une évaluation
+  a été ajoutée ». L'éditeur propose les quatorze déclencheurs sur tout
+  appareil d'enfant, quelle que soit la source. *Que faire :* ne pas les
+  utiliser sur un appareil EcoleDirecte.
+- **Le mot de passe est toujours conservé**, EcoleDirecte ne délivrant aucun
+  jeton d'appareil durable (§ [2.6](#26-ecoledirecte)).
+
+### 15.3 Communes aux deux sources
+
+- **La cadence est bridée, exprès.** PRONOTE ne publie aucune limite de débit
+  et sanctionne une adresse IP, pas seulement un compte ; EcoleDirecte a son
+  propre limiteur, réglé par les mêmes options. L'intégration se tient donc à un budget — environ 180 requêtes par
+  jour pour un enfant par défaut —, à un plafond journalier de requêtes, à un
+  plafond de connexions par jour et à des heures calmes, par défaut de 22 h à
+  6 h. Une nouvelle note apparaît à la collecte suivante de sa catégorie, pas à
+  l'instant où elle est saisie. Plusieurs entrées partent de la même adresse IP
+  et additionnent leurs requêtes. *Que faire :* accélérer seulement les
+  catégories qui comptent, en regardant l'estimation affichée ; un appel de
+  service ou un bouton passe les heures calmes, jamais le plafond
+  (§ [8](#8-réglages-et-cadence), [le limiteur et ses six états](LIMITEUR.md)).
+- **Après un redémarrage ou un rechargement, les entités repartent vides.**
+  Les données ne sont gardées qu'en mémoire ; chaque catégorie est relue tout de
+  suite, même en heures calmes, et les entités sont indisponibles le temps de
+  cette première collecte. Chaque redémarrage coûte une connexion sur le
+  plafond du jour. *Que faire :* rien, sinon éviter les redémarrages en boucle
+  (§ [8.6](#86-page--limitation-de-débit-)).
+- **Ce qui change pendant un arrêt ne produit pas d'évènement.** La première
+  collecte après un démarrage sert de référence et n'émet rien, sinon chaque
+  redémarrage rejouerait le trimestre ; une note arrivée pendant l'arrêt est
+  donc bien affichée, mais « Nouvelle note » ne se déclenche pas pour elle.
+  *Que faire :* après un redémarrage, ne pas compter sur les évènements pour
+  ce qui a changé pendant l'arrêt ; les capteurs, eux, sont à jour
+  (§ [4.10](#410-les-entités--évènement---ce-qui-vient-de-changer)).
+- **Les identifiants de PRONOTE changent à chaque session.** Le numéro d'un
+  enfant et celui de chaque élément — devoir, note, actualité — sont
+  rechiffrés à chaque connexion. L'intégration attribue donc ses propres clés,
+  et reconnaît un enfant dont le numéro a changé à son nom. Deux conséquences :
+  un devoir dont le professeur réécrit l'énoncé est traité comme un nouveau
+  devoir ; et un enfant dont le numéro **et** le nom publiés par PRONOTE
+  changent en même temps apparaît comme un nouvel appareil. *Que faire :*
+  cibler les devoirs par l'identifiant que l'intégration publie, jamais par
+  un numéro relevé dans PRONOTE ; supprimer l'appareil figé s'il en apparaît
+  un (§ [10.5](#105-deux-appareils-pour-un-seul-enfant)).
+- **L'agenda ne montre que ce qui a été collecté** : la semaine en cours et la
+  suivante pour l'emploi du temps. Faire défiler l'agenda plus loin ne déclenche
+  aucune requête et n'affiche rien de plus. *Que faire :* rien — trois mois de
+  défilement coûteraient trois mois de requêtes.
+- **L'historique des listes n'est pas enregistré.** Les attributs qui portent
+  des listes (`items` et assimilés) sont exclus de l'enregistreur de Home
+  Assistant, parce qu'ils dépassent sa limite de taille ; l'état — un nombre,
+  une date — est, lui, enregistré. *Que faire :* grapher l'état, pas la liste.
+- **Certaines données dépendent de l'établissement.** Menus, évaluations par
+  compétences, vie scolaire, photo, heures de fin de cours : beaucoup
+  d'établissements n'en publient pas tout. Une entité créée peut donc rester
+  vide. *Que faire :* rien à corriger côté Home Assistant
+  (§ [10.3](#103-symptôme--cause--remède)).
 
 ---
 

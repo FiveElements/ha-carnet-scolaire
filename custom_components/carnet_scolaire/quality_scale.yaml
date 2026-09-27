@@ -76,23 +76,23 @@ rules:
   docs-data-update: done
   docs-examples: done
   docs-known-limitations:
-    status: todo
+    status: done
     comment: >
-      Limitations are scattered across the guide and the specification; there
-      is no single section stating them (e.g. a parent account cannot tick
-      homework, EcoleDirecte offers no write, child identifiers rotate).
+      docs/GUIDE-UTILISATEUR.md section 15 "Limites connues" lists each
+      limitation (PRONOTE, EcoleDirecte, both) with its cause and what the
+      user can do.
   docs-supported-devices:
-    status: todo
+    status: done
     comment: >
-      The docs do not state in one place which platforms, account types
-      (parent, pupil) and login modes are supported, nor what each source
-      (PRONOTE, EcoleDirecte) lacks.
+      docs/GUIDE-UTILISATEUR.md section 13 "Ce qui est pris en charge" states
+      the supported sources, PRONOTE spaces, account types, login modes and
+      ENT portals, and what is not supported.
   docs-supported-functions:
-    status: todo
+    status: done
     comment: >
-      The entity catalogue (annexe A) lists PRONOTE entities but does not say
-      which ones EcoleDirecte provides, so the functions a user gets depend on
-      a source the docs do not map.
+      docs/GUIDE-UTILISATEUR.md section 14 "Fonctions fournies, par source"
+      maps entities, services and device automations to PRONOTE and
+      EcoleDirecte, and links annexe A for the detail.
   docs-troubleshooting: done
   docs-use-cases: done
   dynamic-devices: done

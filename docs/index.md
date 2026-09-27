@@ -60,16 +60,23 @@ authentification, et aucun mot de passe n'est conservé.
   `todo`, `image`, `event`, `button` — emploi du temps, devoirs, notes et
   moyennes, absences et retards, punitions, évaluations par compétences,
   actualités, discussions, menus, personnel, bulletins.
-- **Huit services**, dont quatre renvoient une réponse plutôt que d'alimenter
-  une entité : l'URL iCal, l'identité, le PDF d'emploi du temps et l'état du
-  limiteur.
-- **Écritures optionnelles**, coupées par défaut : cocher un devoir, marquer
-  une actualité comme lue, envoyer un message.
+- **Neuf services**, dont cinq renvoient une réponse plutôt que d'alimenter
+  une entité : l'URL iCal, l'identité, le PDF d'emploi du temps, l'adresse
+  d'une pièce jointe et l'état du limiteur.
+- **Écritures optionnelles**, activées pour une nouvelle installation et
+  coupées d'un interrupteur : cocher un devoir, marquer une actualité comme
+  lue, envoyer un message.
 - **Automatisations d'appareil** : 14 déclencheurs, 10 conditions, 4 actions,
   plus huit blueprints livrés en français et en anglais.
 - **Trois modes de connexion** : QR code (recommandé), identifiants directs,
   ENT.
 - **Comptes parents multi-enfants**, chaque enfant étant un appareil distinct.
+
+Tout n'est pas disponible partout : EcoleDirecte n'offre qu'une partie de ces
+fonctions, et PRONOTE lui-même pose quelques limites. Le guide les rassemble
+en trois sections — [ce qui est pris en charge](GUIDE-UTILISATEUR.md#13-ce-qui-est-pris-en-charge),
+[les fonctions par source](GUIDE-UTILISATEUR.md#14-fonctions-fournies-par-source)
+et [les limites connues](GUIDE-UTILISATEUR.md#15-limites-connues).
 
 ## Ce que ça protège
 
