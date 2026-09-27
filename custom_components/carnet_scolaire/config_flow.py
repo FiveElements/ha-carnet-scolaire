@@ -32,9 +32,10 @@ import uuid as uuid_module
 from homeassistant.config_entries import (
     SOURCE_RECONFIGURE,
     ConfigEntry,
+    ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
-    OptionsFlow,
+    OptionsFlowWithReload,
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
@@ -1034,13 +1035,18 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
             for key, value in merged.items()
             if key not in _NEVER_PERSISTED and value is not None
         }
-        # `reload_even_if_entry_is_unchanged=False` because this entry *has* an
-        # update listener (`__init__.py`, `add_update_listener`), and HA 2026.9
-        # reports leaving the default on such an entry as a mistake:
-        # `report_usage("has an update listener and should use it for scheduling
-        # a reload", breaks_in_ha_version="2026.12.0")`. The listener does the
-        # reload, so asking for one here as well is either redundant or a second
-        # reload.
+        # This call is the one and only reload of a re-authentication: Home
+        # Assistant schedules it whenever the entry changed, and
+        # `reload_even_if_entry_is_unchanged=False` spares a login when it did
+        # not. It is also why the integration registers **no** update listener.
+        # On an entry that has one, Home Assistant 2026.9 reports this very call
+        # -- whatever that flag says, as soon as the data changed, which a
+        # reconnection always does -- with `report_usage("has an update listener
+        # and should use it for scheduling a reload",
+        # breaks_in_ha_version="2026.12.0")`. An earlier comment here claimed
+        # the flag avoided that report; it did not, and every reconnection of a
+        # loaded entry logged it. Options now reload through
+        # `PronoteOptionsFlow` instead (see its docstring).
         return self.async_update_reload_and_abort(
             entry,
             data=persisted,
@@ -1416,7 +1422,7 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
 
-class PronoteOptionsFlow(OptionsFlow):
+class PronoteOptionsFlow(OptionsFlowWithReload):
     """Three sections, and a live budget estimate.
 
     The estimate is not decoration. Annexe B §7 requires the page to show what
@@ -1424,6 +1430,24 @@ class PronoteOptionsFlow(OptionsFlow):
     the numbers in the annexe -- a setting whose consequence you cannot see gets
     set at random, and the consequence here is measured in requests against
     somebody's school account.
+
+    **It is also what applies a save (§7.3).** ``OptionsFlowWithReload``
+    reloads the entry when, and only when, the stored options really changed,
+    which replaces the update listener ``__init__.py`` used to register. The
+    listener had to go: Home Assistant 2026.9 reports every
+    ``async_update_reload_and_abort`` on an entry carrying one -- that is,
+    every re-authentication and reconfiguration of a running account -- and
+    announces the break for 2026.12. Dropping it also removed the guard it
+    needed, because a listener fires on *any* write, including the account's
+    own writes to ``entry.data`` (a rotated token, a newly paired child), none
+    of which may reload; this flow only ever sees the options.
+
+    The reload is limited to a **loaded** entry, which is what the listener's
+    lifetime gave for free: it was registered at the end of a successful
+    set-up and removed on unload. Saving the options of an entry that is
+    failing therefore does not start a set-up -- and a login -- of its own; it
+    waits for Home Assistant's own retry, as it always did. See
+    :meth:`_save`.
     """
 
     async def async_step_init(
@@ -1697,6 +1721,9 @@ class PronoteOptionsFlow(OptionsFlow):
         for key in clearable:
             if not merged.get(key):
                 merged.pop(key, None)
+        # Read by Home Assistant when the flow finishes, so decided here, at
+        # the last moment: only a running account is reloaded (class docstring).
+        self.automatic_reload = self.config_entry.state is ConfigEntryState.LOADED
         return self.async_create_entry(title="", data=merged)
 
     def _estimate_placeholders(self, options: Mapping[str, Any]) -> dict[str, str]:

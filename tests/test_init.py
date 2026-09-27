@@ -124,6 +124,10 @@ from custom_components.carnet_scolaire.tiers import (
     collect_tier,
 )
 from tests.test_ecoledirecte_client import RecordingTransport, load_fixture
+from tests.test_options_flow import (
+    _form_defaults as form_defaults,
+    _open as open_options_section,
+)
 
 from .conftest import CHILDREN, REQUIRES_HASS, child_key
 
@@ -689,12 +693,20 @@ async def test_an_options_change_reloads_without_recollecting(
     An options save reloads the entry, which builds a new scheduler whose every
     deadline is unset -- making all ten tiers immediately due. The schedule is
     handed across the reload through ``hass.data``, so the reload is free.
+
+    Saved through the options page and not written with ``async_update_entry``:
+    the page is what reloads (``PronoteOptionsFlow`` is an
+    ``OptionsFlowWithReload``), and a bare write to the options no longer does.
     """
     before = len(parent_client.posts)
 
-    hass.config_entries.async_update_entry(
-        mock_entry,
-        options={**mock_entry.options, OPT_TIER_ENABLED.format(tier="menus"): False},
+    form = await open_options_section(hass, mock_entry, "tiers")
+    await hass.config_entries.options.async_configure(
+        form["flow_id"],
+        {
+            **form_defaults(form["data_schema"]),
+            OPT_TIER_ENABLED.format(tier="menus"): False,
+        },
     )
     await hass.async_block_till_done()
 
@@ -711,11 +723,13 @@ async def test_a_data_only_write_does_not_reload_the_entry(
     """Minting a child key at runtime must not restart the account.
 
     ``_async_pair_children`` persists its table with ``async_update_entry``,
-    which wakes the update listener. That listener exists to apply an
-    *options* change -- its own docstring says so -- yet it reloads on any
-    write at all. Pairing a child discovered during a tick would therefore
-    reload the very entry whose entities we are adding without a reload, and
-    the ``dynamic-devices`` rule would be unreachable by construction.
+    which used to wake the update listener. That listener existed to apply an
+    *options* change, yet it fired on any write at all; it is gone now (see
+    ``PronoteOptionsFlow``), and this test keeps anything that replaces it
+    from reloading on a data write. Otherwise pairing a child discovered
+    during a tick would reload the very entry whose entities we are adding
+    without a reload, and the ``dynamic-devices`` rule would be unreachable by
+    construction.
     """
     stored = list(mock_entry.data.get(CONF_CHILD_KEYS) or ())
 
