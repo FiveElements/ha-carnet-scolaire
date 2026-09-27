@@ -734,6 +734,34 @@ async def test_a_failed_login_re_displays_the_form_with_a_reason(
     assert result["errors"] == {"base": expected}
 
 
+async def test_an_undecodable_answer_in_the_flow_is_logged_without_its_payload(
+    hass: HomeAssistant, no_spacing: None, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The flow's login decodes what the runtime's does, with the same risk.
+
+    An unexpected failure was logged with ``_LOGGER.exception``, and the
+    traceback of a decoding error prints what it could not read -- a child's
+    name, a ``N``. It is described instead; a genuine bug keeps its traceback.
+    """
+    caplog.set_level(logging.DEBUG, logger="custom_components.carnet_scolaire")
+    flow_id = await _start(hass)
+    error = KeyError("46#NOT-A-REAL-N")
+    error.__context__ = ValueError("Enfant Un")
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe", side_effect=error
+    ):
+        result = await _submit_credentials(hass, flow_id)
+
+    assert result["errors"] == {"base": "unknown"}
+    assert "unexpected failure while validating the account: KeyError (decode)" in (
+        caplog.text
+    )
+    assert "Traceback" not in caplog.text
+    assert "46#NOT-A-REAL-N" not in caplog.text
+    assert "Enfant Un" not in caplog.text
+
+
 async def test_the_flow_stops_asking_after_three_refusals(
     hass: HomeAssistant, no_spacing: None
 ) -> None:

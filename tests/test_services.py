@@ -553,7 +553,10 @@ async def test_a_failure_on_the_way_to_pronote_reaches_the_caller_as_a_sentence(
     assert raised.value.translation_key == key
     assert raised.value.translation_placeholders == placeholders
     assert not isinstance(raised.value, ServiceValidationError)
-    assert raised.value.__cause__ is failure
+    # Chained to the original, so a traceback keeps the real cause -- except
+    # a decoding error, whose text is the payload it could not read.
+    decoding = isinstance(failure, DataError)
+    assert raised.value.__cause__ is (None if decoding else failure)
     assert "NOT-A-REAL-TOKEN" not in str(raised.value)
     assert "NOT-A-REAL-TOKEN" not in json.dumps(raised.value.translation_placeholders)
     assert parent_client.ical_calls == 0

@@ -123,7 +123,11 @@ from .const import (
     SessionStrategy,
 )
 from .ent_providers import ent_provider_names
-from .failures import describe_failure, is_transport_failure
+from .failures import (
+    describe_failure,
+    is_traceback_safe,
+    is_transport_failure,
+)
 from .login_guard import clear_login_penalties, limiter_state_store, login_guard
 from .options import (
     build_rate_limit_config,
@@ -334,6 +338,22 @@ def _refusal_shape(error: BaseException) -> str:
     if is_transport_failure(error):
         return describe_failure(error)
     return f"{type(error).__name__}({error})"
+
+
+def _log_unexpected(message: str, error: BaseException) -> None:
+    """An unexpected validation failure, traced only when that is safe.
+
+    A decoding error lands here -- the flow's login is the runtime's -- and its
+    traceback prints what it could not decode: a child's name, a `N`. It is
+    then described instead (`failures.describe_failure`); a genuine bug keeps
+    its traceback, which is the whole of what a report about it can contain.
+    """
+    _LOGGER.error(
+        "%s: %s",
+        message,
+        describe_failure(error),
+        exc_info=is_traceback_safe(error),
+    )
 
 
 def _reset_ed_entry_penalties(hass: HomeAssistant, entry_id: str | None) -> None:
@@ -798,8 +818,8 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
             errors["base"] = "ed_invalid_auth"
         except ConnectorTransportError:
             errors["base"] = "cannot_connect"
-        except Exception:
-            _LOGGER.exception("unexpected failure while validating EcoleDirecte")
+        except Exception as error:  # noqa: BLE001 -- logged, then "unknown"
+            _log_unexpected("unexpected failure while validating EcoleDirecte", error)
             errors["base"] = "unknown"
         else:
             students = list(outcome["students"])
@@ -1389,8 +1409,8 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
             _log_refusal(error)
             guard.note_login(LoginOutcome.TRANSPORT, requests_used=cost)
             errors["base"] = "cannot_connect"
-        except Exception:
-            _LOGGER.exception("unexpected failure while validating the account")
+        except Exception as error:  # noqa: BLE001 -- logged, then "unknown"
+            _log_unexpected("unexpected failure while validating the account", error)
             guard.note_login(LoginOutcome.TRANSPORT, requests_used=cost)
             errors["base"] = "unknown"
         else:

@@ -74,7 +74,7 @@ from .const import (
 )
 from .coordinator import PronoteTierCoordinator
 from .delta import DeltaDetector
-from .failures import describe_failure, is_transport_failure
+from .failures import describe_failure, is_traceback_safe
 from .login_guard import limiter_state_store
 from .models import Period, SessionFacts, Snapshot, Student
 from .options import (
@@ -1222,23 +1222,30 @@ class PronoteAccount:
                 # attempted ten logins a tick: the one gesture that gets an
                 # address suspended.
                 self.scheduler.mark_failed(tier, self.limiter.retry_delay())
-                _LOGGER.debug("authentication blocked tier %s: %s", tier, error)
+                # Described, not quoted: `AccountUnreadable` is raised from a
+                # decoding error, and that text is the payload.
+                _LOGGER.debug(
+                    "authentication blocked tier %s: %s",
+                    tier,
+                    describe_failure(error),
+                )
                 return
             except Exception as error:  # top of one cycle (§5.3)
                 record.consecutive_failures += 1
                 coordinator.note_failure(error)
                 self.scheduler.mark_failed(tier, self.limiter.retry_delay())
-                # No traceback for a transport failure: it prints the message
-                # of every link, and the transport link quotes the host and
-                # the path it failed on. The session has already said, once,
-                # that the service is unavailable.
-                transport = is_transport_failure(error)
+                # No traceback for a transport or a decoding failure: it
+                # prints the message of every link, the transport link quotes
+                # the host and the path it failed on, and the decoding link
+                # the data it could not read -- a name, a homework text, a
+                # `N`. The session has already said, once, that the service
+                # is unavailable.
                 _LOGGER.debug(
                     "tier %s failed for student %s: %s",
                     tier,
                     student.id,
                     describe_failure(error),
-                    exc_info=not transport,
+                    exc_info=is_traceback_safe(error),
                 )
                 return
 

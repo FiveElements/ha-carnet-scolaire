@@ -30,6 +30,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.diagnostics import REDACTED
+from pronotepy.exceptions import ParsingError
 import pytest
 
 from custom_components.carnet_scolaire.const import (
@@ -40,6 +41,7 @@ from custom_components.carnet_scolaire.const import (
     DOMAIN,
     SERVICE_GET_ICAL_URL,
     SERVICE_GET_RATE_LIMIT_STATUS,
+    Tier,
 )
 from custom_components.carnet_scolaire.diagnostics import (
     async_get_config_entry_diagnostics,
@@ -52,6 +54,8 @@ if TYPE_CHECKING:
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     from custom_components.carnet_scolaire.account import PronoteAccount
+
+    from .fixtures.client import FakeClient
 
 pytestmark = REQUIRES_HASS
 
@@ -255,3 +259,53 @@ async def test_nothing_secret_is_logged_even_at_debug(
             f"{name} was written to the log"
         )
     assert not any(TICKET in hay for hay in haystacks)
+
+
+async def test_a_payload_that_cannot_be_decoded_is_not_logged_even_at_debug(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    account: PronoteAccount,
+    parent_client: FakeClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The one path where the data itself, not a credential, reached the log.
+
+    The text of a decoding error is a fragment of what it could not decode:
+    ``pronotepy`` writes ``Error while converting value: <the converter's
+    error>``, which quotes the value, and a ``KeyError`` names what was looked
+    up. It went into a DEBUG traceback on this integration's logger -- the
+    one a user is told to enable. Only that logger is read here: the
+    ``pronotepy`` ones are never enabled, and this test does not either.
+    """
+    caplog.set_level(logging.DEBUG, logger="custom_components.carnet_scolaire")
+    name = "Enfant Un"
+    session_n = "46#NOT-A-REAL-N"
+    text = f"invalid literal for int() with base 10: '{name}' ({session_n})"
+    failures: list[Exception] = [
+        ParsingError(f"Error while converting value: {text}", {"L": name}, ("V",)),
+        KeyError(session_n),
+        ValueError(text),
+    ]
+
+    def _undecodable(_body: Any) -> dict[str, Any]:
+        raise failures.pop(0)
+
+    parent_client.responses["PageCahierDeTexte"] = _undecodable
+    for _attempt in range(3):
+        await account._async_collect(Tier.HOMEWORK)
+    await hass.async_block_till_done()
+
+    ours = [
+        caplog.handler.format(record)
+        for record in caplog.records
+        if record.name.startswith("custom_components.carnet_scolaire")
+    ]
+    assert not failures, "the three failures were not all raised"
+    assert any("(decode" in line for line in ours), "log capture is not wired up"
+    diagnostics = json.dumps(
+        await async_get_config_entry_diagnostics(hass, mock_entry), default=str
+    )
+    for hay in (*ours, diagnostics):
+        assert name not in hay
+        assert session_n not in hay
+        assert "Traceback" not in hay

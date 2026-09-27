@@ -24,7 +24,7 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
-from pronotepy.exceptions import PronoteAPIError
+from pronotepy.exceptions import DataError, PronoteAPIError
 
 from .account import PronoteAccount
 from .attachment import async_register_view
@@ -40,7 +40,7 @@ from .connectors.errors import (
 from .connectors.factory import source_from_entry_data
 from .connectors.protocol import Source
 from .const import DEFAULT_READ_TIMEOUT, DOMAIN, OPT_READ_TIMEOUT
-from .failures import describe_failure, is_transport_failure
+from .failures import describe_failure, safe_cause
 from .options import bounded_option
 from .ratelimit import LoginRefusedByLimiter
 from .services import async_setup_services
@@ -116,11 +116,12 @@ def _chain_for_log(error: Exception) -> Exception | None:
     """The cause to chain a set-up refusal to, or ``None`` to hide it.
 
     Home Assistant writes the traceback of a ``ConfigEntryNotReady`` at DEBUG,
-    cause included, and the message of a transport cause quotes the
-    establishment's host and the path it failed on. Every other cause is kept:
-    it is what a bug report about a real fault needs.
+    cause included. The message of a transport cause quotes the
+    establishment's host and the path it failed on; the message of a decoding
+    cause quotes what it could not decode -- a child's name, a ``N``. Every
+    other cause is kept: it is what a bug report about a real fault needs.
     """
-    return None if is_transport_failure(error) else error
+    return safe_cause(error)
 
 
 def _setup_error[E: HomeAssistantError](
@@ -201,7 +202,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
         await account.async_unload()
         raise _setup_error(
             ConfigEntryNotReady, "setup_login_postponed", error
-        ) from error
+        ) from _chain_for_log(error)
     except (AccountUnreadable, ConnectorUndecodableError, ConnectorError) as error:
         # The server answered and the credentials were fine; what came back is
         # outside the declared contract. Retrying is right -- establishments do
@@ -213,7 +214,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
         # repair as `AccountUnreadable`, never `ConfigEntryAuthFailed`.
         account.async_open_unreadable_issue()
         await account.async_unload()
-        raise _setup_error(ConfigEntryNotReady, "setup_unreadable", error) from error
+        # Not chained when the cause quotes the payload: `AccountUnreadable`
+        # is raised *from* the decoding error, whose text is the data.
+        raise _setup_error(
+            ConfigEntryNotReady, "setup_unreadable", error
+        ) from _chain_for_log(error)
     except PronoteAPIError as error:
         # A protocol-level refusal with no `Erreur.G` we recognise. It is the
         # server's answer, so "not ready" and retry -- never "auth failed",
@@ -221,7 +226,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
         await account.async_unload()
         raise _setup_error(
             ConfigEntryNotReady, "setup_server_refused", error
-        ) from error
+        ) from _chain_for_log(error)
     except (TimeoutError, OSError) as error:
         # Classified, not quoted, and not chained. Home Assistant logs this
         # message and shows it as the entry's state, then logs the "Full
@@ -229,6 +234,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
         # establishment's host and the path it failed on.
         await account.async_unload()
         raise _setup_error(ConfigEntryNotReady, "setup_network_error", error) from None
+    except (DataError, KeyError, ValueError) as error:
+        # A decoding error *after* the login -- the children, the periods --
+        # comes out of the session unwrapped, and used to escape set-up
+        # entirely: Home Assistant then logs "Error setting up entry" with the
+        # full traceback, at ERROR, on its own logger, and the text of a
+        # decoding error is the payload it could not read. It is the condition
+        # an undecodable login already names, so it gets the same repair and
+        # the same reason. After the `OSError` arm on purpose: `requests`'
+        # `InvalidURL` and `JSONDecodeError` are `ValueError`s as well, and
+        # they are transport failures.
+        account.async_open_unreadable_issue()
+        await account.async_unload()
+        raise _setup_error(
+            ConfigEntryNotReady, "setup_unreadable", error
+        ) from _chain_for_log(error)
 
     entry.runtime_data = account
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = account

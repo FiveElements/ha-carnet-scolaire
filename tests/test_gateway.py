@@ -1648,6 +1648,45 @@ def test_an_undecodable_absence_or_delay_costs_only_itself(
     assert [item.ref for item in facts.delays] == ["D-GOOD"]
 
 
+def test_a_skipped_entry_is_logged_without_the_payload_it_carried(
+    gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Every skipped entry wrote a DEBUG traceback, and it quoted the entry.
+
+    ``pronotepy`` raises ``Error while converting value: <the converter's
+    error>``, the converter's error quotes the refused value, and DEBUG on
+    this integration's logger is exactly what a user is told to turn on
+    before filing a bug. The line keeps the kind of entry and the protocol
+    field; the value, and the entry's session ``N``, stay out.
+    """
+    caplog.set_level(logging.DEBUG, logger="custom_components.carnet_scolaire")
+    name = "Enfant Un"
+    session_n = "46#NOT-A-REAL-N"
+    bad_absence = protocol.absence(identifier=session_n)
+    bad_absence["dateDebut"] = {"_T": 7, "V": name}
+    client.responses["PagePresence"] = protocol.attendance_response([bad_absence])
+
+    period = current_period(gateway, client)
+    facts = gateway.attendance(client, period).facts  # type: ignore[arg-type]
+
+    # Only this integration's records. `pronotepy.dataClasses` writes the
+    # whole entry at DEBUG on its own logger -- the reason no user is ever
+    # told to enable it -- and the suite's root level lets it through here.
+    ours = "\n".join(
+        caplog.handler.format(record)
+        for record in caplog.records
+        if record.name.startswith("custom_components.carnet_scolaire")
+    )
+    assert facts.absences == ()
+    assert (
+        "skipping an undecodable absence: ParsingError (decode, field dateDebut.V)"
+        in ours
+    )
+    assert "Traceback" not in ours
+    assert name not in ours
+    assert session_n not in ours
+
+
 def test_an_absence_missing_a_required_field_is_dropped(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:

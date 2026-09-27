@@ -35,7 +35,7 @@ from homeassistant.helpers import (
     entity_registry as er,
     issue_registry as ir,
 )
-from pronotepy.exceptions import CryptoError, MFAError, PronoteAPIError
+from pronotepy.exceptions import CryptoError, MFAError, ParsingError, PronoteAPIError
 import pytest
 import requests
 
@@ -1184,6 +1184,141 @@ async def test_a_failed_tier_that_is_not_transport_keeps_its_traceback(
     await account._async_collect(Tier.HOMEWORK)
 
     assert "Traceback" in caplog.text
+
+
+#: What the text of a decoding error carries: a fragment of the payload it
+#: could not read. Fictional, both of them.
+_DECODED_NAME = "Enfant Un"
+_DECODED_N = "46#NOT-A-REAL-N"
+
+
+def _decoding_error() -> ParsingError:
+    """A decoding error as ``pronotepy``'s resolver raises it, cause and all."""
+    text = f"invalid literal for int() with base 10: '{_DECODED_NAME}' ({_DECODED_N})"
+    error = ParsingError(
+        f"Error while converting value: {text}",
+        {"N": _DECODED_N, "L": _DECODED_NAME},
+        ("dateDemande", "V"),
+    )
+    error.__cause__ = ValueError(text)
+    return error
+
+
+def _assert_no_payload(text: str) -> None:
+    assert _DECODED_NAME not in text
+    assert _DECODED_N not in text
+
+
+def _assert_no_issue_quotes_the_payload(hass: HomeAssistant) -> None:
+    for issue in ir.async_get(hass).issues.values():
+        _assert_no_payload(json.dumps(issue.translation_placeholders or {}))
+
+
+def _debug_on_what_a_user_is_told_to_enable(caplog: pytest.LogCaptureFixture) -> None:
+    """This integration's logger and Home Assistant's, never ``pronotepy``'s."""
+    caplog.set_level(logging.DEBUG, logger="custom_components.carnet_scolaire")
+    caplog.set_level(logging.DEBUG, logger="homeassistant")
+
+
+async def test_an_undecodable_login_names_the_field_and_never_the_payload(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    school_day: Any,
+    no_spacing: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The login decode line is loud on purpose, and it quoted the payload.
+
+    It wrote ``(%s: %s)`` with the error's message, ``AccountUnreadable``
+    carried ``str(error)``, and set-up chained the decoding error, whose
+    traceback Home Assistant prints at DEBUG -- so a child's name or a ``N``
+    reached the log a user attaches to a public issue. The line keeps what a
+    protocol change is diagnosed by: the class and the protocol field.
+    """
+    del school_day, no_spacing
+    _debug_on_what_a_user_is_told_to_enable(caplog)
+
+    await _setup_failing(hass, mock_entry, _decoding_error())
+
+    assert mock_entry.state is ConfigEntryState.SETUP_RETRY
+    assert mock_entry.error_reason_translation_key == "setup_unreadable"
+    assert (
+        "could not be decoded (ParsingError (decode, field dateDemande.V))"
+        in caplog.text
+    )
+    _assert_no_payload(caplog.text)
+    _assert_no_payload(str(mock_entry.reason))
+    _assert_no_payload(json.dumps(mock_entry.error_reason_translation_placeholders))
+    _issue(hass, mock_entry, ISSUE_ACCOUNT_UNREADABLE)
+    _assert_no_issue_quotes_the_payload(hass)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(_decoding_error(), id="parsing-error"),
+        pytest.param(KeyError(_DECODED_N), id="key-error"),
+        pytest.param(ValueError(_DECODED_NAME), id="value-error"),
+    ],
+)
+async def test_a_decoding_error_after_the_login_is_unreadable_not_a_crash(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    school_day: Any,
+    no_spacing: None,
+    caplog: pytest.LogCaptureFixture,
+    error: Exception,
+) -> None:
+    """Learning the account's shape decodes too, outside the login's wrapper.
+
+    A decoding error there came out of set-up unclassified, and Home
+    Assistant answered with "Error setting up entry" and the full traceback,
+    at ERROR, on its own logger -- the payload in plain text, and no retry.
+    It is the condition an undecodable login already names.
+    """
+    del school_day, no_spacing
+    _debug_on_what_a_user_is_told_to_enable(caplog)
+
+    with patch.object(PronoteAccount, "async_setup", side_effect=error):
+        await hass.config_entries.async_setup(mock_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert mock_entry.state is ConfigEntryState.SETUP_RETRY
+    assert mock_entry.error_reason_translation_key == "setup_unreadable"
+    _assert_no_payload(caplog.text)
+    _assert_no_payload(str(mock_entry.reason))
+    _issue(hass, mock_entry, ISSUE_ACCOUNT_UNREADABLE)
+    _assert_no_issue_quotes_the_payload(hass)
+
+
+async def test_a_collection_that_cannot_be_decoded_leaves_no_payload_behind(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    account: PronoteAccount,
+    parent_client: FakeClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The failed tier's DEBUG traceback printed the payload it choked on.
+
+    The line keeps the tier, the student and the kind of failure, without a
+    traceback; diagnostics and repair issues must not have picked up the text.
+    """
+    _debug_on_what_a_user_is_told_to_enable(caplog)
+
+    def _undecodable(_body: Any) -> dict[str, Any]:
+        raise _decoding_error()
+
+    parent_client.responses["PageCahierDeTexte"] = _undecodable
+    caplog.clear()
+
+    await account._async_collect(Tier.HOMEWORK)
+
+    assert "ParsingError (decode, field dateDemande.V)" in caplog.text
+    assert "Traceback" not in caplog.text
+    _assert_no_payload(caplog.text)
+    diagnostics = await async_get_config_entry_diagnostics(hass, mock_entry)
+    _assert_no_payload(json.dumps(diagnostics, default=str))
+    _assert_no_issue_quotes_the_payload(hass)
 
 
 #: What an upstream message can carry: a pasted address with its session
