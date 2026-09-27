@@ -148,6 +148,13 @@ class EcoledirecteConnector:
     def student_ids(self) -> tuple[str, ...]:
         return self._student_ids
 
+    def announced_children(self) -> tuple[tuple[str, str], ...]:
+        """Every child the login announced, as ``(id, name)``."""
+        return tuple(
+            (student_id, self._session_facts[student_id].student.name)
+            for student_id in self._student_ids
+        )
+
     def session_facts(self, student_id: str) -> SessionFacts:
         try:
             return self._session_facts[student_id]

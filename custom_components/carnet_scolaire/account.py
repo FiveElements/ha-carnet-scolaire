@@ -34,7 +34,7 @@ from homeassistant.helpers import (
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util import dt as dt_util
 
-from .child_keys import is_minted, pair
+from .child_keys import followed, is_legacy_selection, is_minted, pair
 from .connectors.factory import build_connector, source_from_entry_data
 from .connectors.protocol import LimiterView, PronoteExtras, Source, has_pronote_extras
 from .const import (
@@ -175,7 +175,14 @@ def _establishment_timezone(hass: HomeAssistant, options: Mapping[str, Any]) -> 
 
 
 def _selected_children_from_entry(data: Mapping[str, Any]) -> tuple[str, ...]:
-    """Pronote stores `children`; ED stores the selection as `child_keys` only."""
+    """The stored choice of children, in whichever form the entry holds it.
+
+    Once an account has paired, `children` holds minted keys. Before that it
+    is in the form the config flow writes: resource identifiers for PRONOTE,
+    and for an EcoleDirecte entry nothing at all -- its flow records only the
+    chosen children in `child_keys`, so their identifiers *are* the choice.
+    `child_keys.followed` reads both forms.
+    """
     stored = data.get(CONF_CHILDREN)
     if stored:
         return tuple(stored)
@@ -213,12 +220,6 @@ class PronoteAccount:
         self.state = AccountState()
 
         options = entry.options
-        #: The options this account was built from, so the update listener can
-        #: tell an options save -- which must reload -- from a write to
-        #: ``entry.data``, which must not. Pairing a child discovered mid-tick
-        #: writes the key table, and a reload there would undo the very thing
-        #: that write exists to make possible.
-        self.applied_options: dict[str, Any] = dict(options)
         # Clamped, like everything else read out of the options mapping. A
         # stored read timeout of 0 makes every request time out before it is
         # sent, which presents as a total outage with a healthy server, and
@@ -301,12 +302,17 @@ class PronoteAccount:
         self._carried_snapshots = _saved_snapshots(hass).get(entry.entry_id)
         self._carried_schedule = _saved_schedule(hass).get(entry.entry_id, {})
 
+        #: The stored choice, re-read and rewritten as minted keys at every
+        #: pairing: see `_async_pair_children`.
         self._selected_children = _selected_children_from_entry(entry.data)
-        #: Every child the account has announced so far, followed or not. The
-        #: baseline `_async_adopt_announced_children` compares against.
+        #: The roster the last pairing saw, followed or not. What
+        #: `_async_adopt_announced_children` compares against to know whether a
+        #: login changed it.
         self._announced_children: tuple[str, ...] = ()
         #: PRONOTE resource identifier -> the key this integration minted for
-        #: that child. Filled by `_async_pair_children` during set-up, before
+        #: that child, for the *followed* children only -- a declined child
+        #: has a record in the table but no entity to build. Filled by
+        #: `_async_pair_children` during set-up, before
         #: any platform is forwarded, because `entity.py` reads it to build
         #: every `unique_id`. Empty until then, and deliberately not defaulted
         #: to the resource identifier: see `stable_key`.
@@ -569,8 +575,13 @@ class PronoteAccount:
         current: Period | None = None
 
         await self.connector.async_open()
-        self._announced_children = self.connector.student_ids()
-        student_ids = self._student_ids()
+        announced = self.connector.announced_children()
+        self._announced_children = tuple(child_id for child_id, _ in announced)
+        # Before the facts are read, because pairing is what says whom to
+        # follow -- and a declined child's facts must never be decoded -- and
+        # before the platforms are forwarded, because every `unique_id` is
+        # built from what this establishes.
+        student_ids = self._async_pair_children(announced)
         await self.connector.async_load_session_facts(student_ids)
         for student_id in student_ids:
             facts = self.connector.session_facts(student_id)
@@ -582,10 +593,6 @@ class PronoteAccount:
         self.state.students = tuple(students)
         self.state.periods = periods
         self.state.current_period = current
-
-        # Before the platforms are forwarded, because every `unique_id` is
-        # built from what this establishes.
-        self._async_pair_children(students)
 
         session_coordinator = self.coordinators[Tier.SESSION]
         for student, facts in zip(students, session_snapshots, strict=True):
@@ -601,39 +608,90 @@ class PronoteAccount:
             )
 
     @callback
-    def _async_pair_children(self, students: Sequence[Student]) -> None:
-        """Give every announced child the key this integration owns.
+    def _async_pair_children(
+        self, announced: Sequence[tuple[str, str]]
+    ) -> tuple[str, ...]:
+        """Give every announced child its key, and say which ones to follow.
 
         The whole point of `child_keys` is that PRONOTE's resource identifier
-        rotates, so this runs at every set-up rather than once: the table in
-        the config entry is the durable artefact, and re-pairing against it is
-        the normal mode of operation.
+        rotates, so this runs at every set-up and after every login that
+        changed the roster: the table in the config entry is the durable
+        artefact, and re-pairing against it is the normal mode of operation.
 
-        Writing the entry here is safe and the timing is not accidental.
-        `async_setup_entry` attaches the update listener that reloads the entry
-        *after* `async_setup` returns, so this write cannot start a reload
-        loop -- and it only writes when the table actually changed, which is
-        the same guard `_async_persist_credentials` needs for the opposite
-        reason.
+        Every announced child is paired, followed or not, and the selection is
+        stored as the minted keys of the followed ones. It used to be stored
+        as resource identifiers, which is to say as the one value known to
+        rotate: every login that renamed a child made it a "newcomer", its new
+        identifier was appended, and a one-child account ended up holding
+        eleven identifiers of which none matched -- warning at every restart
+        that the selection had lapsed, and silently re-following any child the
+        user had declined. A declined child now keeps a record in the table and
+        stays out of the selection, so a rotation cannot turn it into a
+        newcomer; a child the table has never seen is still followed, because
+        nobody was ever asked about it. `child_keys.followed` holds the rule,
+        including the one-time translation of a selection still stored as
+        identifiers.
+
+        Writing the entry here is safe: only the options flow reloads the
+        entry (`PronoteOptionsFlow`), and a write to ``entry.data`` wakes
+        nothing, so this write cannot start a reload loop -- and it only
+        writes when the table or the selection actually
+        changed, which is the same guard `_async_persist_credentials` needs for
+        the opposite reason. On an ordinary rotation the table changes (each
+        record's identifier) and the selection does not.
         """
         stored = list(self.entry.data.get(CONF_CHILD_KEYS) or ())
-        keys, table, notes = pair(
-            stored, [(student.id, student.name) for student in students]
-        )
-        self._child_keys = keys
-        self._keys_ever.update(keys)
+        selection = _selected_children_from_entry(self.entry.data)
+        keys, table, notes = pair(stored, announced)
+        chosen = followed(stored, table, selection, keys)
         for note in notes:
             # Keys only, never a name: this lands in the log users attach to
             # public issues (§8.2). It is logged at all because the silence
             # here is what hid the duplicate-device defect for as long as it
             # existed.
             _LOGGER.info("child identity: %s", note)
-        if table != stored:
-            self.hass.config_entries.async_update_entry(
-                self.entry, data={**self.entry.data, CONF_CHILD_KEYS: table}
+        if selection and is_legacy_selection(selection):
+            _LOGGER.info(
+                "the child selection was stored as %d resource identifier(s), "
+                "which PRONOTE rotates at every login; it is now stored "
+                "as the %d minted key(s) of the children followed",
+                len(selection),
+                len(chosen),
             )
 
+        student_ids = tuple(
+            child_id for child_id, _ in announced if keys[child_id] in chosen
+        )
+        if not student_ids and announced:
+            # Following every child is the right recovery -- refusing to
+            # collect anything would take the whole integration down -- but
+            # doing it silently is what once let a serious defect hide. Since
+            # the selection is kept as minted keys, a rotation no longer lands
+            # here: only an account on which every child the user chose has
+            # gone, leaving only children they declined. The selection itself
+            # is left as stored, so a returning child is followed again.
+            _LOGGER.warning(
+                "none of the %d children selected for this account is among "
+                "the %d it now announces, all of which were declined; all %d "
+                "are followed until the selection is changed",
+                len(chosen),
+                len(announced),
+                len(announced),
+            )
+            student_ids = tuple(child_id for child_id, _ in announced)
+
+        self._child_keys = {child_id: keys[child_id] for child_id in student_ids}
+        self._keys_ever.update(keys)
+
+        data: dict[str, Any] = {**self.entry.data, CONF_CHILD_KEYS: table}
+        if chosen:
+            data[CONF_CHILDREN] = chosen
+        if data != dict(self.entry.data):
+            self.hass.config_entries.async_update_entry(self.entry, data=data)
+        self._selected_children = _selected_children_from_entry(self.entry.data)
+
         self._async_adopt_existing_registry_rows()
+        return student_ids
 
     @callback
     def _async_adopt_existing_registry_rows(self) -> None:
@@ -958,62 +1016,6 @@ class PronoteAccount:
             return student_id
         return key
 
-    def _student_ids(self) -> tuple[str, ...]:
-        """Which children to follow: those the user selected, or all of them."""
-        available = self.connector.student_ids()
-        if not self._selected_children:
-            return available
-        chosen = tuple(sid for sid in available if sid in self._selected_children)
-        if not chosen:
-            # Following every child is the right recovery -- refusing to
-            # collect anything because a stored identifier went stale would
-            # take the whole integration down -- but doing it *silently* is
-            # what let a serious defect hide.
-            #
-            # A PRONOTE resource identifier is written `46#<signature>`, and
-            # that signature is **not stable between sessions**. The
-            # identifiers stored at configuration time therefore stop matching,
-            # this fallback quietly follows the children it was handed instead,
-            # and because an entity's `unique_id` embeds the identifier, a
-            # whole new device and one entity per description appear while the
-            # previous generation is orphaned in the registry -- every
-            # dashboard, automation and helper pointing at it dead, with
-            # nothing logged anywhere. `config_flow._account_identity` already
-            # learned that lesson for the *account* id and drops the signature
-            # before comparing; nobody carried it here.
-            # Two sentences of this message were written before the minted
-            # keys existed and became false with them: the previous
-            # generation's entities *are* still updated, because their
-            # identity no longer contains the rotating identifier, and
-            # re-selecting is not a fix -- it would store the identifier
-            # PRONOTE announces today, which rotates again at the next
-            # session and brings the reader straight back here. A peer session
-            # read the old wording during an incident and came within one step
-            # of acting on it, which is what an instruction that has outlived
-            # its cause costs.
-            #
-            # What remains true is narrower and is the part worth saying: the
-            # *selection* cannot survive a rotation, because it is stored as
-            # resource identifiers. A parent who followed one child of two
-            # therefore has both followed again after a rotation, with
-            # entities appearing for the one they had excluded.
-            _LOGGER.warning(
-                "none of the %d selected children match the %d the account "
-                "now announces, so all %d are followed. PRONOTE resource "
-                "identifiers are not stable between sessions, so this is "
-                "expected and is recovered from: the entities keep their "
-                "identity and keep updating, and there is nothing to repair. "
-                "The one consequence is that a narrower selection has lapsed "
-                "-- if you had chosen not to follow a child, it is followed "
-                "again now. Re-selecting in the options restores that for "
-                "this session but not beyond it, because the selection is "
-                "stored as the identifiers that rotate",
-                len(self._selected_children),
-                len(available),
-                len(available),
-            )
-        return chosen or available
-
     def _stopping(self) -> bool:
         """Whether teardown has begun.
 
@@ -1096,26 +1098,18 @@ class PronoteAccount:
         if not newcomers:
             return
 
-        # Unknown is not refused. `_student_ids` keeps only the children the
-        # user selected, and every real entry carries a selection -- so on the
-        # face of it a child enrolled later is filtered out and this rule could
-        # never be satisfied. But that list was chosen among the children that
-        # existed *then*: one that did not exist was never declined.
-        #
-        # The baseline is the roster this account was *announced* at set-up,
-        # not the children it follows and not the keys it has minted. Both of
-        # those exclude a child the user deliberately unticked in the flow,
-        # which would make it a newcomer at the first batch and undo their
-        # choice. A restart re-reads the whole announced roster, so an
-        # exclusion survives one.
-        self._selected_children = (*self._selected_children, *sorted(newcomers))
-        self.hass.config_entries.async_update_entry(
-            self.entry,
-            data={**self.entry.data, CONF_CHILDREN: list(self._selected_children)},
-        )
-        _LOGGER.info(
-            "the account now announces %d child(ren) it never announced "
-            "before; following them from this batch on",
+        # An identifier the last pairing did not see is, far more often than a
+        # child enrolled mid-year, a child PRONOTE renamed at the last login.
+        # Which of the two it is, and whether it is followed, is decided by
+        # re-pairing -- not here. This used to append every such identifier to
+        # the stored selection, so a one-child account grew it by one per
+        # login. Re-pairing recognises a renamed child by its record, keeps a
+        # declined one declined, and follows a genuinely new one: unknown is
+        # not refused, because the selection was chosen among the children
+        # that existed *then*, and one that did not exist was never declined.
+        _LOGGER.debug(
+            "the last login announced %d identifier(s) not seen at the last "
+            "pairing; pairing again",
             len(newcomers),
         )
         before = {

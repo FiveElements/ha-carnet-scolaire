@@ -77,6 +77,9 @@ class FakeConnector(SchoolConnector):
     def student_ids(self) -> tuple[str, ...]:
         return ("STUDENT-1",)
 
+    def announced_children(self) -> tuple[tuple[str, str], ...]:
+        return (("STUDENT-1", self._session_facts.student.name),)
+
     async def async_collect(
         self,
         tier: Tier,

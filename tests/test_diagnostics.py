@@ -488,6 +488,12 @@ async def test_the_followed_child_selection_is_fingerprinted_like_the_rest(
     instead of redacting.
     """
     entry = account.entry
+    # A selection still in the identifier form, as an entry holds it until its
+    # first pairing -- once paired it holds minted keys, which stay in clear.
+    hass.config_entries.async_update_entry(
+        entry,
+        data={**entry.data, "children": [child_id for child_id, _ in CHILDREN]},
+    )
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
 
     selection = diagnostics["entry"]["data"]["children"]
@@ -497,6 +503,23 @@ async def test_the_followed_child_selection_is_fingerprinted_like_the_rest(
     dumped = json.dumps(diagnostics)
     for child_id, _name in CHILDREN:
         assert child_id not in dumped
+
+
+@REQUIRES_HASS
+async def test_a_selection_of_minted_keys_is_shown_in_clear(
+    hass: HomeAssistant, account: PronoteAccount
+) -> None:
+    """The key is ours and grants nothing, so hashing it only hides the answer.
+
+    Once paired, the selection is stored as the keys every ``unique_id``
+    carries; a report reading ``children: ["child-1"]`` says which device is
+    followed, where a fingerprint would say nothing a reader could act on.
+    """
+    diagnostics = await async_get_config_entry_diagnostics(hass, account.entry)
+
+    assert diagnostics["entry"]["data"]["children"] == [
+        child_key(account.entry, child_id) for child_id, _ in CHILDREN
+    ]
 
 
 @REQUIRES_HASS
