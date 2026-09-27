@@ -1777,7 +1777,7 @@ def _options(index: int) -> dict[str, Any]:
             ),
             (
                 "Off stops collecting this category altogether and saves its "
-                "requests; its entities stop updating."
+                "requests; its entities stay unavailable."
             ),
         ),
         (
@@ -1787,7 +1787,7 @@ def _options(index: int) -> dict[str, Any]:
             ),
             (
                 "Désactivé, la catégorie n'est plus collectée du tout et ses "
-                "appels sont économisés ; ses entités ne se mettent plus à jour."
+                "appels sont économisés ; ses entités restent indisponibles."
             ),
         ),
     )[pick]
