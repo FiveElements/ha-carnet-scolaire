@@ -37,6 +37,7 @@ from homeassistant.helpers import (
 )
 from pronotepy.exceptions import CryptoError, MFAError, PronoteAPIError
 import pytest
+import requests
 
 from custom_components.carnet_scolaire import async_remove_config_entry_device
 from custom_components.carnet_scolaire.account import (
@@ -98,6 +99,9 @@ from custom_components.carnet_scolaire.const import (
     Priority,
     SessionStrategy,
     Tier,
+)
+from custom_components.carnet_scolaire.diagnostics import (
+    async_get_config_entry_diagnostics,
 )
 from custom_components.carnet_scolaire.hardened_client import BootstrapUnavailable
 from custom_components.carnet_scolaire.login_guard import limiter_state_store
@@ -1023,6 +1027,137 @@ async def test_a_school_that_is_simply_down_is_retried(
     await _setup_failing(hass, mock_entry, OSError("connection refused"))
 
     assert mock_entry.state is ConfigEntryState.SETUP_RETRY
+
+
+#: A transport failure as ``requests`` writes it. The host is a *sub*-domain of
+#: the entry's own fictional address on purpose: the configured page URL is
+#: allowed in diagnostics and in the bootstrap repair, so the assertion has to
+#: be about the text of the error and nothing else.
+_LEAKY_HOST = "ecole.demo.example.invalid"
+_LEAKY_PARAMETER = "identifiant=NOT-A-REAL-SESSION"
+_LEAKY_MESSAGE = (
+    f"HTTPSConnectionPool(host='{_LEAKY_HOST}', port=443): Max retries exceeded "
+    f"with url: /pronote/parent.html?{_LEAKY_PARAMETER}"
+)
+
+
+def _assert_leak_free(text: str) -> None:
+    assert _LEAKY_HOST not in text
+    assert _LEAKY_PARAMETER not in text
+
+
+def _assert_no_issue_quotes_the_error(hass: HomeAssistant) -> None:
+    for issue in ir.async_get(hass).issues.values():
+        _assert_leak_free(json.dumps(issue.translation_placeholders or {}))
+
+
+async def test_a_school_that_is_down_at_set_up_is_not_ready_without_its_address(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    school_day: Any,
+    no_spacing: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """``ConfigEntryNotReady(str(error))`` published the ``requests`` message.
+
+    Home Assistant logs that reason and shows it on the integration's card, so
+    a school that was down at start-up printed its host and the page path --
+    session parameters included -- where a user copies it into an issue. The
+    reason must still say what kind of failure it was.
+    """
+    caplog.set_level(logging.DEBUG)
+
+    await _setup_failing(hass, mock_entry, requests.ConnectionError(_LEAKY_MESSAGE))
+
+    assert mock_entry.state is ConfigEntryState.SETUP_RETRY
+    assert mock_entry.reason == "ConnectionError (connection)"
+    _assert_leak_free(caplog.text)
+    _assert_no_issue_quotes_the_error(hass)
+
+
+async def test_a_wrapped_transport_failure_at_set_up_is_not_chained_into_the_log(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    school_day: Any,
+    no_spacing: None,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A fixed message is not enough when the cause travels with it.
+
+    EcoleDirecte raises ``ConnectorTransportError("EcoleDirecte request
+    failed")`` *from* the ``aiohttp`` error, and Home Assistant logs the full
+    traceback of a ``ConfigEntryNotReady`` at DEBUG on this integration's own
+    logger -- so the cause's host and path reached the log anyway.
+    """
+    caplog.set_level(logging.DEBUG)
+    error = ConnectorTransportError("the service could not be reached")
+    error.__cause__ = requests.ConnectionError(_LEAKY_MESSAGE)
+
+    await _setup_failing(hass, mock_entry, error)
+
+    assert mock_entry.state is ConfigEntryState.SETUP_RETRY
+    _assert_leak_free(caplog.text)
+    _assert_leak_free(str(mock_entry.reason))
+    _assert_no_issue_quotes_the_error(hass)
+
+
+async def test_a_collection_that_cannot_reach_the_school_leaves_no_address_behind(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    account: PronoteAccount,
+    parent_client: FakeClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The failed tier wrote a DEBUG traceback, and a traceback quotes the host.
+
+    DEBUG on this integration's own logger is exactly what a user is told to
+    turn on before filing a bug, and the traceback of a ``requests`` failure
+    prints its message -- the establishment's host and the page path. The line
+    keeps the tier, the student and the kind of failure; the diagnostics and
+    the repair issues must not have picked the text up either.
+    """
+    caplog.set_level(logging.DEBUG, logger="custom_components.carnet_scolaire")
+
+    def _unreachable(_body: Any) -> dict[str, Any]:
+        raise requests.ConnectionError(_LEAKY_MESSAGE)
+
+    parent_client.responses["PageCahierDeTexte"] = _unreachable
+    caplog.clear()
+
+    await account._async_collect(Tier.HOMEWORK)
+
+    assert "ConnectionError (connection)" in caplog.text
+    assert "Traceback" not in caplog.text
+    _assert_leak_free(caplog.text)
+    diagnostics = await async_get_config_entry_diagnostics(hass, mock_entry)
+    _assert_leak_free(json.dumps(diagnostics, default=str))
+    _assert_no_issue_quotes_the_error(hass)
+
+
+async def test_a_failed_tier_that_is_not_transport_keeps_its_traceback(
+    hass: HomeAssistant,
+    account: PronoteAccount,
+    parent_client: FakeClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Only the transport case loses its traceback.
+
+    An unexpected exception in a collector is a bug in this integration, and
+    the traceback is the whole of what a report about it can contain.
+    Stripping it everywhere, to be safe, would trade one defect for another.
+    """
+    caplog.set_level(logging.DEBUG, logger="custom_components.carnet_scolaire")
+
+    def _broken(_body: Any) -> dict[str, Any]:
+        message = "a collector bug"
+        raise RuntimeError(message)
+
+    parent_client.responses["PageCahierDeTexte"] = _broken
+    caplog.clear()
+
+    await account._async_collect(Tier.HOMEWORK)
+
+    assert "Traceback" in caplog.text
 
 
 async def test_a_snapshot_collected_for_another_child_is_refused(

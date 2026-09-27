@@ -74,6 +74,7 @@ from .const import (
 )
 from .coordinator import PronoteTierCoordinator
 from .delta import DeltaDetector
+from .failures import describe_failure, is_transport_failure
 from .login_guard import limiter_state_store
 from .models import Period, SessionFacts, Snapshot, Student
 from .options import (
@@ -1233,8 +1234,17 @@ class PronoteAccount:
                 record.consecutive_failures += 1
                 coordinator.note_failure(error)
                 self.scheduler.mark_failed(tier, self.limiter.retry_delay())
+                # No traceback for a transport failure: it prints the message
+                # of every link, and the transport link quotes the host and
+                # the path it failed on. The session has already said, once,
+                # that the service is unavailable.
+                transport = is_transport_failure(error)
                 _LOGGER.debug(
-                    "tier %s failed for student %s", tier, student.id, exc_info=True
+                    "tier %s failed for student %s: %s",
+                    tier,
+                    student.id,
+                    describe_failure(error),
+                    exc_info=not transport,
                 )
                 return
 
