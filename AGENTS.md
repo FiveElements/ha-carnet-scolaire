@@ -132,8 +132,9 @@ the container, same `docker run` prefix.
 
 ### Generated files — never hand-edit
 
-`strings.json`, `translations/en.json`, `translations/fr.json` and
-`services.yaml` are all produced by `scripts/build_translations.py`, and a test
+`strings.json`, `translations/en.json`, `translations/fr.json`,
+`services.yaml` and `icons.json` are all produced by
+`scripts/build_translations.py`, and a test
 asserts each file equals the generator's output. Edit the table in the script,
 then run it. Nothing user-visible is hard-coded under `custom_components/`.
 Two hassfest traps: a translation string may not contain a URL (use
