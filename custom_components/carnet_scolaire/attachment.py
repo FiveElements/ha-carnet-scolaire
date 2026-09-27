@@ -208,8 +208,8 @@ def cache_for(hass: HomeAssistant, entry_id: str) -> _ByteCache:
 
 def _locate(
     account: PronoteAccount, print_: str, *, student_id: str | None = None
-) -> tuple[str, HomeworkAttachment] | None:
-    """Find the *file* one fingerprint names, and whose child it belongs to.
+) -> tuple[str, str, HomeworkAttachment] | None:
+    """Find the *file* one fingerprint names: its child, its homework, itself.
 
     Scanned rather than addressed: the snapshot is the authority on what this
     account may fetch, so a fingerprint that matches nothing in it is refused
@@ -244,7 +244,7 @@ def _locate(
                 if attachment.kind is not AttachmentKind.FILE:
                     continue
                 if hmac.compare_digest(fingerprint(item.id, attachment.id), print_):
-                    return student.id, attachment
+                    return student.id, item.id, attachment
     return None
 
 
@@ -275,7 +275,7 @@ class PronoteAttachmentView(HomeAssistantView):
         located = _locate(account, print_)
         if located is None:
             return web.Response(status=404, text="no such document on this account")
-        student_id, attachment = located
+        student_id, homework_id, attachment = located
 
         if attachment.kind is not AttachmentKind.FILE:
             # `_locate` already returns files only, so this is unreachable
@@ -291,7 +291,7 @@ class PronoteAttachmentView(HomeAssistantView):
         cache = cache_for(hass, entry_id)
         if (cached := cache.get(print_)) is None:
             try:
-                cached = await _fetch(account, attachment, student_id)
+                cached = await _fetch(account, attachment, homework_id, student_id)
             except TierDeferred as deferred:
                 # The limiter said "later", not "never", so 503 with a
                 # `Retry-After` a browser understands -- and with the limiter's
@@ -335,16 +335,26 @@ class PronoteAttachmentView(HomeAssistantView):
 
 
 async def _fetch(
-    account: PronoteAccount, attachment: HomeworkAttachment, student_id: str
+    account: PronoteAccount,
+    attachment: HomeworkAttachment,
+    homework_id: str,
+    student_id: str,
 ) -> tuple[bytes, str]:
-    """Download one document through the one path to the network."""
+    """Download one document through the one path to the network.
+
+    Two requests: the gateway reads the homework again in this session to find
+    the document's current ``N`` (see ``PronoteGateway.homework_attachment``).
+    """
     extras = account.extras
     if extras is None:
         raise AttachmentUnavailable(attachment.name, 501)
 
     def work(client: Any) -> tuple[bytes, str | None, int]:
         return extras.gateway.homework_attachment(
-            client, attachment_id=attachment.id, name=attachment.name
+            client,
+            homework_id=homework_id,
+            attachment_id=attachment.id,
+            name=attachment.name,
         )
 
     content, declared, _cost = await extras.session.run(
@@ -359,7 +369,7 @@ async def _fetch(
         Priority.GESTURE,
         work,
         student_id=student_id,
-        cost=1,
+        cost=2,
     )
     return content, _content_type(declared)
 

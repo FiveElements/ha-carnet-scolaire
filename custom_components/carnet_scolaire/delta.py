@@ -44,6 +44,15 @@ is for.
 Stated generally: **delta on identity where identity is stable, on a
 whitelisted subset of fields where the protocol supersedes instead of
 appending.**
+
+And ``N`` turned out to be stable for **one session only**: PRONOTE
+re-encrypts it at every login. Keyed on it, the first collection after a
+reconnection announced every homework item of the year as new -- fifty-four
+events in one millisecond, measured -- and compared no lesson with anything.
+So the identity this module sees is the key :mod:`.item_keys` mints from the
+content, and the lesson pairing still uses ``N`` where it is valid: inside the
+session that produced the previous timetable, which is the only way to follow a
+*move*, since a lesson's key is built from its slot.
 """
 
 from __future__ import annotations
@@ -132,8 +141,12 @@ class DeltaDetector:
 
     def __init__(self) -> None:
         self._seen_ids: dict[tuple[str, str], set[str]] = {}
-        #: Per student, per lesson ``N``: the last signature seen for it.
+        #: Per student, per lesson key: the last signature seen for it.
         self._lesson_signatures: dict[str, dict[str, _LessonMemo]] = {}
+        #: Per student, the session ``N`` -> key map of the last timetable. A
+        #: moved lesson keeps its ``N`` inside one session but not its key,
+        #: which is built from the slot; see :meth:`timetable`.
+        self._lesson_refs: dict[str, dict[str, str]] = {}
         self._unread: dict[str, dict[str, int]] = {}
 
     # -- generic append-only handling --------------------------------------
@@ -173,6 +186,8 @@ class DeltaDetector:
             self._seen_ids[(new, key[1])] = self._seen_ids.pop(key)
         if old in self._lesson_signatures:
             self._lesson_signatures[new] = self._lesson_signatures.pop(old)
+        if old in self._lesson_refs:
+            self._lesson_refs[new] = self._lesson_refs.pop(old)
         if old in self._unread:
             self._unread[new] = self._unread.pop(old)
 
@@ -181,6 +196,7 @@ class DeltaDetector:
         for key in [k for k in self._seen_ids if k[0] == student_id]:
             del self._seen_ids[key]
         self._lesson_signatures.pop(student_id, None)
+        self._lesson_refs.pop(student_id, None)
         self._unread.pop(student_id, None)
 
     # -- marks -------------------------------------------------------------
@@ -189,7 +205,10 @@ class DeltaDetector:
         """New grades, by identifier."""
         new = self._new_ids(
             student_id,
-            f"grades:{facts.period_id}",
+            # The period's position, not its `N`: that is re-encrypted by every
+            # login, and a new collection name primes instead of comparing --
+            # a grade published across a reconnection was never announced.
+            f"grades:{facts.period_index}",
             (grade.id for grade in facts.grades),
         )
         if not new:
@@ -393,20 +412,31 @@ class DeltaDetector:
     # -- the timetable: the two-step rule ---------------------------------
 
     def timetable(self, student_id: str, facts: TimetableFacts) -> list[DeltaEvent]:
-        """Detect modified lessons on a whitelisted field tuple, per ``N``.
+        """Detect modified lessons on a whitelisted field tuple.
 
         Runs over ``facts.all_lessons`` -- the week *before* de-duplication --
-        and keys on the lesson identifier. The module docstring says why both of
-        those matter; briefly, de-duplication discards the entry that carries a
-        substitution's cancellation, and a slot key cannot represent a move.
+        because de-duplication discards the entry that carries a
+        substitution's cancellation.
+
+        Each entry is paired with its previous self in two ways, and the order
+        matters. By PRONOTE's ``N`` first, when the previous timetable came
+        from the same session: that is the only pairing that survives a
+        *move*, since the minted key is built from the slot and a moved lesson
+        changes slot. By the key otherwise: the ``N`` is re-encrypted by every
+        login, and pairing on it alone meant a cancellation published across a
+        reconnection was compared with nothing and never announced.
 
         Note what is *not* emitted: an entry appearing for the first time is not
         a change. A newly published timetable week would otherwise fire an
         event for every lesson in it.
         """
         memos = self._lesson_signatures.get(student_id)
+        previous_refs = self._lesson_refs.get(student_id, {})
         current = {lesson.id: _LessonMemo.of(lesson) for lesson in facts.all_lessons}
         self._lesson_signatures[student_id] = current
+        self._lesson_refs[student_id] = {
+            lesson.ref: lesson.id for lesson in facts.all_lessons if lesson.ref
+        }
 
         if memos is None:
             _LOGGER.debug(
@@ -419,7 +449,8 @@ class DeltaDetector:
 
         events: list[DeltaEvent] = []
         for lesson in facts.all_lessons:
-            before = memos.get(lesson.id)
+            same_session = previous_refs.get(lesson.ref) if lesson.ref else None
+            before = memos.get(same_session or lesson.id)
             if before is None or before.signature == current[lesson.id].signature:
                 continue
             events.extend(_lesson_events(lesson, before))

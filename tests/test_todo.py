@@ -47,6 +47,7 @@ from custom_components.carnet_scolaire.todo import PARALLEL_UPDATES, async_setup
 from .conftest import CHILDREN, HAS_HASS_HARNESS, REQUIRES_HASS
 from .fixtures import protocol
 from .fixtures.client import FakeClient
+from .keys import key_of
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -265,7 +266,7 @@ async def test_an_item_the_server_left_blank_is_still_addressable(
     rendering an empty one.
     """
     items = await _items(hass, _list_id("Enfant Un"))
-    blank = next(item for item in items if item["uid"] == "HOMEWORK-2")
+    blank = next(item for item in items if item["uid"] == key_of(account, "HOMEWORK-2"))
 
     assert blank["summary"] == "?"
     assert not blank.get("description")
@@ -283,7 +284,7 @@ async def test_the_detail_line_is_prose_and_not_the_markup_pronote_sent(
     """
     items = {item["uid"]: item for item in await _items(hass, _list_id("Enfant Un"))}
 
-    assert items["HOMEWORK-1"]["description"] == "Lire le chapitre 4"
+    assert items[key_of(account, "HOMEWORK-1")]["description"] == "Lire le chapitre 4"
 
 
 async def test_a_ticked_item_reads_as_completed_and_an_open_one_as_needing_action(
@@ -297,8 +298,8 @@ async def test_a_ticked_item_reads_as_completed_and_an_open_one_as_needing_actio
     """
     items = {item["uid"]: item for item in await _items(hass, _list_id("Enfant Un"))}
 
-    assert items["HOMEWORK-1"]["status"] == TodoItemStatus.NEEDS_ACTION
-    assert items["HOMEWORK-2"]["status"] == TodoItemStatus.COMPLETED
+    assert items[key_of(account, "HOMEWORK-1")]["status"] == TodoItemStatus.NEEDS_ACTION
+    assert items[key_of(account, "HOMEWORK-2")]["status"] == TodoItemStatus.COMPLETED
     # The state is the number of items still needing action, so the mapping is
     # observable from an automation without reading the list at all.
     state = hass.states.get(_list_id("Enfant Un"))
@@ -358,7 +359,11 @@ async def test_the_list_is_visibly_read_only_while_writes_are_off(
         await hass.services.async_call(
             "todo",
             "update_item",
-            {"entity_id": entity_id, "item": "HOMEWORK-1", "status": "completed"},
+            {
+                "entity_id": entity_id,
+                "item": key_of(account, "HOMEWORK-1"),
+                "status": "completed",
+            },
             blocking=True,
         )
 
@@ -400,7 +405,9 @@ async def test_a_tick_is_refused_by_the_option_and_not_only_by_the_feature_flag(
     with pytest.raises(ServiceValidationError) as raised:
         await _entity(hass, _list_id("Enfant Un")).async_update_todo_item(
             TodoItem(
-                uid="HOMEWORK-1", summary="Histoire", status=TodoItemStatus.COMPLETED
+                uid=key_of(account, "HOMEWORK-1"),
+                summary="Histoire",
+                status=TodoItemStatus.COMPLETED,
             )
         )
 
@@ -487,7 +494,7 @@ async def test_ticking_an_item_sends_the_status_and_never_the_wording(
         "update_item",
         {
             "entity_id": entity_id,
-            "item": "HOMEWORK-1",
+            "item": key_of(account, "HOMEWORK-1"),
             "rename": "Histoire",
             "description": "Lire le chapitre 4",
             "due_date": "2026-03-16",
@@ -499,6 +506,61 @@ async def test_ticking_an_item_sends_the_status_and_never_the_wording(
     assert parent_client.body_for("SaisieTAFFaitEleve") == {
         "listeTAF": [{"N": "HOMEWORK-1", "E": 2, "TAFFait": True}]
     }
+
+
+@writes_on
+async def test_a_tick_after_a_reconnection_is_recorded_under_the_new_sessions_n(
+    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+) -> None:
+    """The defect of 0.1.4, end to end: the list, the tick, the wire.
+
+    Measured on 2026-09-26: the list was read at 21:55, a session opened at
+    22:57, and the tick sent at 22:59:58 carried the ``N`` of the old session.
+    PRONOTE accepted it and recorded nothing, and the next collection read the
+    item back unticked -- so the card unticked itself. Here the server renames
+    the item exactly as it did then, and the tick must reach it anyway.
+    """
+    uid = key_of(account, "HOMEWORK-1")
+    renamed = [dict(entry) for entry in HOMEWORK_ENTRIES]
+    renamed[0]["N"] = "HOMEWORK-1-AFTER-THE-LOGIN"
+    parent_client.responses["PageCahierDeTexte"] = protocol.homework_response(renamed)
+
+    await hass.services.async_call(
+        "todo",
+        "update_item",
+        {"entity_id": _list_id("Enfant Un"), "item": uid, "status": "completed"},
+        blocking=True,
+    )
+
+    assert parent_client.body_for("SaisieTAFFaitEleve") == {
+        "listeTAF": [{"N": "HOMEWORK-1-AFTER-THE-LOGIN", "E": 2, "TAFFait": True}]
+    }
+
+
+@writes_on
+async def test_a_tick_on_an_item_withdrawn_since_is_refused_visibly(
+    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+) -> None:
+    """The card puts the checkbox back on an error, and only on an error.
+
+    A tick lost silently is the defect; a tick refused is a message the parent
+    can act on.
+    """
+    uid = key_of(account, "HOMEWORK-1")
+    parent_client.responses["PageCahierDeTexte"] = protocol.homework_response(
+        HOMEWORK_ENTRIES[1:]
+    )
+
+    with pytest.raises(ServiceValidationError) as raised:
+        await hass.services.async_call(
+            "todo",
+            "update_item",
+            {"entity_id": _list_id("Enfant Un"), "item": uid, "status": "completed"},
+            blocking=True,
+        )
+
+    assert raised.value.translation_key == "item_not_found"
+    assert "SaisieTAFFaitEleve" not in parent_client.posted_names
 
 
 @writes_on
@@ -532,14 +594,14 @@ async def test_an_edit_to_what_the_teacher_wrote_is_refused_and_not_lost(
         await hass.services.async_call(
             "todo",
             "update_item",
-            {"entity_id": entity_id, "item": "HOMEWORK-1", **edit},
+            {"entity_id": entity_id, "item": key_of(account, "HOMEWORK-1"), **edit},
             blocking=True,
         )
 
     assert raised.value.translation_key == "todo_item_owned_by_pronote"
     assert len(parent_client.posts) == before
     items = {item["uid"]: item for item in await _items(hass, entity_id)}
-    assert items["HOMEWORK-1"]["summary"] == "Histoire"
+    assert items[key_of(account, "HOMEWORK-1")]["summary"] == "Histoire"
 
 
 @writes_on
@@ -562,7 +624,7 @@ async def test_a_tick_after_the_child_was_renamed_reaches_the_right_child(
         "update_item",
         {
             "entity_id": _list_id("Enfant Un"),
-            "item": "HOMEWORK-1",
+            "item": key_of(account, "HOMEWORK-1"),
             "status": "completed",
         },
         blocking=True,
@@ -589,7 +651,7 @@ async def test_unticking_an_item_sends_the_negative_and_not_nothing(
         "update_item",
         {
             "entity_id": _list_id("Enfant Un"),
-            "item": "HOMEWORK-2",
+            "item": key_of(account, "HOMEWORK-2"),
             "status": "needs_action",
         },
         blocking=True,
@@ -644,7 +706,7 @@ async def test_a_tick_is_billed_to_the_right_child_as_a_gesture(
             "update_item",
             {
                 "entity_id": _list_id("Enfant Deux"),
-                "item": "HOMEWORK-1",
+                "item": key_of(account, "HOMEWORK-1"),
                 "status": "completed",
             },
             blocking=True,
@@ -655,7 +717,9 @@ async def test_a_tick_is_billed_to_the_right_child_as_a_gesture(
             "tier": str(Tier.HOMEWORK),
             "priority": Priority.GESTURE,
             "student_id": STUDENT_TWO,
-            "cost": 1,
+            # The list is read again in the posting session, then the tick is
+            # posted: the `N` a snapshot holds is dead after a reconnection.
+            "cost": 2,
         }
     ]
     # The selection is only observable in the *order*, so it is asserted there:
@@ -663,20 +727,22 @@ async def test_a_tick_is_billed_to_the_right_child_as_a_gesture(
     # exactly like one placed before it.
     assert parent_client.journal[mark:] == [
         ("select", STUDENT_TWO),
+        ("post", "PageCahierDeTexte"),
         ("post", "SaisieTAFFaitEleve"),
     ]
 
 
 @writes_on
-async def test_a_tick_asks_for_a_re_read_instead_of_paying_for_one(
+async def test_a_tick_reads_the_list_once_and_leaves_the_rest_to_the_tier(
     hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
 ) -> None:
-    """The local truth is already correct, so the checkbox costs one request.
+    """One read to find the item, and no second one to publish it.
 
-    Re-reading the homework tier on the spot would double the price of every
-    tap, for information the caller already has. The tier is boosted so the
-    next scheduled collection picks the item up, and the state is written
-    locally in the meantime.
+    The read is not optional: PRONOTE re-encrypts every ``N`` at each login, and
+    a tick posted with the one a snapshot holds is accepted and recorded
+    nowhere -- measured on 0.1.4. Publishing what that read found would be a
+    collection of its own, though, so the tier is boosted instead and the next
+    scheduled collection picks the item up.
     """
     reads_before = parent_client.posted_names.count("PageCahierDeTexte")
 
@@ -685,14 +751,14 @@ async def test_a_tick_asks_for_a_re_read_instead_of_paying_for_one(
         "update_item",
         {
             "entity_id": _list_id("Enfant Un"),
-            "item": "HOMEWORK-1",
+            "item": key_of(account, "HOMEWORK-1"),
             "status": "completed",
         },
         blocking=True,
     )
     await hass.async_block_till_done()
 
-    assert parent_client.posted_names.count("PageCahierDeTexte") == reads_before
+    assert parent_client.posted_names.count("PageCahierDeTexte") == reads_before + 1
     assert account.scheduler.diagnostics()[str(Tier.HOMEWORK)]["boosted"] is True
 
 
@@ -721,7 +787,7 @@ async def test_a_tick_that_was_deferred_fails_visibly(
             "update_item",
             {
                 "entity_id": _list_id("Enfant Un"),
-                "item": "HOMEWORK-1",
+                "item": key_of(account, "HOMEWORK-1"),
                 "status": "completed",
             },
             blocking=True,

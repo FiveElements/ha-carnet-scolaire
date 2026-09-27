@@ -76,6 +76,11 @@ class Lesson:
     place: int
     duration: int
     end_inferred: bool
+    #: PRONOTE's ``N`` for this item, valid **only in the session that read
+    #: it** -- ``id`` is the key this integration mints (see
+    #: :mod:`.item_keys`). ``None`` for a connector whose identifiers are
+    #: already stable.
+    ref: str | None = None
 
     @property
     def slot_key(self) -> tuple[str, int]:
@@ -173,14 +178,16 @@ class HomeworkAttachment:
     #: address, so this field would otherwise publish a label as though it were
     #: a URL, and a scheme like `javascript:` would reach an `href`.
     url: str | None = None
-    #: PRONOTE's own identifier for the document, kept so a file can still be
-    #: *fetched* later even though its address cannot be published. It is what
-    #: the encrypted path segment is built from, and it is deliberately absent
+    #: The key this integration mints for the document (see
+    #: :mod:`.item_keys`), stable across sessions. It is deliberately absent
     #: from every published attribute: what a dashboard receives is a
-    #: fingerprint of it (see :mod:`.attachment`), which is URL-safe -- a real
-    #: identifier carries a ``#``, a fragment delimiter that would truncate a
-    #: path -- and keeps a real identifier out of the recorder.
+    #: fingerprint of it and of its homework's key (see :mod:`.attachment`).
     id: str = ""
+    #: PRONOTE's own identifier for the document, which is what a file is
+    #: *fetched* by -- the encrypted path segment is built from it. Valid only
+    #: in the session that read it, so a download re-reads the homework in its
+    #: own session rather than trusting a snapshot's value.
+    ref: str = ""
     #: Decided in `gateway._attachment`. Defaults to the answer that opens
     #: nothing, so a DTO built without deciding fails closed.
     kind: AttachmentKind = AttachmentKind.OPAQUE
@@ -209,6 +216,11 @@ class Homework:
     #: its address. See :class:`HomeworkAttachment` for why a file never
     #: carries one.
     attachments: tuple[HomeworkAttachment, ...] = ()
+    #: PRONOTE's ``N`` for this item, valid **only in the session that read
+    #: it** -- ``id`` is the key this integration mints (see
+    #: :mod:`.item_keys`). ``None`` for a connector whose identifiers are
+    #: already stable.
+    ref: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +256,11 @@ class Grade:
     is_bonus: bool
     is_optional: bool
     is_out_of_20: bool
+    #: PRONOTE's ``N`` for this item, valid **only in the session that read
+    #: it** -- ``id`` is the key this integration mints (see
+    #: :mod:`.item_keys`). ``None`` for a connector whose identifiers are
+    #: already stable.
+    ref: str | None = None
 
     def __post_init__(self) -> None:
         """Enforce the exclusivity the docstring promises.
@@ -327,6 +344,11 @@ class Absence:
     hours: str | None
     days: int | None
     reasons: tuple[str, ...]
+    #: PRONOTE's ``N`` for this item, valid **only in the session that read
+    #: it** -- ``id`` is the key this integration mints (see
+    #: :mod:`.item_keys`). ``None`` for a connector whose identifiers are
+    #: already stable.
+    ref: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,6 +361,11 @@ class Delay:
     justified: bool
     justification: str | None
     reasons: tuple[str, ...]
+    #: PRONOTE's ``N`` for this item, valid **only in the session that read
+    #: it** -- ``id`` is the key this integration mints (see
+    #: :mod:`.item_keys`). ``None`` for a connector whose identifiers are
+    #: already stable.
+    ref: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -362,6 +389,11 @@ class Punishment:
     during_lesson: bool
     homework: str | None
     schedule: tuple[PunishmentSlot, ...]
+    #: PRONOTE's ``N`` for this item, valid **only in the session that read
+    #: it** -- ``id`` is the key this integration mints (see
+    #: :mod:`.item_keys`). ``None`` for a connector whose identifiers are
+    #: already stable.
+    ref: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -394,6 +426,11 @@ class Evaluation:
     description: str | None
     date: date
     acquisitions: tuple[Acquisition, ...]
+    #: PRONOTE's ``N`` for this item, valid **only in the session that read
+    #: it** -- ``id`` is the key this integration mints (see
+    #: :mod:`.item_keys`). ``None`` for a connector whose identifiers are
+    #: already stable.
+    ref: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +452,11 @@ class Information:
     created: datetime
     start_date: datetime | None
     end_date: datetime | None
+    #: PRONOTE's ``N`` for this item, valid **only in the session that read
+    #: it** -- ``id`` is the key this integration mints (see
+    #: :mod:`.item_keys`). ``None`` for a connector whose identifiers are
+    #: already stable.
+    ref: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -425,6 +467,11 @@ class Message:
     author: str | None
     created: datetime
     content: str | None
+    #: PRONOTE's ``N`` for this item, valid **only in the session that read
+    #: it** -- ``id`` is the key this integration mints (see
+    #: :mod:`.item_keys`). ``None`` for a connector whose identifiers are
+    #: already stable.
+    ref: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -455,6 +502,11 @@ class Discussion:
     closed: bool
     labels: tuple[str, ...]
     messages: tuple[Message, ...] = ()
+    #: PRONOTE's ``N`` for this item, valid **only in the session that read
+    #: it** -- ``id`` is the key this integration mints (see
+    #: :mod:`.item_keys`). ``None`` for a connector whose identifiers are
+    #: already stable.
+    ref: str | None = None
 
 
 # ---------------------------------------------------------------------------

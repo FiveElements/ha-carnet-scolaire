@@ -13,6 +13,7 @@ the notification.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 from zoneinfo import ZoneInfo
 
@@ -1155,3 +1156,96 @@ def test_every_event_type_has_an_identifier_in_its_attributes(
     assert matching, f"no {event_type} event was produced"
     for event in matching:
         assert any(key.endswith("_id") or key == "id" for key in event.attributes)
+
+
+# ---------------------------------------------------------------------------
+# Across a reconnection: PRONOTE re-encrypts every `N` at each login
+# ---------------------------------------------------------------------------
+
+
+def test_a_lesson_that_moves_inside_one_session_is_followed_by_its_n() -> None:
+    """The key is built from the slot, so a move changes it; the ``N`` does not.
+
+    Inside the session that produced the previous timetable, the ``N`` is the
+    only thing that can say "this is the same lesson, somewhere else".
+    """
+    detector = DeltaDetector()
+    detector.timetable(STUDENT, timetable(a_lesson(id="lesson-slot-a", ref="N-1")))
+
+    moved = a_lesson(
+        id="lesson-slot-b",
+        ref="N-1",
+        start=dt.datetime(2026, 3, 12, 14, 0, tzinfo=PARIS),
+        end=dt.datetime(2026, 3, 12, 15, 0, tzinfo=PARIS),
+    )
+    events = detector.timetable(STUDENT, timetable(moved))
+
+    assert [event.event_type for event in events] == [EVENT_LESSON_MOVED]
+
+
+def test_a_cancellation_published_across_a_reconnection_is_still_announced() -> None:
+    """Paired on the ``N`` alone, it was compared with nothing and never fired.
+
+    That is the event the one live automation on this integration listens to.
+    """
+    detector = DeltaDetector()
+    detector.timetable(STUDENT, timetable(a_lesson(id="lesson-slot-a", ref="N-1")))
+
+    canceled = a_lesson(id="lesson-slot-a", ref="N-2", canceled=True)
+    events = detector.timetable(STUDENT, timetable(canceled))
+
+    assert [event.event_type for event in events] == [EVENT_LESSON_CANCELED]
+
+
+def test_across_a_reconnection_a_lesson_in_a_new_slot_is_left_unpaired() -> None:
+    """New ``N`` and new key: nothing to compare with, so nothing is claimed.
+
+    Pairing on anything looser -- the subject alone, the day -- is what fired a
+    move for the whole week when the bell times shifted.
+    """
+    detector = DeltaDetector()
+    detector.timetable(STUDENT, timetable(a_lesson(id="lesson-slot-a", ref="N-1")))
+
+    elsewhere = a_lesson(
+        id="lesson-slot-b",
+        ref="N-2",
+        start=dt.datetime(2026, 3, 12, 14, 0, tzinfo=PARIS),
+        end=dt.datetime(2026, 3, 12, 15, 0, tzinfo=PARIS),
+    )
+
+    assert detector.timetable(STUDENT, timetable(elsewhere)) == []
+
+
+def test_a_renamed_child_keeps_the_lesson_pairing_by_n() -> None:
+    """``rename`` carries the ``N`` map along with the signatures."""
+    detector = DeltaDetector()
+    detector.timetable("OLD", timetable(a_lesson(id="lesson-slot-a", ref="N-1")))
+    detector.rename("OLD", STUDENT)
+
+    moved = a_lesson(
+        id="lesson-slot-b",
+        ref="N-1",
+        start=dt.datetime(2026, 3, 12, 14, 0, tzinfo=PARIS),
+        end=dt.datetime(2026, 3, 12, 15, 0, tzinfo=PARIS),
+    )
+
+    assert [e.event_type for e in detector.timetable(STUDENT, timetable(moved))] == [
+        EVENT_LESSON_MOVED
+    ]
+
+
+def test_a_grade_published_across_a_reconnection_is_announced() -> None:
+    """The period's ``N`` rotates too, and it used to name the collection.
+
+    A new collection name primes instead of comparing, so a grade that arrived
+    between two sessions was swallowed by the priming pass.
+    """
+    detector = DeltaDetector()
+    detector.marks(STUDENT, marks(a_grade()))
+
+    after_login = dataclasses.replace(
+        marks(a_grade(), a_grade("GRADE-2")), period_id="PERIOD-1-AFTER-THE-LOGIN"
+    )
+    events = detector.marks(STUDENT, after_login)
+
+    assert [event.event_type for event in events] == [EVENT_GRADE_ADDED]

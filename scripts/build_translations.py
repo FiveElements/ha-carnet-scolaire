@@ -1303,6 +1303,19 @@ EXCEPTIONS: list[tuple[str, str, str]] = [
         ),
     ),
     (
+        "item_not_found",
+        (
+            "That item is no longer on PRONOTE as it was last read: it was "
+            "withdrawn or changed since. Nothing was sent. Refresh, then try "
+            "again."
+        ),
+        (
+            "Cet élément n'est plus sur PRONOTE tel qu'il a été lu : il a été "
+            "retiré ou modifié depuis. Rien n'a été envoyé. Actualisez, puis "
+            "réessayez."
+        ),
+    ),
+    (
         "todo_item_owned_by_pronote",
         (
             "Only the tick can be changed. The subject, the wording and the due "

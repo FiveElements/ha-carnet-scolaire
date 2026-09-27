@@ -727,6 +727,9 @@
     "todo_item_unknown": {
       "message": "Cet élément de liste n'a pas d'identifiant PRONOTE : il ne peut pas être mis à jour."
     },
+    "item_not_found": {
+      "message": "Cet élément n'est plus sur PRONOTE tel qu'il a été lu : il a été retiré ou modifié depuis. Rien n'a été envoyé. Actualisez, puis réessayez."
+    },
     "todo_item_owned_by_pronote": {
       "message": "Seule la coche peut changer. La matière, l'énoncé et l'échéance d'un devoir appartiennent au professeur, dans PRONOTE."
     }

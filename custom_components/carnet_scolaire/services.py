@@ -54,7 +54,12 @@ from .const import (
     Priority,
     Tier,
 )
-from .gateway import DiscussionIsClosed, DiscussionNotFound, RecipientNotFound
+from .gateway import (
+    DiscussionIsClosed,
+    DiscussionNotFound,
+    ItemNotFound,
+    RecipientNotFound,
+)
 from .ratelimit import TierDeferred
 
 if TYPE_CHECKING:
@@ -416,6 +421,19 @@ async def _async_get_identity(call: ServiceCall) -> ServiceResponse:
     }
 
 
+async def _run_on_item(
+    extras: PronoteExtras, tier: Tier, student_id: str | None, fn: Any, *, cost: int
+) -> None:
+    """Run a write that names one item by its key, refusing a key now gone."""
+    try:
+        await _run(extras, tier, student_id, fn, cost=cost)
+    except ItemNotFound as missing:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="item_not_found",
+        ) from missing
+
+
 async def _async_mark_homework_done(call: ServiceCall) -> None:
     """Tick or untick one homework item."""
     account, student_id = _resolve_student(call.hass, call)
@@ -428,7 +446,9 @@ async def _async_mark_homework_done(call: ServiceCall) -> None:
     def work(client: Any) -> int:
         return extras.gateway.set_homework_done(client, homework_id, done=done)
 
-    await _run(extras, Tier.HOMEWORK, student_id, work, cost=1)
+    # Two: the list is read again in the posting session (see
+    # `set_homework_done`).
+    await _run_on_item(extras, Tier.HOMEWORK, student_id, work, cost=2)
     # Re-read soon rather than immediately: the tick is local truth already, and
     # an instant re-fetch would double the cost of every checkbox.
     account.scheduler.request([Tier.HOMEWORK])
@@ -445,7 +465,7 @@ async def _async_mark_information_read(call: ServiceCall) -> None:
     def work(client: Any) -> int:
         return extras.gateway.mark_information_read(client, information_id)
 
-    await _run(extras, Tier.NEWS, student_id, work, cost=1)
+    await _run_on_item(extras, Tier.NEWS, student_id, work, cost=2)
     account.scheduler.request([Tier.NEWS])
 
 

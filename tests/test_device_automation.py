@@ -33,6 +33,7 @@ from custom_components.carnet_scolaire.const import (
     EVENT_GRADE_ADDED,
     EVENT_LESSON_CANCELED,
     OPT_WRITE_OPERATIONS_ENABLED,
+    Tier,
 )
 from custom_components.carnet_scolaire.device_action import (
     ACTION_TYPES,
@@ -52,6 +53,7 @@ from custom_components.carnet_scolaire.device_trigger import (
 )
 
 from .conftest import CHILDREN, REQUIRES_HASS, child_key
+from .keys import key_of
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -506,8 +508,8 @@ async def test_the_editor_asks_only_for_the_fields_an_action_needs(
         pytest.param(
             "mark_information_read",
             "mark_information_read",
-            {"information_id": "NEWS-1"},
-            {"information_id": "NEWS-1"},
+            {"information_id": "INFORMATION-1"},
+            {"information_id": "INFORMATION-1"},
             id="information-read",
         ),
     ],
@@ -531,6 +533,17 @@ async def test_a_write_action_carries_its_identifier_into_the_service_call(
     from custom_components.carnet_scolaire.device_action import (
         async_call_action_from_config,
     )
+
+    # Parametrised with PRONOTE's `N`, which is what a fixture carries; what an
+    # automation holds, and what the service looks up, is the minted key.
+    def keyed(data: dict[str, Any]) -> dict[str, Any]:
+        tiers = {"homework_id": Tier.HOMEWORK, "information_id": Tier.NEWS}
+        return {
+            field: key_of(account, value, tiers[field]) if field in tiers else value
+            for field, value in data.items()
+        }
+
+    extra, expected_data = keyed(extra), keyed(expected_data)
 
     hass.config_entries.async_update_entry(
         mock_entry,
