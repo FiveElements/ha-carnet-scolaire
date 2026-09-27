@@ -369,7 +369,7 @@ class FakeClient:
             "PageEquipePedagogique": protocol.teaching_staff_response(
                 [protocol.teaching_staff()]
             ),
-            "SaisieTAFFaitEleve": {"dataSec": {"data": {}}},
+            "SaisieTAFFaitEleve": self._record_homework_ticks,
             "SaisieActualites": {"dataSec": {"data": {}}},
         }
 
@@ -476,6 +476,32 @@ class FakeClient:
         self.closed = True
 
     # -- the protocol seam -------------------------------------------------
+
+    def _record_homework_ticks(self, body: Any) -> dict[str, Any]:
+        """Answer ``SaisieTAFFaitEleve`` as the server does, per account shape.
+
+        A student's tick is recorded: the next ``PageCahierDeTexte`` reads the
+        item back with the new ``TAFFait``. A parent's is answered exactly the
+        same way and recorded nowhere, which is what was measured on a live
+        parent account on 2026-09-27 -- so a fake that recorded it would let a
+        test pass on the one account where the tick has never worked.
+
+        The homework response is rebuilt rather than edited in place: the
+        entries are often module-level constants shared across tests.
+        """
+        if not self.is_parent_account:
+            ticks = {line["N"]: line["TAFFait"] for line in body["listeTAF"]}
+            listed = self.responses["PageCahierDeTexte"]
+            entries = listed["dataSec"]["data"]["ListeTravauxAFaire"]["V"]
+            self.responses["PageCahierDeTexte"] = protocol.homework_response(
+                [
+                    {**entry, "TAFFait": ticks[entry["N"]]}
+                    if entry["N"] in ticks
+                    else entry
+                    for entry in entries
+                ]
+            )
+        return {"dataSec": {"data": {}}}
 
     def _answer(self, name: str, body: Any = None) -> dict[str, Any]:
         """Look up a canned response, calling it when it is a callable."""

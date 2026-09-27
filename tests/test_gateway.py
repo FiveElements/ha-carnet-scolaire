@@ -39,6 +39,7 @@ from custom_components.carnet_scolaire.gateway import (
     PronoteGateway,
     ProtocolChanged,
     RecipientNotFound,
+    WriteNotApplied,
     _attachment,
     _color_census,
     _establishment_host,
@@ -2256,15 +2257,20 @@ def test_ticking_homework_posts_directly(
 
     An object read after its session closed raises ``Erreur.G = 22`` (§3.1), so
     the write is posted from the identifier rather than from a live object --
-    the ``N`` found by reading the list again, which is the second request.
+    the ``N`` found by reading the list again, which is the first request. The
+    third reads it back, because only that shows the tick landed.
     """
     key = gateway.homework(client).facts.homework[0].id
     before = len(client.posted_names)
 
     calls = gateway.set_homework_done(client, key, done=True)
 
-    assert calls == 2
-    assert client.posted_names[before:] == ["PageCahierDeTexte", "SaisieTAFFaitEleve"]
+    assert calls == 3
+    assert client.posted_names[before:] == [
+        "PageCahierDeTexte",
+        "SaisieTAFFaitEleve",
+        "PageCahierDeTexte",
+    ]
     assert client.body_for("SaisieTAFFaitEleve") == {
         "listeTAF": [{"N": "HOMEWORK-1", "E": 2, "TAFFait": True}]
     }
@@ -2307,6 +2313,51 @@ def test_a_tick_for_an_item_no_longer_listed_is_refused_and_posts_nothing(
         gateway.set_homework_done(client, "hw-0000000000000000", done=True)
 
     assert "SaisieTAFFaitEleve" not in client.posted_names
+
+
+def test_a_tick_from_a_parent_session_is_reported_as_not_recorded(
+    gateway: PronoteGateway, parent_client: FakeClient
+) -> None:
+    """The defect of 0.1.5, measured on a live parent account on 2026-09-27.
+
+    The tick carried the ``N`` of the posting session and the ``E`` the server
+    expects, PRONOTE answered normally, and the next collection read the item
+    back undone. Reported as a success, the card kept its box ticked until that
+    collection quietly unticked it. The read-back is what turns it into an
+    error, and the request count is still what was placed.
+    """
+    key = gateway.homework(parent_client).facts.homework[0].id
+    before = len(parent_client.posted_names)
+
+    with pytest.raises(WriteNotApplied):
+        gateway.set_homework_done(parent_client, key, done=True)
+
+    assert parent_client.posted_names[before:] == [
+        "PageCahierDeTexte",
+        "SaisieTAFFaitEleve",
+        "PageCahierDeTexte",
+    ]
+
+
+def test_a_tick_whose_item_vanished_on_the_read_back_is_not_a_success(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """Nothing read back is not proof of anything, least of all of the tick.
+
+    A teacher withdrawing the item between the post and the read-back is rare,
+    and the answer then is the same as for an ignored tick: the write cannot be
+    shown to have landed, so it is not reported as having done so.
+    """
+    key = gateway.homework(client).facts.homework[0].id
+
+    def _withdrawn(_body: Any) -> dict[str, Any]:
+        client.responses["PageCahierDeTexte"] = protocol.homework_response([])
+        return {"dataSec": {"data": {}}}
+
+    client.responses["SaisieTAFFaitEleve"] = _withdrawn
+
+    with pytest.raises(WriteNotApplied):
+        gateway.set_homework_done(client, key, done=True)
 
 
 def test_replying_to_a_thread_costs_three_requests(

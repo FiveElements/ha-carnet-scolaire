@@ -585,7 +585,7 @@ donnerait l'illusion qu'il n'a jamais existé.
 
 | Entité | Éléments | Écriture | P |
 | --- | --- | --- | --- |
-| `todo.<é>_devoirs` | un élément par devoir, `due` = échéance, `summary` = matière, `description` = énoncé **en texte simple** | cocher → `Homework.set_done(True)` | `homework` |
+| `todo.<é>_devoirs` | un élément par devoir, `due` = échéance, `summary` = matière, `description` = énoncé **en texte simple** | cocher → `SaisieTAFFaitEleve`, relu ensuite ; compte élève seulement | `homework` |
 
 **Exigence.** `UPDATE_ITEM` n'est annoncé que si `write_operations_enabled` est
 vrai (§8.3 de la spécification).
@@ -623,7 +623,7 @@ dans aucun état (§8.1 de la spécification).
 | `carnet_scolaire.refresh` | entrée, palier optionnel | force une échéance | — |
 | `carnet_scolaire.get_ical_url` | entrée | rend l'URL iCal | `SupportsResponse.ONLY` |
 | `carnet_scolaire.get_identity` | entrée | rend l'identité et les responsables légaux | `SupportsResponse.ONLY` |
-| `carnet_scolaire.mark_homework_done` | identifiant de devoir | `Homework.set_done()` | — |
+| `carnet_scolaire.mark_homework_done` | identifiant de devoir | `SaisieTAFFaitEleve`, relu ensuite ; refusé sur un compte parent | — |
 | `carnet_scolaire.mark_information_read` | identifiant d'actualité | `Information.mark_as_read()` | — |
 | `carnet_scolaire.send_message` | discussion ou destinataires | `Discussion.reply()` / `Client.new_discussion()` | — |
 | `carnet_scolaire.generate_timetable_pdf` | entrée, jour, orientation | rend une URL de PDF | `SupportsResponse.ONLY` |

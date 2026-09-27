@@ -1253,6 +1253,21 @@ entier, et `todo.update_item` refuse un champ dont la fonctionnalité n'est pas
 annoncée. Un appel qui change la matière, l'énoncé ou l'échéance est refusé
 avec une explication plutôt qu'ignoré : seule la coche part vers PRONOTE.
 
+**Exigence.** Sur un compte **parent**, la liste de devoirs reste en lecture
+seule même quand l'option est vraie, le service `mark_homework_done` est refusé
+avant tout envoi, et l'action d'appareil « Cocher un devoir » n'est pas
+proposée. PRONOTE répond normalement à `SaisieTAFFaitEleve` venant d'une
+session parent et n'enregistre rien : mesuré le 2026-09-27, avec le `N` de la
+session qui envoyait. Dans l'Espace Parents, l'état d'un devoir est d'ailleurs
+un texte, pas une case.
+
+**Exigence.** Une coche n'est annoncée réussie qu'après relecture. La réponse du
+serveur à une écriture ne prouve rien : elle est la même quand l'écriture est
+ignorée. La liste est donc relue après l'envoi, dans la même session, et une
+coche que la relecture ne montre pas appliquée lève une erreur, sur laquelle
+la carte remet la case dans son état. Elle coûte trois requêtes : lecture,
+envoi, relecture.
+
 ### 8.4 Diagnostic
 
 **Exigence.** `async_get_config_entry_diagnostics` masque `password`,

@@ -604,40 +604,112 @@ async def test_a_write_is_refused_with_a_reason_by_default(
     assert len(parent_client.posts) == before
 
 
+#: The homework tick is only recorded from a student's own session, so every
+#: test that expects it to land logs in as one.
+on_a_student_account = pytest.mark.parametrize(
+    "account_client", ["student"], indirect=True, ids=["student-account"]
+)
+
+
+@on_a_student_account
 async def test_ticking_a_homework_item_posts_it_and_asks_for_a_re_read(
     hass: HomeAssistant,
     mock_entry: MockConfigEntry,
     writes_on: PronoteAccount,
-    parent_client: FakeClient,
+    client: FakeClient,
 ) -> None:
-    """Re-read *soon*, not immediately.
+    """Checked on the wire, then refreshed by the tier rather than from here.
 
-    The tick is local truth already, and an instant re-fetch would double the
-    cost of every checkbox.
+    The tick is read back inside the call, which is what shows it landed, but
+    publishing that read would be a collection outside the scheduler: the
+    homework tier is boosted instead.
     """
 
     await hass.services.async_call(
         DOMAIN,
         SERVICE_MARK_HOMEWORK_DONE,
         {
-            "device_id": _child_device(hass, mock_entry, STUDENT_ONE),
+            "device_id": _child_device(hass, mock_entry, protocol.STUDENT_ID),
             "homework_id": key_of(writes_on, "HOMEWORK-1"),
             "done": True,
         },
         blocking=True,
     )
 
-    assert parent_client.body_for("SaisieTAFFaitEleve") == {
+    assert client.body_for("SaisieTAFFaitEleve") == {
         "listeTAF": [{"N": "HOMEWORK-1", "E": 2, "TAFFait": True}]
     }
     assert writes_on.scheduler.diagnostics()[str(Tier.HOMEWORK)]["boosted"] is True
 
 
-async def test_a_write_naming_an_item_no_longer_listed_is_refused(
+async def test_a_tick_on_a_parent_account_is_refused_before_anything_is_sent(
     hass: HomeAssistant,
     mock_entry: MockConfigEntry,
     writes_on: PronoteAccount,
     parent_client: FakeClient,
+) -> None:
+    """PRONOTE answers a parent's tick normally and records nothing.
+
+    Measured on 2026-09-27. Sent anyway, the call would spend three requests
+    to produce an error, and an automation written against a parent account
+    would fail every time it ran; refused up front, it fails once, for free,
+    with a message saying why.
+    """
+    before = len(parent_client.posts)
+
+    with pytest.raises(ServiceValidationError) as raised:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_MARK_HOMEWORK_DONE,
+            {
+                "device_id": _child_device(hass, mock_entry, STUDENT_ONE),
+                "homework_id": key_of(writes_on, "HOMEWORK-1"),
+                "done": True,
+            },
+            blocking=True,
+        )
+
+    assert raised.value.translation_key == "homework_tick_parent_account"
+    assert len(parent_client.posts) == before
+
+
+@on_a_student_account
+async def test_a_tick_the_server_acknowledged_and_dropped_is_an_error(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    writes_on: PronoteAccount,
+    client: FakeClient,
+) -> None:
+    """The server's answer proves nothing; the read-back does.
+
+    Two releases in a row announced a tick that PRONOTE had not recorded,
+    because a normal answer was taken for a success. Here the server answers
+    normally and records nothing, and the automation's trace has to show a
+    failure rather than a write that never happened.
+    """
+    client.responses["SaisieTAFFaitEleve"] = {"dataSec": {"data": {}}}
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_MARK_HOMEWORK_DONE,
+            {
+                "device_id": _child_device(hass, mock_entry, protocol.STUDENT_ID),
+                "homework_id": key_of(writes_on, "HOMEWORK-1"),
+                "done": True,
+            },
+            blocking=True,
+        )
+
+    assert raised.value.translation_key == "write_not_applied"
+
+
+@on_a_student_account
+async def test_a_write_naming_an_item_no_longer_listed_is_refused(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    writes_on: PronoteAccount,
+    client: FakeClient,
 ) -> None:
     """PRONOTE would accept a stale ``N`` and record nothing; the service refuses.
 
@@ -652,7 +724,7 @@ async def test_a_write_naming_an_item_no_longer_listed_is_refused(
             DOMAIN,
             SERVICE_MARK_HOMEWORK_DONE,
             {
-                "device_id": _child_device(hass, mock_entry, STUDENT_ONE),
+                "device_id": _child_device(hass, mock_entry, protocol.STUDENT_ID),
                 "homework_id": "hw-0000000000000000",
                 "done": True,
             },
@@ -660,7 +732,7 @@ async def test_a_write_naming_an_item_no_longer_listed_is_refused(
         )
 
     assert raised.value.translation_key == "item_not_found"
-    assert "SaisieTAFFaitEleve" not in parent_client.posted_names
+    assert "SaisieTAFFaitEleve" not in client.posted_names
 
 
 async def test_marking_a_news_item_read_names_the_child_as_the_public(

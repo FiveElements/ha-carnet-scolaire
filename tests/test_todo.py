@@ -75,8 +75,6 @@ if not HAS_HASS_HARNESS:  # pragma: no cover - the Windows path only
         allow_module_level=True,
     )
 
-STUDENT_ONE, STUDENT_TWO = (child_id for child_id, _name in CHILDREN)
-
 #: Applied to a test that needs the checkbox to actually be tappable. It sets
 #: the option **before** the entry is set up rather than flipping it
 #: afterwards, and that is not a shortcut: the scheduler's cadence deliberately
@@ -88,6 +86,12 @@ STUDENT_ONE, STUDENT_TWO = (child_id for child_id, _name in CHILDREN)
 #: covers the runtime flip on its own.
 writes_on = pytest.mark.parametrize(
     "writes_enabled", [True], indirect=True, ids=["writes-on"]
+)
+
+#: Applied to a test about the parent account, where PRONOTE answers a tick
+#: normally and records nothing (measured on 2026-09-27).
+on_a_parent_account = pytest.mark.parametrize(
+    "account_client", ["parent"], indirect=True, ids=["parent-account"]
 )
 
 #: The two items the fake server answers with, chosen so one homework response
@@ -113,16 +117,37 @@ HOMEWORK_ENTRIES = [
 ]
 
 
-@pytest.fixture(name="parent_client")
-def parent_client_fixture() -> FakeClient:
-    """Override the shared client so every child has the two items above.
+@pytest.fixture(name="client")
+def client_fixture() -> FakeClient:
+    """A student's own account, holding the two items above.
 
     Overridden here rather than in ``conftest.py`` because the shape of the
     homework response is this module's subject and no other module's.
     """
+    client = FakeClient()
+    client.responses["PageCahierDeTexte"] = protocol.homework_response(HOMEWORK_ENTRIES)
+    return client
+
+
+@pytest.fixture(name="parent_client")
+def parent_client_fixture() -> FakeClient:
+    """A parent account, with the two items above for every child."""
     client = FakeClient(children=CHILDREN)
     client.responses["PageCahierDeTexte"] = protocol.homework_response(HOMEWORK_ENTRIES)
     return client
+
+
+@pytest.fixture(name="account_client")
+def account_client_fixture(
+    request: pytest.FixtureRequest, client: FakeClient, parent_client: FakeClient
+) -> FakeClient:
+    """A student account here, unless a test asks for the parent one.
+
+    The reverse of the suite's default, and for the module's own reason: the
+    tick is only recorded from a student's session, so the checkbox only
+    exists there. :data:`on_a_parent_account` selects the other shape.
+    """
+    return parent_client if getattr(request, "param", None) == "parent" else client
 
 
 @pytest.fixture(name="writes_enabled")
@@ -198,6 +223,7 @@ async def _items(hass: HomeAssistant, entity_id: str) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
+@on_a_parent_account
 async def test_one_list_per_child_and_not_one_per_account(
     hass: HomeAssistant, account: PronoteAccount
 ) -> None:
@@ -340,7 +366,7 @@ async def test_the_list_is_unknown_and_not_empty_before_any_collection(
 
 
 async def test_the_list_is_visibly_read_only_while_writes_are_off(
-    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+    hass: HomeAssistant, account: PronoteAccount, client: FakeClient
 ) -> None:
     """Declared through the supported features, so the frontend shows no box.
 
@@ -354,7 +380,7 @@ async def test_the_list_is_visibly_read_only_while_writes_are_off(
     assert state is not None
     assert state.attributes["supported_features"] == TodoListEntityFeature(0)
 
-    before = len(parent_client.posts)
+    before = len(client.posts)
     with pytest.raises(HomeAssistantError):
         await hass.services.async_call(
             "todo",
@@ -367,7 +393,7 @@ async def test_the_list_is_visibly_read_only_while_writes_are_off(
             blocking=True,
         )
 
-    assert len(parent_client.posts) == before
+    assert len(client.posts) == before
 
 
 @pytest.mark.parametrize("writes_enabled", [None], indirect=True, ids=["option-absent"])
@@ -390,7 +416,7 @@ async def test_an_entry_from_before_writes_were_on_by_default_stays_read_only(
 
 
 async def test_a_tick_is_refused_by_the_option_and_not_only_by_the_feature_flag(
-    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+    hass: HomeAssistant, account: PronoteAccount, client: FakeClient
 ) -> None:
     """Defence in depth, and the reason the guard is not redundant.
 
@@ -399,6 +425,80 @@ async def test_a_tick_is_refused_by_the_option_and_not_only_by_the_feature_flag(
     integration, a future change to core's service layer -- sails past them.
     The option check is what keeps the *account* safe, so it is asserted on its
     own, with the translation key the user actually reads.
+    """
+    before = len(client.posts)
+
+    with pytest.raises(ServiceValidationError) as raised:
+        await _entity(hass, _list_id("Enfant Un")).async_update_todo_item(
+            TodoItem(
+                uid=key_of(account, "HOMEWORK-1"),
+                summary="Histoire",
+                status=TodoItemStatus.COMPLETED,
+            )
+        )
+
+    assert raised.value.translation_key == "writes_disabled"
+    assert len(client.posts) == before
+
+
+async def test_turning_writes_on_re_declares_the_feature(
+    hass: HomeAssistant, mock_entry: MockConfigEntry, account: PronoteAccount
+) -> None:
+    """The option reloads the entry, so the checkbox appears (§7.3).
+
+    Without the reload a user would turn writing on and find the list still
+    read-only until Home Assistant restarted, which reads as the option having
+    no effect at all. On a student account, the only one whose ticks PRONOTE
+    records.
+    """
+    entity_id = _list_id("Enfant Un")
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.attributes["supported_features"] == TodoListEntityFeature(0)
+
+    hass.config_entries.async_update_entry(
+        mock_entry,
+        options={**mock_entry.options, OPT_WRITE_OPERATIONS_ENABLED: True},
+    )
+    await hass.async_block_till_done()
+
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.attributes["supported_features"] == (
+        TodoListEntityFeature.UPDATE_TODO_ITEM
+        | TodoListEntityFeature.SET_DUE_DATE_ON_ITEM
+        | TodoListEntityFeature.SET_DESCRIPTION_ON_ITEM
+    )
+
+
+@writes_on
+@on_a_parent_account
+async def test_a_parent_account_gets_no_checkbox_even_with_writes_on(
+    hass: HomeAssistant, account: PronoteAccount
+) -> None:
+    """The defect of 0.1.5: a box a parent could tick and PRONOTE ignored.
+
+    Measured on 2026-09-27: the tick carried the posting session's ``N``, the
+    server answered normally, and the next collection read the item back
+    undone -- the Espace Parents shows that state as text, not as a box. A
+    checkbox offered there can only lie, so none is offered, for either child.
+    """
+    assert account.write_enabled is True
+    for _child_id, name in CHILDREN:
+        state = hass.states.get(_list_id(name))
+        assert state is not None
+        assert state.attributes["supported_features"] == TodoListEntityFeature(0)
+
+
+@writes_on
+@on_a_parent_account
+async def test_a_tick_on_a_parent_account_is_refused_and_sends_nothing(
+    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+) -> None:
+    """The guard behind the missing box, for a caller that ignores the features.
+
+    Sent, the tick would spend three requests to reach an error; refused
+    here, it costs nothing and says why.
     """
     before = len(parent_client.posts)
 
@@ -411,40 +511,8 @@ async def test_a_tick_is_refused_by_the_option_and_not_only_by_the_feature_flag(
             )
         )
 
-    assert raised.value.translation_key == "writes_disabled"
+    assert raised.value.translation_key == "homework_tick_parent_account"
     assert len(parent_client.posts) == before
-
-
-async def test_turning_writes_on_re_declares_the_feature(
-    hass: HomeAssistant, mock_entry: MockConfigEntry, account: PronoteAccount
-) -> None:
-    """The option reloads the entry, so the checkbox appears (§7.3).
-
-    Without the reload a user would turn writing on and find the list still
-    read-only until Home Assistant restarted, which reads as the option having
-    no effect at all. Asserted for both children, because the feature is
-    declared per entity in ``__init__`` and one list left behind would be one
-    child whose homework could not be ticked.
-    """
-    for _child_id, name in CHILDREN:
-        state = hass.states.get(_list_id(name))
-        assert state is not None
-        assert state.attributes["supported_features"] == TodoListEntityFeature(0)
-
-    hass.config_entries.async_update_entry(
-        mock_entry,
-        options={**mock_entry.options, OPT_WRITE_OPERATIONS_ENABLED: True},
-    )
-    await hass.async_block_till_done()
-
-    for _child_id, name in CHILDREN:
-        state = hass.states.get(_list_id(name))
-        assert state is not None
-        assert state.attributes["supported_features"] == (
-            TodoListEntityFeature.UPDATE_TODO_ITEM
-            | TodoListEntityFeature.SET_DUE_DATE_ON_ITEM
-            | TodoListEntityFeature.SET_DESCRIPTION_ON_ITEM
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -454,7 +522,7 @@ async def test_turning_writes_on_re_declares_the_feature(
 
 @writes_on
 async def test_an_item_with_no_pronote_identifier_is_refused_rather_than_guessed(
-    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+    hass: HomeAssistant, account: PronoteAccount, client: FakeClient
 ) -> None:
     """``uid`` is the ``N`` the write is addressed to, and there is no fallback.
 
@@ -463,7 +531,7 @@ async def test_an_item_with_no_pronote_identifier_is_refused_rather_than_guessed
     error naming the problem is the only outcome that does not cost a call and
     then lie about it.
     """
-    before = len(parent_client.posts)
+    before = len(client.posts)
 
     with pytest.raises(ServiceValidationError) as raised:
         await _entity(hass, _list_id("Enfant Un")).async_update_todo_item(
@@ -471,12 +539,12 @@ async def test_an_item_with_no_pronote_identifier_is_refused_rather_than_guessed
         )
 
     assert raised.value.translation_key == "todo_item_unknown"
-    assert len(parent_client.posts) == before
+    assert len(client.posts) == before
 
 
 @writes_on
 async def test_ticking_an_item_sends_the_status_and_never_the_wording(
-    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+    hass: HomeAssistant, account: PronoteAccount, client: FakeClient
 ) -> None:
     """PRONOTE owns the subject, the wording and the deadline of a homework.
 
@@ -503,14 +571,14 @@ async def test_ticking_an_item_sends_the_status_and_never_the_wording(
         blocking=True,
     )
 
-    assert parent_client.body_for("SaisieTAFFaitEleve") == {
+    assert client.body_for("SaisieTAFFaitEleve") == {
         "listeTAF": [{"N": "HOMEWORK-1", "E": 2, "TAFFait": True}]
     }
 
 
 @writes_on
 async def test_a_tick_after_a_reconnection_is_recorded_under_the_new_sessions_n(
-    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+    hass: HomeAssistant, account: PronoteAccount, client: FakeClient
 ) -> None:
     """The defect of 0.1.4, end to end: the list, the tick, the wire.
 
@@ -523,7 +591,7 @@ async def test_a_tick_after_a_reconnection_is_recorded_under_the_new_sessions_n(
     uid = key_of(account, "HOMEWORK-1")
     renamed = [dict(entry) for entry in HOMEWORK_ENTRIES]
     renamed[0]["N"] = "HOMEWORK-1-AFTER-THE-LOGIN"
-    parent_client.responses["PageCahierDeTexte"] = protocol.homework_response(renamed)
+    client.responses["PageCahierDeTexte"] = protocol.homework_response(renamed)
 
     await hass.services.async_call(
         "todo",
@@ -532,14 +600,14 @@ async def test_a_tick_after_a_reconnection_is_recorded_under_the_new_sessions_n(
         blocking=True,
     )
 
-    assert parent_client.body_for("SaisieTAFFaitEleve") == {
+    assert client.body_for("SaisieTAFFaitEleve") == {
         "listeTAF": [{"N": "HOMEWORK-1-AFTER-THE-LOGIN", "E": 2, "TAFFait": True}]
     }
 
 
 @writes_on
 async def test_a_tick_on_an_item_withdrawn_since_is_refused_visibly(
-    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+    hass: HomeAssistant, account: PronoteAccount, client: FakeClient
 ) -> None:
     """The card puts the checkbox back on an error, and only on an error.
 
@@ -547,7 +615,7 @@ async def test_a_tick_on_an_item_withdrawn_since_is_refused_visibly(
     can act on.
     """
     uid = key_of(account, "HOMEWORK-1")
-    parent_client.responses["PageCahierDeTexte"] = protocol.homework_response(
+    client.responses["PageCahierDeTexte"] = protocol.homework_response(
         HOMEWORK_ENTRIES[1:]
     )
 
@@ -560,7 +628,7 @@ async def test_a_tick_on_an_item_withdrawn_since_is_refused_visibly(
         )
 
     assert raised.value.translation_key == "item_not_found"
-    assert "SaisieTAFFaitEleve" not in parent_client.posted_names
+    assert "SaisieTAFFaitEleve" not in client.posted_names
 
 
 @writes_on
@@ -576,7 +644,7 @@ async def test_a_tick_on_an_item_withdrawn_since_is_refused_visibly(
 async def test_an_edit_to_what_the_teacher_wrote_is_refused_and_not_lost(
     hass: HomeAssistant,
     account: PronoteAccount,
-    parent_client: FakeClient,
+    client: FakeClient,
     edit: dict[str, str],
 ) -> None:
     """Declaring the fields opens the edit dialog; saving in it must say no.
@@ -588,7 +656,7 @@ async def test_an_edit_to_what_the_teacher_wrote_is_refused_and_not_lost(
     filling with a parent's own phrasing over a teacher's.
     """
     entity_id = _list_id("Enfant Un")
-    before = len(parent_client.posts)
+    before = len(client.posts)
 
     with pytest.raises(ServiceValidationError) as raised:
         await hass.services.async_call(
@@ -599,46 +667,14 @@ async def test_an_edit_to_what_the_teacher_wrote_is_refused_and_not_lost(
         )
 
     assert raised.value.translation_key == "todo_item_owned_by_pronote"
-    assert len(parent_client.posts) == before
+    assert len(client.posts) == before
     items = {item["uid"]: item for item in await _items(hass, entity_id)}
     assert items[key_of(account, "HOMEWORK-1")]["summary"] == "Histoire"
 
 
 @writes_on
-async def test_a_tick_after_the_child_was_renamed_reaches_the_right_child(
-    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
-) -> None:
-    """The live failure: "no child with id", on the first tick after a re-login.
-
-    The entity kept the identifier of the session it was created in. PRONOTE
-    had renamed the child since, so the write selected a child the client no
-    longer had. The rename here is not followed by a batch: the tick itself
-    is the first call to meet it, which is what a re-login inside the write
-    produces.
-    """
-    parent_client.rotate_identifiers()
-    renamed = {str(child.id) for child in parent_client.children}
-
-    await hass.services.async_call(
-        "todo",
-        "update_item",
-        {
-            "entity_id": _list_id("Enfant Un"),
-            "item": key_of(account, "HOMEWORK-1"),
-            "status": "completed",
-        },
-        blocking=True,
-    )
-
-    assert parent_client.body_for("SaisieTAFFaitEleve") == {
-        "listeTAF": [{"N": "HOMEWORK-1", "E": 2, "TAFFait": True}]
-    }
-    assert parent_client.child_selections[-1] in renamed
-
-
-@writes_on
 async def test_unticking_an_item_sends_the_negative_and_not_nothing(
-    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+    hass: HomeAssistant, account: PronoteAccount, client: FakeClient
 ) -> None:
     """Marking a finished homework unfinished again is a write of its own.
 
@@ -657,26 +693,24 @@ async def test_unticking_an_item_sends_the_negative_and_not_nothing(
         blocking=True,
     )
 
-    assert parent_client.body_for("SaisieTAFFaitEleve") == {
+    assert client.body_for("SaisieTAFFaitEleve") == {
         "listeTAF": [{"N": "HOMEWORK-2", "E": 2, "TAFFait": False}]
     }
 
 
 @writes_on
 async def test_a_tick_is_billed_to_the_right_child_as_a_gesture(
-    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+    hass: HomeAssistant, account: PronoteAccount, client: FakeClient
 ) -> None:
     """Four things about the call, each with its own failure mode.
 
     It goes through the session manager at all -- a write placed beside the
     limiter is a write outside the budget that protects the account. It is
-    billed to the ``homework`` tier and costs one, because a write that
-    under-reports corrupts the very budget it spends. It is ``GESTURE`` and
-    never ``CRITICAL``: a human tapping a checkbox crosses quiet hours, but
-    nothing done by hand escapes the daily cap (annexe B §2.4). And
-    it names the child, because ``ParentClient`` keeps the first child selected
-    by default -- a write that forgot to say which child would tick the
-    *sibling's* homework and raise nothing at all.
+    billed to the ``homework`` tier and costs what it places, because a write
+    that under-reports corrupts the very budget it spends. It is ``GESTURE``
+    and never ``CRITICAL``: a human tapping a checkbox crosses quiet hours, but
+    nothing done by hand escapes the daily cap (annexe B §2.4). And it names
+    the student, so the call is accounted to the list it came from.
     """
     recorded: list[dict[str, Any]] = []
     real_run = account.extras.session.run
@@ -699,13 +733,13 @@ async def test_a_tick_is_billed_to_the_right_child_as_a_gesture(
         )
         return await real_run(tier, priority, fn, student_id=student_id, cost=cost)
 
-    mark = len(parent_client.journal)
+    mark = len(client.journal)
     with patch.object(account.extras.session, "run", _recording_run):
         await hass.services.async_call(
             "todo",
             "update_item",
             {
-                "entity_id": _list_id("Enfant Deux"),
+                "entity_id": _list_id("Enfant Un"),
                 "item": key_of(account, "HOMEWORK-1"),
                 "status": "completed",
             },
@@ -716,35 +750,34 @@ async def test_a_tick_is_billed_to_the_right_child_as_a_gesture(
         {
             "tier": str(Tier.HOMEWORK),
             "priority": Priority.GESTURE,
-            "student_id": STUDENT_TWO,
-            # The list is read again in the posting session, then the tick is
-            # posted: the `N` a snapshot holds is dead after a reconnection.
-            "cost": 2,
+            "student_id": protocol.STUDENT_ID,
+            # The list is read in the posting session, because the `N` a
+            # snapshot holds is dead after a reconnection; the tick is posted;
+            # and the list is read back, because only that shows it landed.
+            "cost": 3,
         }
     ]
-    # The selection is only observable in the *order*, so it is asserted there:
-    # in two separate ledgers a `set_child` placed after the post would look
-    # exactly like one placed before it.
-    assert parent_client.journal[mark:] == [
-        ("select", STUDENT_TWO),
+    assert client.journal[mark:] == [
         ("post", "PageCahierDeTexte"),
         ("post", "SaisieTAFFaitEleve"),
+        ("post", "PageCahierDeTexte"),
     ]
 
 
 @writes_on
-async def test_a_tick_reads_the_list_once_and_leaves_the_rest_to_the_tier(
-    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+async def test_a_tick_reads_the_list_around_the_post_and_leaves_the_rest_to_the_tier(
+    hass: HomeAssistant, account: PronoteAccount, client: FakeClient
 ) -> None:
-    """One read to find the item, and no second one to publish it.
+    """One read to find the item, one to check the tick, none to publish it.
 
-    The read is not optional: PRONOTE re-encrypts every ``N`` at each login, and
-    a tick posted with the one a snapshot holds is accepted and recorded
-    nowhere -- measured on 0.1.4. Publishing what that read found would be a
-    collection of its own, though, so the tier is boosted instead and the next
-    scheduled collection picks the item up.
+    Neither read is optional. PRONOTE re-encrypts every ``N`` at each login,
+    and a tick posted with the one a snapshot holds is accepted and recorded
+    nowhere -- measured on 0.1.4; and a tick PRONOTE ignores is answered like
+    one it records -- measured on 0.1.5. Publishing what the second read found
+    would be a collection of its own, though, so the tier is boosted instead
+    and the next scheduled collection picks the item up.
     """
-    reads_before = parent_client.posted_names.count("PageCahierDeTexte")
+    reads_before = client.posted_names.count("PageCahierDeTexte")
 
     await hass.services.async_call(
         "todo",
@@ -758,13 +791,40 @@ async def test_a_tick_reads_the_list_once_and_leaves_the_rest_to_the_tier(
     )
     await hass.async_block_till_done()
 
-    assert parent_client.posted_names.count("PageCahierDeTexte") == reads_before + 1
+    assert client.posted_names.count("PageCahierDeTexte") == reads_before + 2
     assert account.scheduler.diagnostics()[str(Tier.HOMEWORK)]["boosted"] is True
 
 
 @writes_on
+async def test_a_tick_the_server_acknowledged_and_dropped_puts_the_box_back(
+    hass: HomeAssistant, account: PronoteAccount, client: FakeClient
+) -> None:
+    """The card puts the checkbox back on an error, so this must be one.
+
+    The server answers here without recording anything, as it did for every
+    tick of 0.1.5 on a parent account. Reported as a success, the box stayed
+    ticked until the next collection quietly unticked it.
+    """
+    client.responses["SaisieTAFFaitEleve"] = {"dataSec": {"data": {}}}
+
+    with pytest.raises(HomeAssistantError) as raised:
+        await hass.services.async_call(
+            "todo",
+            "update_item",
+            {
+                "entity_id": _list_id("Enfant Un"),
+                "item": key_of(account, "HOMEWORK-1"),
+                "status": "completed",
+            },
+            blocking=True,
+        )
+
+    assert raised.value.translation_key == "write_not_applied"
+
+
+@writes_on
 async def test_a_tick_that_was_deferred_fails_visibly(
-    hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+    hass: HomeAssistant, account: PronoteAccount, client: FakeClient
 ) -> None:
     """A postponed tick reads exactly like a tick that did not work.
 
@@ -800,5 +860,5 @@ async def test_a_tick_that_was_deferred_fails_visibly(
         # would read as a measurement.
         "seconds": "42",
     }
-    assert "SaisieTAFFaitEleve" not in parent_client.posted_names
+    assert "SaisieTAFFaitEleve" not in client.posted_names
     assert account.scheduler.diagnostics()[str(Tier.HOMEWORK)]["boosted"] is False

@@ -352,6 +352,20 @@ class PronoteAccount:
         )
 
     @property
+    def can_tick_homework(self) -> bool:
+        """Whether a homework tick sent from this account can reach PRONOTE.
+
+        Only a student's own session can. ``SaisieTAFFaitEleve`` sent from a
+        parent session is answered normally and recorded nowhere -- measured
+        on 2026-09-27 with the ``N`` of the posting session, and consistent
+        with the Espace Parents, where the state of a homework item is text
+        and not a checkbox. So a parent account is refused the tick up front,
+        rather than billed for a write that is then reported as a success.
+        """
+        extras = self.extras
+        return extras is not None and extras.session.parent_account is False
+
+    @property
     def students(self) -> tuple[Student, ...]:
         """The children this entry follows."""
         return self.state.students

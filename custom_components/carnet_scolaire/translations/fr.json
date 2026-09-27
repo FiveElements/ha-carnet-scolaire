@@ -727,6 +727,12 @@
     "todo_item_unknown": {
       "message": "Cet élément de liste n'a pas d'identifiant PRONOTE : il ne peut pas être mis à jour."
     },
+    "homework_tick_parent_account": {
+      "message": "PRONOTE n'enregistre pas la coche d'un devoir envoyée depuis un compte parent : seul le compte de l'élève peut cocher un devoir. Rien n'a été envoyé."
+    },
+    "write_not_applied": {
+      "message": "PRONOTE a accepté la demande sans l'enregistrer : l'élément a été relu inchangé. Réessayez plus tard, ou faites la modification dans PRONOTE."
+    },
     "item_not_found": {
       "message": "Cet élément n'est plus sur PRONOTE tel qu'il a été lu : il a été retiré ou modifié depuis. Rien n'a été envoyé. Actualisez, puis réessayez."
     },

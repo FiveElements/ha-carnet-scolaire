@@ -6,10 +6,14 @@ a service call, which is exactly why it is gated: with write operations off --
 the default (§8.3) -- the list is read-only and says so through its supported
 features rather than by failing when tapped.
 
-The tick is applied locally the moment the server accepts it, and the homework
-tier is asked for a refresh rather than re-read immediately: the local truth is
-already correct, and an instant re-fetch would double the cost of every
-checkbox.
+It is read-only on a parent account too, whatever the option says. PRONOTE
+answers a parent session's tick normally and records nothing (measured on
+2026-09-27), so a checkbox offered there could only ever lie.
+
+On a student account the tick is read back before it is reported: the server's
+answer proves nothing, and a tick that did not land raises, so the card puts
+the box back. The published snapshot is still refreshed by the tier rather
+than from that check read.
 """
 
 from __future__ import annotations
@@ -22,11 +26,11 @@ from homeassistant.components.todo import (
     TodoListEntity,
     TodoListEntityFeature,
 )
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .const import DOMAIN, Priority, Tier
 from .entity import PronoteEntity, async_add_per_student
-from .gateway import ItemNotFound
+from .gateway import ItemNotFound, WriteNotApplied
 from .ratelimit import TierDeferred
 
 if TYPE_CHECKING:
@@ -80,7 +84,8 @@ class PronoteHomeworkTodoList(PronoteEntity, TodoListEntity):
         # Declared from the option rather than always: a checkbox that appears
         # tappable and then refuses is worse than one that is visibly
         # read-only. Changing the option reloads the entry, so this is
-        # re-evaluated (§7.3).
+        # re-evaluated (§7.3). The account's shape is known here too: the
+        # platforms are forwarded only after the first login.
         #
         # The due date and the description are declared too, although neither
         # can be written. Home Assistant's own list card ticks an item by
@@ -93,7 +98,7 @@ class PronoteHomeworkTodoList(PronoteEntity, TodoListEntity):
             TodoListEntityFeature.UPDATE_TODO_ITEM
             | TodoListEntityFeature.SET_DUE_DATE_ON_ITEM
             | TodoListEntityFeature.SET_DESCRIPTION_ON_ITEM
-            if account.write_enabled
+            if account.write_enabled and account.can_tick_homework
             else TodoListEntityFeature(0)
         )
 
@@ -138,6 +143,18 @@ class PronoteHomeworkTodoList(PronoteEntity, TodoListEntity):
                 translation_domain=DOMAIN,
                 translation_key="writes_disabled",
             )
+        account = self.account
+        extras = account.extras
+        if extras is None:
+            raise ServiceValidationError(
+                f"{account.connector.capabilities.source} does not support "
+                "homework writes"
+            )
+        if not account.can_tick_homework:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="homework_tick_parent_account",
+            )
         if item.uid is None:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
@@ -160,13 +177,6 @@ class PronoteHomeworkTodoList(PronoteEntity, TodoListEntity):
 
         done = item.status == TodoItemStatus.COMPLETED
         homework_id = item.uid
-        account = self.account
-        extras = account.extras
-        if extras is None:
-            raise ServiceValidationError(
-                f"{account.connector.capabilities.source} does not support "
-                "homework writes"
-            )
 
         def work(client: Any) -> int:
             return extras.gateway.set_homework_done(client, homework_id, done=done)
@@ -181,9 +191,10 @@ class PronoteHomeworkTodoList(PronoteEntity, TodoListEntity):
                 Priority.GESTURE,
                 work,
                 student_id=self.student.id,
-                # The list is read again before the post: the item's `N` is only
-                # valid in the session that read it (see `set_homework_done`).
-                cost=2,
+                # The list is read before the post, because the item's `N` is
+                # only valid in the session that read it, and again after it,
+                # because only that shows the tick landed (`set_homework_done`).
+                cost=3,
             )
         except ItemNotFound as missing:
             # Raised, not swallowed: PRONOTE would have accepted a stale `N` and
@@ -192,6 +203,11 @@ class PronoteHomeworkTodoList(PronoteEntity, TodoListEntity):
                 translation_domain=DOMAIN,
                 translation_key="item_not_found",
             ) from missing
+        except WriteNotApplied as ignored:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="write_not_applied",
+            ) from ignored
         except TierDeferred as deferred:
             # A tick that was silently postponed reads as a tick that did not
             # work, so this fails visibly instead.

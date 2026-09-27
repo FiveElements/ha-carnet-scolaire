@@ -375,6 +375,10 @@ class SessionManager:
         ) = None
 
         self._client: HardenedClient | None = None
+        #: The account's shape as the last login announced it, kept after the
+        #: session closes: an entity asks it at set-up and between batches,
+        #: when no client may be held. ``None`` until a login succeeded.
+        self._parent_account: bool | None = None
         self._opened_at: float | None = None
         self._last_success: float | None = None
 
@@ -442,6 +446,16 @@ class SessionManager:
     def is_open(self) -> bool:
         """Whether a client is currently held."""
         return self._client is not None
+
+    @property
+    def parent_account(self) -> bool | None:
+        """Whether the account logged in holds children, or ``None`` before any login.
+
+        Read from the handshake, so it places no request. It outlives the
+        client on purpose: a write that PRONOTE silently ignores from one shape
+        of account has to be refused before a session is opened for it.
+        """
+        return self._parent_account
 
     @property
     def student_ids(self) -> tuple[str, ...]:
@@ -898,6 +912,7 @@ class SessionManager:
 
         self._limiter.note_login(LoginOutcome.SUCCESS)
         self._client = client
+        self._parent_account = client.is_parent_account
         self._opened_at = self._clock()
         self._last_success = self._opened_at
         self._note_reachable()

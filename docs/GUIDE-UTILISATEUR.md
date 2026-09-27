@@ -862,6 +862,12 @@ L'identifiant du devoir se lit dans le champ `id` des éléments de l'attribut
 `items` du capteur « Devoirs ». Le champ **Fait** vaut `true` par défaut ; à
 `false`, il décoche.
 
+Ce service ne fonctionne qu'avec un **compte élève**. Depuis un compte parent,
+PRONOTE accepte la demande et n'enregistre rien ; l'intégration la refuse donc
+avant de l'envoyer, avec un message qui le dit. Sur un compte élève, la coche
+est relue juste après l'envoi : si PRONOTE ne l'a pas appliquée, le service
+échoue au lieu d'annoncer un succès.
+
 **Marquer une actualité comme lue** :
 
 ```yaml
@@ -1006,14 +1012,16 @@ message envoyé est un vrai message, avec l'identité du compte.
 
 **Trois choses changent dans l'interface, une fois l'écriture activée :**
 
-- la liste de tâches « Devoirs » devient cochable — avant, elle est visiblement
-  en lecture seule, ce qui vaut mieux qu'une case qui semble cliquable et refuse
-  au moment du clic. La boîte d'édition de Home Assistant propose aussi de
+- la liste de tâches « Devoirs » devient cochable, **sur un compte élève** —
+  avant, elle est visiblement en lecture seule, ce qui vaut mieux qu'une case
+  qui semble cliquable et refuse au moment du clic. Sur un compte parent, elle
+  le reste : PRONOTE n'enregistre pas une coche envoyée par un parent. La boîte d'édition de Home Assistant propose aussi de
   modifier la matière, l'énoncé et l'échéance : l'enregistrement est **refusé**
   avec un message, parce qu'ils appartiennent au professeur. Seule la coche part ;
 - les trois services d'écriture cessent de refuser ;
 - deux actions supplémentaires apparaissent dans l'éditeur d'automatisations,
-  « Cocher un devoir » et « Marquer une actualité comme lue ».
+  « Cocher un devoir » (compte élève seulement) et « Marquer une actualité comme
+  lue ».
 
 **Une écriture est refusée si elle ne peut pas partir**, plutôt que silencieusement
 reportée. Une case cochée qui aurait été mise en attente ressemblerait à une case
@@ -1567,7 +1575,8 @@ Ces messages apparaissent dans **Paramètres → Système → Réparations**.
 | **Les moyennes sont vides, ou la « Période en cours » est indisponible.** | Changement de trimestre, ou établissement qui ne publie pas de notes. Pendant les vacances scolaires, entre deux périodes, PRONOTE ne publie souvent plus de moyenne courante. | C'est normal, et l'intégration préfère ne rien dire que dire faux : quand la période en cours ne peut pas être déterminée de façon fiable, l'entité devient indisponible plutôt que de désigner la mauvaise période. Les chiffres du trimestre écoulé restent lisibles dans les entités « Moyenne générale (Trimestre 1) », « Bulletin (Trimestre 1) », etc. Les moyennes reviendront à l'ouverture de la période suivante. |
 | **Une note reste à « unknown » alors qu'elle est bien dans PRONOTE.** | La « note » est en réalité une mention : « Absent », « Non noté », « Dispensé », « Non rendu », « Félicitations ». | Regardez l'attribut `status` du capteur « Dernière note » : il porte le motif. C'est volontaire — un état numérique ne peut pas contenir du texte sans casser les seuils et les graphiques. |
 | **Le nombre de cours du jour semble doublé.** | Ce défaut est corrigé : PRONOTE renvoie le cours d'origine *et* son remplacement, et l'intégration ne garde que le plus récent. | Si vous observez encore un doublon, signalez-le : c'est un bug. |
-| **Une case cochée dans la liste de devoirs revient toute seule.** | L'écriture n'est pas activée, ou l'appel a été refusé par le limiteur. | Vérifiez « Autoriser l'écriture dans PRONOTE » dans les options. Une écriture reportée affiche une erreur explicite plutôt que d'échouer en silence. |
+| **Une case cochée dans la liste de devoirs revient toute seule.** | L'écriture n'est pas activée, l'appel a été refusé par le limiteur, ou PRONOTE a accepté la coche sans l'enregistrer. | Vérifiez « Autoriser l'écriture dans PRONOTE » dans les options. Une écriture reportée, ou relue inchangée, affiche une erreur explicite plutôt que d'échouer en silence. |
+| **La liste de devoirs n'a pas de case à cocher, alors que l'écriture est activée.** | Le compte est un compte parent. | C'est voulu : PRONOTE n'enregistre pas une coche envoyée depuis un compte parent. Seul le compte de l'élève peut cocher un devoir. |
 | **Un service répond « Reporté par le limiteur ».** | Le budget est momentanément épuisé. | Le message donne le délai à attendre. Contrairement à une collecte programmée, un service reporté échoue visiblement : c'est délibéré, pour que vous sachiez qu'il n'a rien fait. |
 | **Un service refuse d'agir sur le compte.** | *« Ce compte suit plusieurs enfants… Ciblez l'appareil de l'enfant plutôt que celui du compte. »* | Choisissez l'appareil de l'enfant. L'appareil du compte n'est accepté comme raccourci que s'il n'y a qu'un enfant. |
 | **Un déclencheur d'appareil ne se déclenche jamais.** | Vous avez ciblé l'appareil du compte au lieu de celui de l'enfant. Ou la catégorie concernée est désactivée. Ou l'établissement ne publie pas cette donnée. | Ciblez l'appareil de l'enfant : le compte ne propose aucun déclencheur. Vérifiez que la catégorie est activée dans « Intervalles de collecte ». |
