@@ -36,6 +36,7 @@ from .connectors.errors import (
 from .connectors.factory import source_from_entry_data
 from .connectors.protocol import Source
 from .const import DEFAULT_READ_TIMEOUT, DOMAIN, OPT_READ_TIMEOUT
+from .failures import describe_failure, is_transport_failure
 from .options import bounded_option
 from .ratelimit import LoginRefusedByLimiter
 from .services import async_setup_services
@@ -107,6 +108,17 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:  # noqa:
     return True
 
 
+def _chain_for_log(error: Exception) -> Exception | None:
+    """The cause to chain a set-up refusal to, or ``None`` to hide it.
+
+    Home Assistant writes the traceback of a ``ConfigEntryNotReady`` at DEBUG,
+    cause included, and the message of a transport cause quotes the
+    establishment's host and the path it failed on. Every other cause is kept:
+    it is what a bug report about a real fault needs.
+    """
+    return None if is_transport_failure(error) else error
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> bool:
     """Set up one PRONOTE account."""
     connector_client = (
@@ -142,7 +154,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
         # failure is the same class of event on the other source.
         account.async_open_bootstrap_issue()
         await account.async_unload()
-        raise ConfigEntryNotReady(str(error)) from error
+        # The message is ours and fixed; the chain is not. Home Assistant logs
+        # the "Full exception" at DEBUG on this integration's logger, and the
+        # traceback prints the `aiohttp` or `requests` cause, host and path.
+        raise ConfigEntryNotReady(str(error)) from _chain_for_log(error)
     except (
         LoginRefused,
         LoginRefusedByLimiter,
@@ -177,8 +192,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
         await account.async_unload()
         raise ConfigEntryNotReady(str(error)) from error
     except (TimeoutError, OSError) as error:
+        # Classified, not quoted, and not chained. Home Assistant logs this
+        # message and shows it as the entry's state, then logs the "Full
+        # exception" at DEBUG -- and the text of a `requests` error names the
+        # establishment's host and the path it failed on.
         await account.async_unload()
-        raise ConfigEntryNotReady(str(error)) from error
+        raise ConfigEntryNotReady(describe_failure(error)) from None
 
     entry.runtime_data = account
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = account

@@ -34,6 +34,7 @@ from unittest.mock import patch
 from pronotepy import ChildNotFound
 from pronotepy.exceptions import ExpiredObject, PronoteAPIError
 import pytest
+import requests
 
 from custom_components.carnet_scolaire.const import (
     LimiterState,
@@ -928,7 +929,8 @@ async def test_an_os_error_on_a_call_marks_the_server_unreachable_and_re_raises(
             _work(raises=OSError("network is down")),
         )
 
-    assert "PRONOTE is unavailable: network is down" in caplog.text
+    assert "PRONOTE is unavailable: OSError (os error)" in caplog.text
+    assert "network is down" not in caplog.text
     # And the failure is recorded, so the next attempt is held off rather than
     # made at the tier's cadence against a server that is down.
     assert harness.limiter.retry_delay() > 0
@@ -1013,3 +1015,71 @@ def test_an_ent_provider_upstream_still_ships_is_resolved_to_its_callable() -> N
     )
 
     assert _resolve_ent(credentials) is getattr(ent_module, name)
+
+
+# ---------------------------------------------------------------------------
+# A transport failure is described, never quoted
+# ---------------------------------------------------------------------------
+
+#: What ``requests`` writes when a school's server does not answer: the host,
+#: and the page path with whatever parameters it carried. Fictional, and
+#: shaped like the real thing.
+_LEAKY_HOST = "demo.example.invalid"
+_LEAKY_PARAMETER = "identifiant=NOT-A-REAL-SESSION"
+_LEAKY_MESSAGE = (
+    f"HTTPSConnectionPool(host='{_LEAKY_HOST}', port=443): Max retries exceeded "
+    f"with url: /pronote/parent.html?{_LEAKY_PARAMETER}"
+)
+
+
+def _leak_free(text: str) -> bool:
+    return _LEAKY_HOST not in text and _LEAKY_PARAMETER not in text
+
+
+async def test_an_unreachable_school_is_logged_without_its_address(
+    harness: Harness, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The ``log-when-unavailable`` line printed ``str(error)`` verbatim.
+
+    For a ``requests`` failure that is the establishment's host and the path
+    the call failed on, session parameters included -- at INFO, in the log a
+    user pastes into a public issue. The line must still say *what kind* of
+    failure it was, or it stops being worth reading.
+    """
+    caplog.set_level(logging.DEBUG, logger="custom_components.carnet_scolaire")
+
+    with pytest.raises(requests.ConnectionError):
+        await harness.manager.run(
+            "timetable",
+            Priority.HIGH,
+            _work(raises=requests.ConnectionError(_LEAKY_MESSAGE)),
+        )
+
+    assert "PRONOTE is unavailable: ConnectionError (connection)" in caplog.text
+    assert _leak_free(caplog.text)
+    assert _leak_free(repr(harness.manager.diagnostics()))
+
+
+async def test_a_login_that_cannot_reach_the_school_is_logged_without_its_address(
+    harness: Harness, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The login path had its own copy of the same ``str(error)``.
+
+    A school that is down fails at the login first -- the bootstrap GET is the
+    first request of every session -- so this is the copy an outage actually
+    reaches, and it logged the page address a parent had typed.
+    """
+    caplog.set_level(logging.DEBUG, logger="custom_components.carnet_scolaire")
+
+    with (
+        patch(
+            "custom_components.carnet_scolaire.session.build_client",
+            side_effect=requests.ConnectTimeout(_LEAKY_MESSAGE),
+        ),
+        pytest.raises(requests.ConnectTimeout),
+    ):
+        await harness.manager.run("timetable", Priority.HIGH, _work())
+
+    assert "PRONOTE is unavailable: ConnectTimeout (timeout)" in caplog.text
+    assert _leak_free(caplog.text)
+    assert _leak_free(repr(harness.manager.diagnostics()))

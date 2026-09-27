@@ -36,6 +36,7 @@ from homeassistant.config_entries import SOURCE_USER
 from homeassistant.data_entry_flow import FlowResultType
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+import requests
 
 from custom_components.carnet_scolaire.account import PronoteAccount
 from custom_components.carnet_scolaire.config_flow import (
@@ -1836,6 +1837,55 @@ async def test_the_refusal_log_names_the_upstream_cause_and_not_only_ours(
 
     assert "challenge decryption failed" in caplog.text
     assert "ValueError" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "chained",
+    [
+        pytest.param(False, id="direct"),
+        pytest.param(True, id="as-the-cause-of-a-refusal"),
+    ],
+)
+async def test_the_refusal_log_never_quotes_a_transport_error(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    no_spacing: None,
+    caplog: pytest.LogCaptureFixture,
+    chained: bool,
+) -> None:
+    """The refusal line printed the message of a transport failure verbatim.
+
+    A ``requests`` message names the establishment's host and the page path it
+    failed on, parameters included, and this DEBUG line is what a user turns on
+    before attaching the log to an issue. A static upstream message is still
+    printed -- that half is the line's purpose -- but a transport one is reduced
+    to class names and a category, whether it is the error or its cause.
+    """
+    caplog.set_level(
+        logging.DEBUG, logger="custom_components.carnet_scolaire.config_flow"
+    )
+    leaky = requests.ConnectionError(
+        "HTTPSConnectionPool(host='ecole.demo.example.invalid', port=443): "
+        "Max retries exceeded with url: "
+        "/pronote/parent.html?identifiant=NOT-A-REAL-SESSION"
+    )
+    failure: Exception = leaky
+    if chained:
+        failure = ProbeBootstrapFailed("bootstrap failed")
+        failure.__cause__ = leaky
+
+    result = await mock_entry.start_reauth_flow(hass)
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe", side_effect=failure
+    ):
+        await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"password": "still-wrong-not-real"}
+        )
+
+    assert "the login was refused" in caplog.text
+    assert "ConnectionError (connection)" in caplog.text
+    assert "ecole.demo.example.invalid" not in caplog.text
+    assert "NOT-A-REAL-SESSION" not in caplog.text
 
 
 def test_the_flow_never_imports_pronotepy_to_be_added(

@@ -70,6 +70,7 @@ from .const import (
     SessionStrategy,
 )
 from .ent_providers import resolve_ent_provider
+from .failures import describe_failure
 from .hardened_client import (
     BootstrapUnavailable,
     build_client,
@@ -570,7 +571,7 @@ class SessionManager:
             self._limiter.note_failure()
             raise IntegrationFault("a PRONOTE call exceeded its deadline") from error
         except OSError as error:
-            self._note_unreachable(str(error) or type(error).__name__)
+            self._note_unreachable(describe_failure(error))
             self._limiter.note_failure()
             raise
         except PronoteAPIError as error:
@@ -647,6 +648,11 @@ class SessionManager:
         second failed call in the same outage must stay silent -- that is
         what used to fill the log when every coordinator printed its own
         error for the same unreachable server.
+
+        ``reason`` is a fixed text or :func:`~.failures.describe_failure`,
+        never ``str(error)``: a ``requests`` message quotes the establishment's
+        host and the path it failed on, and this line is the one a user pastes
+        into an issue.
         """
         if self._unavailable_logged:
             return
@@ -899,7 +905,7 @@ class SessionManager:
             # `PronoteAPIError`: `requests.Timeout` inherits from `OSError`.
             # Reaching this branch is what makes the backoff engage and the
             # bootstrap GET get counted.
-            self._note_unreachable(str(error) or type(error).__name__)
+            self._note_unreachable(describe_failure(error))
             self._limiter.note_login(LoginOutcome.TRANSPORT)
             raise
 

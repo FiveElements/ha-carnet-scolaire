@@ -119,6 +119,7 @@ from .const import (
     SessionStrategy,
 )
 from .ent_providers import ent_provider_names
+from .failures import describe_failure, is_transport_failure
 from .login_guard import clear_login_penalties, limiter_state_store, login_guard
 from .options import (
     build_rate_limit_config,
@@ -307,12 +308,25 @@ def _log_refusal(error: BaseException) -> None:
     """
     cause = error.__cause__
     _LOGGER.debug(
-        "the login was refused: %s(%s), caused by %s(%s)",
-        type(error).__name__,
-        error,
-        type(cause).__name__ if cause is not None else "nothing",
-        cause if cause is not None else "",
+        "the login was refused: %s, caused by %s",
+        _refusal_shape(error),
+        _refusal_shape(cause) if cause is not None else "nothing",
     )
+
+
+def _refusal_shape(error: BaseException) -> str:
+    """One link of a refusal, as ``_log_refusal`` may print it.
+
+    A classified refusal keeps its message: upstream's are static, and they are
+    the distinction the line exists for. A transport failure does not. The text
+    of a ``requests`` error quotes the establishment's host and the path it
+    failed on -- a page path that can carry session parameters -- and this is
+    the log a user attaches to a public issue, so it is reduced to class names
+    and a category (:func:`~.failures.describe_failure`).
+    """
+    if is_transport_failure(error):
+        return describe_failure(error)
+    return f"{type(error).__name__}({error})"
 
 
 def _reset_ed_entry_penalties(hass: HomeAssistant, entry_id: str | None) -> None:
