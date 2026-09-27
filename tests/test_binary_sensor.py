@@ -265,6 +265,7 @@ def test_an_absence_in_progress_publishes_its_own_dates_and_not_the_days() -> No
     now = dt.datetime(2026, 3, 12, 10, 0, tzinfo=PARIS)
     facts = AttendanceFacts(
         period_id="P1",
+        period_index=1,
         absences=(
             _absence(
                 start=dt.datetime(2026, 3, 2, 8, 0, tzinfo=PARIS),
@@ -299,6 +300,7 @@ def test_no_absence_in_progress_publishes_nothing_rather_than_the_next_one() -> 
     now = dt.datetime(2026, 3, 12, 10, 0, tzinfo=PARIS)
     facts = AttendanceFacts(
         period_id="P1",
+        period_index=1,
         absences=(
             _absence(
                 start=dt.datetime(2026, 3, 20, 8, 0, tzinfo=PARIS),
@@ -324,6 +326,7 @@ def test_the_next_punishment_slot_is_the_earliest_still_ahead() -> None:
     now = dt.datetime(2026, 3, 12, 10, 0, tzinfo=PARIS)
     facts = AttendanceFacts(
         period_id="P1",
+        period_index=1,
         absences=(),
         delays=(),
         punishments=(
@@ -369,6 +372,7 @@ def test_a_punishment_wholly_in_the_past_publishes_nothing() -> None:
     now = dt.datetime(2026, 3, 12, 10, 0, tzinfo=PARIS)
     facts = AttendanceFacts(
         period_id="P1",
+        period_index=1,
         absences=(),
         delays=(),
         punishments=(

@@ -724,9 +724,15 @@ class AttendanceFacts:
     ``PagePresence`` and then read *the same* ``listeAbsences`` list, filtering
     on ``G`` being 13, 14 or 41 (dataClasses.py:606/621/636). One call, one
     filter, three tuples.
+
+    ``period_index`` is what identifies the period *across* sessions:
+    ``period_id`` is the session's ``N``, re-encrypted at every login, and
+    anything keyed on it -- the change detector, a closed-period sensor --
+    loses track of the period at the first reconnection.
     """
 
     period_id: str
+    period_index: int
     absences: tuple[Absence, ...]
     delays: tuple[Delay, ...]
     punishments: tuple[Punishment, ...]
@@ -734,9 +740,14 @@ class AttendanceFacts:
 
 @dataclass(frozen=True, slots=True)
 class EvaluationsFacts:
-    """Competency evaluations for a period."""
+    """Competency evaluations for a period.
+
+    ``period_index`` identifies the period across sessions, as on
+    :class:`AttendanceFacts`; ``period_id`` does not outlive the login.
+    """
 
     period_id: str
+    period_index: int
     evaluations: tuple[Evaluation, ...]
 
 

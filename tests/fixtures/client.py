@@ -318,6 +318,8 @@ class FakeClient:
         #: and a call made without a selection therefore answers for the first
         #: child instead of failing.
         self.journal: list[tuple[str, str]] = []
+        #: How many sessions ``rotate_identifiers`` has simulated.
+        self._rotations = 0
         self._child_payloads: dict[str, dict[str, Any]] = {
             child_id: protocol.parametres_utilisateur(
                 student_id=child_id,
@@ -408,7 +410,16 @@ class FakeClient:
         and it is the single event a newcomer check must not mistake for an
         arrival. Places no request, for the same reason `enrol_child` does
         not: the roster comes with the handshake.
+
+        The periods rotate too, and that is not a detail: every ``N`` the
+        server hands out is re-encrypted per session, the ``ListePeriodes`` of
+        ``FonctionParametres`` and each child's ``periodeParDefaut`` included.
+        This fake used to rotate the children only, so no test could see a
+        period change its ``N`` -- and a change detector naming a collection
+        after that ``N`` primed instead of comparing after every reconnection,
+        missing whatever absence or evaluation arrived with it.
         """
+        self._rotate_periods()
         rotated: dict[str, dict[str, Any]] = {}
         for index, (child_id, payload) in enumerate(self._child_payloads.items(), 1):
             resource = payload["dataSec"]["data"]["ressource"]
@@ -422,6 +433,27 @@ class FakeClient:
         )
         if self._children:
             self.set_child(str(self._children[0].id))
+
+    def _rotate_periods(self) -> None:
+        """Give every period a fresh ``N``, wherever the handshake names it.
+
+        Same labels, same dates, same order -- only the identifier moves, which
+        is exactly what makes the position the one stable handle on a period.
+        """
+        self._rotations += 1
+        general = self.func_options["dataSec"]["data"]["General"]
+        fresh: dict[str, str] = {}
+        for period in general.get("ListePeriodes", []):
+            old = str(period["N"])
+            fresh[old] = f"{old.split('#', 1)[0]}#session-{self._rotations}"
+            period["N"] = fresh[old]
+        payloads = [self.parametres_utilisateur, *self._child_payloads.values()]
+        for payload in payloads:
+            tabs = payload["dataSec"]["data"]["ressource"]["listeOngletsPourPeriodes"]
+            for tab in tabs["V"]:
+                default = tab.get("periodeParDefaut", {}).get("V", {})
+                if default.get("N") in fresh:
+                    default["N"] = fresh[default["N"]]
 
     @property
     def is_parent_account(self) -> bool:

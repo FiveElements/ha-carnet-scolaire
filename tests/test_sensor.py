@@ -946,10 +946,51 @@ def test_a_closed_period_the_history_holds_nothing_for_publishes_unknown(
 
     empty = HistoryFacts(marks=(), attendance=(), evaluations=())
 
-    state, attributes = getattr(sensor_module, value_fn)(empty, "A-PERIOD-NEVER-SEEN")
+    state, attributes = getattr(sensor_module, value_fn)(empty, 99)
 
     assert state is None
     assert attributes == {}
+
+
+def test_a_closed_period_is_found_by_its_position_after_a_reconnection() -> None:
+    """A history sensor keeps the period it was built with; the ``N`` moves.
+
+    The entity is created at set-up and holds that login's ``Period``. The
+    ``history`` tier later reads the closed periods of whatever session is
+    open, and PRONOTE re-encrypts every period ``N`` at each login -- so a
+    lookup on the ``N`` found nothing after the first reconnection and every
+    closed-period sensor fell to ``unknown`` until the next reload.
+    """
+    from custom_components.carnet_scolaire.models import (
+        AttendanceFacts,
+        EvaluationsFacts,
+        HistoryFacts,
+    )
+    from custom_components.carnet_scolaire.sensor import (
+        _history_absences,
+        _history_evaluations,
+    )
+
+    rotated = HistoryFacts(
+        marks=(),
+        attendance=(
+            AttendanceFacts(
+                period_id="PERIOD-0#session-2",
+                period_index=1,
+                absences=(),
+                delays=(),
+                punishments=(),
+            ),
+        ),
+        evaluations=(
+            EvaluationsFacts(
+                period_id="PERIOD-0#session-2", period_index=1, evaluations=()
+            ),
+        ),
+    )
+
+    assert _history_absences(rotated, 1)[0] == 0
+    assert _history_evaluations(rotated, 1)[0] == 0
 
 
 def test_a_day_with_no_lesson_publishes_no_end_of_day_attributes() -> None:

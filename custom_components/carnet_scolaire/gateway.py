@@ -1505,6 +1505,7 @@ class PronoteGateway:
         return GatewayResult(
             AttendanceFacts(
                 period_id=period.id,
+                period_index=period.index,
                 absences=item_keys.restamp(absences, _absence_key),
                 delays=item_keys.restamp(delays, _delay_key),
                 punishments=item_keys.restamp(punishments, _punishment_key),
@@ -1609,6 +1610,7 @@ class PronoteGateway:
         return GatewayResult(
             EvaluationsFacts(
                 period_id=period.id,
+                period_index=period.index,
                 evaluations=item_keys.restamp(items, _evaluation_key),
             ),
             calls=1,

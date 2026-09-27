@@ -216,6 +216,7 @@ def attendance(
     """An attendance snapshot."""
     return AttendanceFacts(
         period_id="PERIOD-1",
+        period_index=2,
         absences=absences,
         delays=delays,
         punishments=punishments,
@@ -302,7 +303,9 @@ def test_a_first_snapshot_emits_nothing_at_all() -> None:
     assert (
         detector.evaluations(
             STUDENT,
-            EvaluationsFacts(period_id="PERIOD-1", evaluations=(an_evaluation(),)),
+            EvaluationsFacts(
+                period_id="PERIOD-1", period_index=2, evaluations=(an_evaluation(),)
+            ),
         )
         == []
     )
@@ -577,12 +580,14 @@ def test_new_evaluations_carry_their_acquisitions() -> None:
     """A competency event with no levels in it says nothing useful."""
     detector = DeltaDetector()
     detector.evaluations(
-        STUDENT, EvaluationsFacts(period_id="PERIOD-1", evaluations=())
+        STUDENT, EvaluationsFacts(period_id="PERIOD-1", period_index=2, evaluations=())
     )
 
     events = detector.evaluations(
         STUDENT,
-        EvaluationsFacts(period_id="PERIOD-1", evaluations=(an_evaluation(),)),
+        EvaluationsFacts(
+            period_id="PERIOD-1", period_index=2, evaluations=(an_evaluation(),)
+        ),
     )
 
     assert [event.event_type for event in events] == [EVENT_EVALUATION_ADDED]
@@ -1127,7 +1132,7 @@ def test_every_event_type_has_an_identifier_in_its_attributes(
     detector.news(STUDENT, NewsFacts(information=()))
     detector.attendance(STUDENT, attendance())
     detector.evaluations(
-        STUDENT, EvaluationsFacts(period_id="PERIOD-1", evaluations=())
+        STUDENT, EvaluationsFacts(period_id="PERIOD-1", period_index=2, evaluations=())
     )
     detector.discussions(STUDENT, discussions(a_thread(unread=0)))
 
@@ -1145,7 +1150,9 @@ def test_every_event_type_has_an_identifier_in_its_attributes(
         ),
         *detector.evaluations(
             STUDENT,
-            EvaluationsFacts(period_id="PERIOD-1", evaluations=(an_evaluation(),)),
+            EvaluationsFacts(
+                period_id="PERIOD-1", period_index=2, evaluations=(an_evaluation(),)
+            ),
         ),
         *detector.discussions(
             STUDENT, discussions(a_thread(unread=1, messages=(a_message("M-1"),)))
@@ -1249,3 +1256,116 @@ def test_a_grade_published_across_a_reconnection_is_announced() -> None:
     events = detector.marks(STUDENT, after_login)
 
     assert [event.event_type for event in events] == [EVENT_GRADE_ADDED]
+
+
+def test_attendance_published_across_a_reconnection_is_announced() -> None:
+    """Absences, delays and punishments used to be named by the period's ``N``.
+
+    The same defect the grades had, left behind in three collections: the
+    first collection after a login found ``absences:<fresh N>``, primed it and
+    returned nothing, so the absence recorded between the two sessions -- the
+    one a parent most wants to hear about -- never fired.
+    """
+    detector = DeltaDetector()
+    detector.attendance(
+        STUDENT,
+        attendance(
+            absences=(an_absence(),),
+            delays=(a_delay(),),
+            punishments=(a_punishment(),),
+        ),
+    )
+
+    after_login = dataclasses.replace(
+        attendance(
+            absences=(an_absence(), an_absence("ABSENCE-2")),
+            delays=(a_delay(), a_delay("DELAY-2")),
+            punishments=(a_punishment(), a_punishment("PUNISHMENT-2")),
+        ),
+        period_id="PERIOD-1-AFTER-THE-LOGIN",
+    )
+    events = detector.attendance(STUDENT, after_login)
+
+    assert [event.event_type for event in events] == [
+        EVENT_ABSENCE_ADDED,
+        EVENT_DELAY_ADDED,
+        EVENT_PUNISHMENT_ADDED,
+    ]
+
+
+def test_an_evaluation_published_across_a_reconnection_is_announced() -> None:
+    """The evaluations collection was named by the period's ``N`` as well."""
+    detector = DeltaDetector()
+    detector.evaluations(
+        STUDENT,
+        EvaluationsFacts(
+            period_id="PERIOD-1", period_index=2, evaluations=(an_evaluation(),)
+        ),
+    )
+
+    events = detector.evaluations(
+        STUDENT,
+        EvaluationsFacts(
+            period_id="PERIOD-1-AFTER-THE-LOGIN",
+            period_index=2,
+            evaluations=(an_evaluation(), an_evaluation("EVALUATION-2")),
+        ),
+    )
+
+    assert [event.event_type for event in events] == [EVENT_EVALUATION_ADDED]
+    assert events[0].attributes["evaluation_id"] == "EVALUATION-2"
+
+
+def test_an_unchanged_list_under_a_rotated_period_announces_nothing() -> None:
+    """The control: a new name for the period is not a new item.
+
+    Keyed by position, the collection is the same one after the login, and a
+    list that did not change must stay silent -- the fix must not trade a
+    missed event for a replayed term.
+    """
+    detector = DeltaDetector()
+    before = attendance(absences=(an_absence(),), delays=(a_delay(),))
+    detector.attendance(STUDENT, before)
+    detector.evaluations(
+        STUDENT,
+        EvaluationsFacts(
+            period_id="PERIOD-1", period_index=2, evaluations=(an_evaluation(),)
+        ),
+    )
+
+    assert (
+        detector.attendance(
+            STUDENT, dataclasses.replace(before, period_id="PERIOD-1-ROTATED")
+        )
+        == []
+    )
+    assert (
+        detector.evaluations(
+            STUDENT,
+            EvaluationsFacts(
+                period_id="PERIOD-1-ROTATED",
+                period_index=2,
+                evaluations=(an_evaluation(),),
+            ),
+        )
+        == []
+    )
+
+
+def test_attendance_is_scoped_to_its_period() -> None:
+    """Another period is still another collection, primed rather than diffed.
+
+    Keying by position must not merge two periods: the first term's absences
+    read against the second term's would all be "new" on the day the term
+    changes.
+    """
+    detector = DeltaDetector()
+    detector.attendance(STUDENT, attendance(absences=(an_absence(),)))
+
+    next_term = dataclasses.replace(
+        attendance(absences=(an_absence(), an_absence("ABSENCE-2"))),
+        period_id="PERIOD-2",
+        period_index=3,
+    )
+
+    assert detector.attendance(STUDENT, next_term) == []
