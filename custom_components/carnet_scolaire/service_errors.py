@@ -38,6 +38,7 @@ from homeassistant.exceptions import HomeAssistantError
 from pronotepy.exceptions import DataError, PronoteAPIError
 
 from .const import DOMAIN, Priority
+from .failures import safe_cause
 from .gateway import ProtocolChanged
 from .ratelimit import TierDeferred
 from .session import (
@@ -59,8 +60,9 @@ def _fail(key: str, **placeholders: str) -> HomeAssistantError:
 
     Every caller raises it ``from`` the original, so the traceback in the log
     keeps the real cause for whoever turns on
-    ``custom_components.carnet_scolaire: debug``; the *message* is the
-    translation and nothing else.
+    ``custom_components.carnet_scolaire: debug`` -- except a decoding failure,
+    whose cause quotes the payload (`failures.safe_cause`); the *message* is
+    the translation and nothing else.
     """
     return HomeAssistantError(
         translation_domain=DOMAIN,
@@ -127,7 +129,9 @@ async def async_run_gesture(
             raise _fail("service_unreachable") from fault
         raise _fail("service_internal_error") from fault
     except (AccountUnreadable, ProtocolChanged, DataError) as unreadable:
-        raise _fail("service_unreadable") from unreadable
+        # Not chained when the chain carries a decoding error: its text is the
+        # data it could not read, and a traceback prints every link.
+        raise _fail("service_unreadable") from safe_cause(unreadable)
     except OSError as unreachable:
         # `requests` exceptions and `TimeoutError` are all `OSError`. Their text
         # quotes the URL they failed on, which is exactly why it goes nowhere.

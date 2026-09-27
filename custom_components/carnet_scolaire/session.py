@@ -889,17 +889,21 @@ class SessionManager:
             # credentials' fault nor a transport failure, so it gets its own
             # outcome and its own hold rather than looping for ever at the
             # tier's cadence.
-            # error(), not exception(): the type and message are the useful
-            # part, and the traceback is a walk through pronotepy's resolver.
+            # error(), not exception(), and never the message. The message of
+            # a decoding error quotes what it could not decode -- a child's
+            # name, a `N`, a converter's `invalid literal ... 'value'` -- and
+            # the traceback prints it again for every link. What stays is what
+            # a protocol change is diagnosed by: the classes involved and the
+            # name of the protocol field, when one can be known without
+            # reading the message (`failures.describe_failure`).
             _LOGGER.error(  # noqa: TRY400
                 "The login response from this establishment could not be "
-                "decoded (%s: %s). This usually means PRONOTE changed something "
+                "decoded (%s). This usually means PRONOTE changed something "
                 "the pinned pronotepy does not handle yet",
-                type(error).__name__,
-                error,
+                describe_failure(error),
             )
             self._limiter.note_login(LoginOutcome.UNDECODABLE)
-            raise AccountUnreadable(str(error)) from error
+            raise AccountUnreadable(describe_failure(error)) from error
         except _TRANSPORT_ERRORS as error:
             # `requests` failures land here, and none of them is a
             # `PronoteAPIError`: `requests.Timeout` inherits from `OSError`.

@@ -59,6 +59,7 @@ from .const import (
     AttachmentKind,
     GradeStatus,
 )
+from .failures import describe_failure
 from .models import (
     Absence,
     Acquisition,
@@ -1016,15 +1017,20 @@ class PronoteGateway:
         """
         try:
             upstream = dataClasses.Lesson(client, entry)
-        except _ENTRY_ERRORS:
+        except _ENTRY_ERRORS as error:
+            # Described, never traced: the traceback of a decoding error
+            # prints what it could not decode, and so would the entry's `N`.
             fallback = self._lesson_raw(entry)
             if fallback is None:
-                _LOGGER.debug("skipping an undecodable timetable entry", exc_info=True)
+                _LOGGER.debug(
+                    "skipping an undecodable timetable entry: %s",
+                    describe_failure(error),
+                )
             else:
                 _LOGGER.debug(
-                    "decoding timetable entry %s from raw JSON: pronotepy refused it",
-                    entry.get("N"),
-                    exc_info=True,
+                    "decoding a timetable entry from raw JSON: pronotepy "
+                    "refused it (%s)",
+                    describe_failure(error),
                 )
             return fallback
 
@@ -1435,8 +1441,10 @@ class PronoteGateway:
 
         try:
             upstream = dataClasses.Report(data)
-        except _ENTRY_ERRORS:
-            _LOGGER.debug("skipping an undecodable report card", exc_info=True)
+        except _ENTRY_ERRORS as error:
+            _LOGGER.debug(
+                "skipping an undecodable report card: %s", describe_failure(error)
+            )
             return None, 1
 
         subjects = tuple(
@@ -1517,8 +1525,10 @@ class PronoteGateway:
         """Decode an absence. Note: ``hours``/``days``, never ``minutes``."""
         try:
             upstream = dataClasses.Absence(entry)
-        except _ENTRY_ERRORS:
-            _LOGGER.debug("skipping an undecodable absence", exc_info=True)
+        except _ENTRY_ERRORS as error:
+            _LOGGER.debug(
+                "skipping an undecodable absence: %s", describe_failure(error)
+            )
             return None
 
         return Absence(
@@ -1535,8 +1545,8 @@ class PronoteGateway:
         """Decode a late arrival. ``minutes`` lives here, not on the absence."""
         try:
             upstream = dataClasses.Delay(entry)
-        except _ENTRY_ERRORS:
-            _LOGGER.debug("skipping an undecodable delay", exc_info=True)
+        except _ENTRY_ERRORS as error:
+            _LOGGER.debug("skipping an undecodable delay: %s", describe_failure(error))
             return None
 
         return Delay(
@@ -1560,8 +1570,10 @@ class PronoteGateway:
         """
         try:
             upstream = dataClasses.Punishment(client, entry)
-        except _ENTRY_ERRORS:
-            _LOGGER.debug("skipping an undecodable punishment", exc_info=True)
+        except _ENTRY_ERRORS as error:
+            _LOGGER.debug(
+                "skipping an undecodable punishment: %s", describe_failure(error)
+            )
             return None
 
         slots: list[PunishmentSlot] = []
@@ -1620,8 +1632,10 @@ class PronoteGateway:
         """Decode one evaluation, reusing upstream's class."""
         try:
             upstream = dataClasses.Evaluation(entry)
-        except _ENTRY_ERRORS:
-            _LOGGER.debug("skipping an undecodable evaluation", exc_info=True)
+        except _ENTRY_ERRORS as error:
+            _LOGGER.debug(
+                "skipping an undecodable evaluation: %s", describe_failure(error)
+            )
             return None
 
         subject = upstream.subject
@@ -1782,8 +1796,10 @@ class PronoteGateway:
         """Expand one thread. Costs exactly one request."""
         try:
             upstream_messages = thread.messages
-        except _ENTRY_ERRORS:
-            _LOGGER.debug("could not expand a discussion thread", exc_info=True)
+        except _ENTRY_ERRORS as error:
+            _LOGGER.debug(
+                "could not expand a discussion thread: %s", describe_failure(error)
+            )
             return (), 1
 
         messages: list[Message] = []
