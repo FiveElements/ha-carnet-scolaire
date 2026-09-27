@@ -134,11 +134,14 @@ def async_condition_from_config(
         hass, config[CONF_DEVICE_ID], key
     )
     if entity_id is None:
-        message = (
-            f"no {key} entity on device {config[CONF_DEVICE_ID]}: this "
-            f"establishment does not publish the data this condition reads"
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="condition_entity_missing",
+            translation_placeholders={
+                "key": key,
+                "device_id": config[CONF_DEVICE_ID],
+            },
         )
-        raise HomeAssistantError(message)
 
     state_config = {
         CONF_CONDITION: "state",

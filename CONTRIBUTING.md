@@ -254,7 +254,7 @@ extérieur au dépôt, et un avertissement en tête du document le dit.
 
 ## 4. Ce qui se génère et ne s'édite pas
 
-Quatre fichiers sont produits par un script. Les modifier à la main casse un
+Cinq fichiers sont produits par un script. Les modifier à la main casse un
 test qui compare le fichier à ce que le générateur produit.
 
 | Fichier | Source |
@@ -263,6 +263,7 @@ test qui compare le fichier à ce que le générateur produit.
 | `custom_components/carnet_scolaire/translations/en.json` | idem |
 | `custom_components/carnet_scolaire/translations/fr.json` | idem |
 | `custom_components/carnet_scolaire/services.yaml` | idem |
+| `custom_components/carnet_scolaire/icons.json` | idem |
 
 Modifiez la table dans le script, puis :
 

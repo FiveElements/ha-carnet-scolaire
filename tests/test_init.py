@@ -103,6 +103,7 @@ from custom_components.carnet_scolaire.const import (
 from custom_components.carnet_scolaire.diagnostics import (
     async_get_config_entry_diagnostics,
 )
+from custom_components.carnet_scolaire.failures import describe_failure
 from custom_components.carnet_scolaire.hardened_client import BootstrapUnavailable
 from custom_components.carnet_scolaire.login_guard import limiter_state_store
 from custom_components.carnet_scolaire.ratelimit import (
@@ -111,6 +112,12 @@ from custom_components.carnet_scolaire.ratelimit import (
     RateLimitConfig,
 )
 from custom_components.carnet_scolaire.sensor import LIST_SENSORS, PRIMITIVE_SENSORS
+from custom_components.carnet_scolaire.session import (
+    AccountUnreadable,
+    BootstrapFailed,
+    InvalidCredentials,
+    LoginRefused,
+)
 from custom_components.carnet_scolaire.tiers import (
     _FIRST_COLLECTION_ATTEMPTS,
     _priority_for,
@@ -1063,14 +1070,19 @@ async def test_a_school_that_is_down_at_set_up_is_not_ready_without_its_address(
     Home Assistant logs that reason and shows it on the integration's card, so
     a school that was down at start-up printed its host and the page path --
     session parameters included -- where a user copies it into an issue. The
-    reason must still say what kind of failure it was.
+    reason must still say what kind of failure it was: it is now a translated
+    sentence whose only placeholder is `describe_failure`.
     """
     caplog.set_level(logging.DEBUG)
 
     await _setup_failing(hass, mock_entry, requests.ConnectionError(_LEAKY_MESSAGE))
 
     assert mock_entry.state is ConfigEntryState.SETUP_RETRY
-    assert mock_entry.reason == "ConnectionError (connection)"
+    assert mock_entry.error_reason_translation_key == "setup_network_error"
+    assert mock_entry.error_reason_translation_placeholders == {
+        "error_type": "ConnectionError (connection)"
+    }
+    _assert_leak_free(str(mock_entry.reason))
     _assert_leak_free(caplog.text)
     _assert_no_issue_quotes_the_error(hass)
 
@@ -1158,6 +1170,86 @@ async def test_a_failed_tier_that_is_not_transport_keeps_its_traceback(
     await account._async_collect(Tier.HOMEWORK)
 
     assert "Traceback" in caplog.text
+
+
+#: What an upstream message can carry: a pasted address with its session
+#: parameters. Fictional, and the whole point of the test below is that it
+#: never reaches the entry.
+_LEAKY_TEXT = "https://demo.example.invalid/pronote/eleve.html?identifiant=NOT-A-TOKEN"
+
+
+@pytest.mark.parametrize(
+    ("error", "state", "key"),
+    [
+        pytest.param(
+            InvalidCredentials(_LEAKY_TEXT),
+            ConfigEntryState.SETUP_ERROR,
+            "setup_auth_failed",
+            id="credentials",
+        ),
+        pytest.param(
+            BootstrapFailed(_LEAKY_TEXT),
+            ConfigEntryState.SETUP_RETRY,
+            "setup_unreachable",
+            id="bootstrap",
+        ),
+        pytest.param(
+            LoginRefused(_LEAKY_TEXT),
+            ConfigEntryState.SETUP_RETRY,
+            "setup_login_postponed",
+            id="login-refused",
+        ),
+        pytest.param(
+            AccountUnreadable(_LEAKY_TEXT),
+            ConfigEntryState.SETUP_RETRY,
+            "setup_unreadable",
+            id="unreadable",
+        ),
+        pytest.param(
+            PronoteAPIError(_LEAKY_TEXT),
+            ConfigEntryState.SETUP_RETRY,
+            "setup_server_refused",
+            id="server-refused",
+        ),
+        pytest.param(
+            OSError(_LEAKY_TEXT),
+            ConfigEntryState.SETUP_RETRY,
+            "setup_network_error",
+            id="network",
+        ),
+    ],
+)
+async def test_a_setup_failure_reads_as_a_translated_sentence_never_as_the_error_text(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    school_day: Any,
+    no_spacing: None,
+    error: Exception,
+    state: ConfigEntryState,
+    key: str,
+) -> None:
+    """Quality scale ``exception-translations``, and a leak it closes.
+
+    Set-up used to raise ``ConfigEntryNotReady(str(error))``: the card on the
+    integrations page, and the retry line in the log, then quoted whatever the
+    library or the server had put in the exception -- in English whatever the
+    user's language, and possibly an address the user pasted with its session
+    parameters. Each arm now names a translation key, and the only placeholder
+    is `describe_failure` -- class names and a fixed category, never a message.
+    """
+    del school_day, no_spacing
+    with patch.object(PronoteAccount, "async_setup", side_effect=error):
+        await hass.config_entries.async_setup(mock_entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert mock_entry.state is state
+    assert mock_entry.error_reason_translation_domain == DOMAIN
+    assert mock_entry.error_reason_translation_key == key
+    assert mock_entry.error_reason_translation_placeholders == {
+        "error_type": describe_failure(error)
+    }
+    assert "NOT-A-TOKEN" not in str(mock_entry.reason)
+    assert "NOT-A-TOKEN" not in describe_failure(error)
 
 
 async def test_a_snapshot_collected_for_another_child_is_refused(

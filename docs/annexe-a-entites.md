@@ -478,6 +478,21 @@ Le nom **affiché** contient le libellé de la période, traduit avec un
 substituteur (`{period}`), donc lisible ; l'identifiant reste stable si
 l'établissement renomme « Trimestre 1 » en « Semestre 1 ».
 
+**Désactivées par défaut.** Ces huit entités par période close sont les
+**seules** de l'intégration créées désactivées (règle
+`entity-disabled-by-default` de l'échelle de qualité) : leur nombre grandit au
+fil de l'année, elles s'écrivent dans l'historique à chaque relecture pour des
+chiffres qui ne changent plus, et aucun blueprint, déclencheur ou condition
+d'appareil ni aucune carte ne les lit. Trois précisions :
+
+- cela ne vaut que pour une entité **nouvellement créée** : une entité déjà
+  présente dans le registre garde son état, activée ou non ;
+- une entité désactivée reste **collectée** — le palier `history` ignore
+  quelles entités sont activées. C'est la désactivation du palier « Périodes
+  closes » dans les options qui économise ses requêtes ;
+- les activer se fait entité par entité, voir le
+  [guide, §4.4](GUIDE-UTILISATEUR.md#44-les-périodes-closes).
+
 ---
 
 ## 3. Capteurs binaires

@@ -226,7 +226,7 @@ async def test_a_trigger_on_a_device_that_no_longer_resolves_does_not_attach(
         name="Un Enfant Parti",
     )
 
-    with pytest.raises(HomeAssistantError):
+    with pytest.raises(HomeAssistantError) as refused:
         await async_attach_trigger(
             hass,
             {
@@ -238,6 +238,12 @@ async def test_a_trigger_on_a_device_that_no_longer_resolves_does_not_attach(
             lambda *_args, **_kwargs: None,
             {},  # type: ignore[arg-type]
         )
+
+    # Translated (quality scale `exception-translations`): the automation
+    # editor shows this sentence, and it used to be English on every install.
+    assert refused.value.translation_domain == DOMAIN
+    assert refused.value.translation_key == "trigger_device_not_followed"
+    assert refused.value.translation_placeholders == {"device_id": stranded.id}
 
 
 # ---------------------------------------------------------------------------
@@ -363,8 +369,18 @@ async def test_a_condition_whose_entity_does_not_exist_says_so(
         }
     )
 
-    with pytest.raises(HomeAssistantError, match="school_day"):
+    with pytest.raises(HomeAssistantError) as refused:
         async_condition_from_config(hass, config)
+
+    # Translated rather than an English f-string (quality scale
+    # `exception-translations`); the entity key it names survives as a
+    # placeholder, so the trace still says which reading is missing.
+    assert refused.value.translation_domain == DOMAIN
+    assert refused.value.translation_key == "condition_entity_missing"
+    assert refused.value.translation_placeholders == {
+        "key": "school_day",
+        "device_id": config["device_id"],
+    }
 
 
 # ---------------------------------------------------------------------------
