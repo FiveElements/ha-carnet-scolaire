@@ -36,6 +36,7 @@ from custom_components.carnet_scolaire.const import (
     Tier,
 )
 from custom_components.carnet_scolaire.device_action import (
+    ACTION_MARK_HOMEWORK_DONE,
     ACTION_TYPES,
     WRITE_ACTIONS,
     async_get_actions,
@@ -53,6 +54,7 @@ from custom_components.carnet_scolaire.device_trigger import (
 )
 
 from .conftest import CHILDREN, REQUIRES_HASS, child_key
+from .fixtures import protocol
 from .keys import key_of
 
 if TYPE_CHECKING:
@@ -392,6 +394,26 @@ async def test_the_write_actions_are_hidden_until_writes_are_enabled(
     await hass.async_block_till_done()
 
     offered = {action["type"] for action in await async_get_actions(hass, device_id)}
+    # A parent account: PRONOTE records nothing its session ticks, so the tick
+    # is not offered even with writes on.
+    assert offered == set(ACTION_TYPES) - {ACTION_MARK_HOMEWORK_DONE}
+
+
+@pytest.mark.parametrize(
+    "account_client", ["student"], indirect=True, ids=["student-account"]
+)
+async def test_a_student_account_is_offered_the_homework_tick(
+    hass: HomeAssistant, mock_entry: MockConfigEntry, account: PronoteAccount
+) -> None:
+    """The one shape of account whose ticks PRONOTE records gets the action."""
+    hass.config_entries.async_update_entry(
+        mock_entry,
+        options={**mock_entry.options, OPT_WRITE_OPERATIONS_ENABLED: True},
+    )
+    await hass.async_block_till_done()
+
+    device_id = _child(hass, mock_entry, protocol.STUDENT_ID)
+    offered = {action["type"] for action in await async_get_actions(hass, device_id)}
     assert offered == set(ACTION_TYPES)
 
 
@@ -440,7 +462,8 @@ async def test_a_refresh_action_calls_the_matching_service(
         hass,
         {
             "domain": DOMAIN,
-            "device_id": _child(hass, mock_entry, STUDENT_ONE),
+            # A student account: the only one on which the tick lands.
+            "device_id": _child(hass, mock_entry, protocol.STUDENT_ID),
             "type": action_type,
             **extra,
         },
@@ -513,6 +536,9 @@ async def test_the_editor_asks_only_for_the_fields_an_action_needs(
             id="information-read",
         ),
     ],
+)
+@pytest.mark.parametrize(
+    "account_client", ["student"], indirect=True, ids=["student-account"]
 )
 async def test_a_write_action_carries_its_identifier_into_the_service_call(
     hass: HomeAssistant,

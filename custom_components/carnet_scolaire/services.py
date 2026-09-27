@@ -59,6 +59,7 @@ from .gateway import (
     DiscussionNotFound,
     ItemNotFound,
     RecipientNotFound,
+    WriteNotApplied,
 )
 from .ratelimit import TierDeferred
 
@@ -278,6 +279,15 @@ def _require_writes(account: PronoteAccount) -> None:
         )
 
 
+def _require_homework_ticks(account: PronoteAccount) -> None:
+    """Refuse a tick from an account whose ticks PRONOTE records nowhere."""
+    if not account.can_tick_homework:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="homework_tick_parent_account",
+        )
+
+
 def _require_service(account: PronoteAccount, service: str) -> None:
     """Refuse a service the connector does not advertise.
 
@@ -432,6 +442,13 @@ async def _run_on_item(
             translation_domain=DOMAIN,
             translation_key="item_not_found",
         ) from missing
+    except WriteNotApplied as ignored:
+        # Not a validation error: the call was well formed and PRONOTE said
+        # yes. The re-read is what showed the answer to be empty.
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="write_not_applied",
+        ) from ignored
 
 
 async def _async_mark_homework_done(call: ServiceCall) -> None:
@@ -440,17 +457,18 @@ async def _async_mark_homework_done(call: ServiceCall) -> None:
     _require_service(account, SERVICE_MARK_HOMEWORK_DONE)
     _require_writes(account)
     extras = _require_pronote_extras(account)
+    _require_homework_ticks(account)
     homework_id = call.data[ATTR_HOMEWORK_ID]
     done = call.data[ATTR_DONE]
 
     def work(client: Any) -> int:
         return extras.gateway.set_homework_done(client, homework_id, done=done)
 
-    # Two: the list is read again in the posting session (see
-    # `set_homework_done`).
-    await _run_on_item(extras, Tier.HOMEWORK, student_id, work, cost=2)
-    # Re-read soon rather than immediately: the tick is local truth already, and
-    # an instant re-fetch would double the cost of every checkbox.
+    # Three: the list is read in the posting session, then the tick is posted,
+    # then the list is read back to prove it landed (see `set_homework_done`).
+    await _run_on_item(extras, Tier.HOMEWORK, student_id, work, cost=3)
+    # The published snapshot is refreshed by the tier, not from the check read:
+    # publishing from here would be a collection outside the scheduler.
     account.scheduler.request([Tier.HOMEWORK])
 
 

@@ -1303,6 +1303,32 @@ EXCEPTIONS: list[tuple[str, str, str]] = [
         ),
     ),
     (
+        "homework_tick_parent_account",
+        (
+            "PRONOTE does not record a homework tick sent from a parent "
+            "account: only the student's own account can tick homework. "
+            "Nothing was sent."
+        ),
+        (
+            "PRONOTE n'enregistre pas la coche d'un devoir envoyée depuis un "
+            "compte parent : seul le compte de l'élève peut cocher un devoir. "
+            "Rien n'a été envoyé."
+        ),
+    ),
+    (
+        "write_not_applied",
+        (
+            "PRONOTE accepted the request but did not record it: the item "
+            "read back unchanged. Try again later, or make the change in "
+            "PRONOTE itself."
+        ),
+        (
+            "PRONOTE a accepté la demande sans l'enregistrer : l'élément a été "
+            "relu inchangé. Réessayez plus tard, ou faites la modification "
+            "dans PRONOTE."
+        ),
+    ),
+    (
         "item_not_found",
         (
             "That item is no longer on PRONOTE as it was last read: it was "

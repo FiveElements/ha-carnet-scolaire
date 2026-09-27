@@ -202,6 +202,20 @@ def parent_client_fixture() -> FakeClient:
     return FakeClient(children=CHILDREN)
 
 
+@pytest.fixture(name="account_client")
+def account_client_fixture(
+    request: pytest.FixtureRequest, client: FakeClient, parent_client: FakeClient
+) -> FakeClient:
+    """The client the ``account`` fixture logs in with.
+
+    The parent account unless a test asks for ``"student"`` by indirect
+    parametrisation. The two are not interchangeable for writes: PRONOTE
+    records a homework tick from a student session and ignores one from a
+    parent session, so a test of the tick has to say which it is on.
+    """
+    return client if getattr(request, "param", "parent") == "student" else parent_client
+
+
 @pytest.fixture(name="entry_data")
 def entry_data_fixture() -> dict[str, Any]:
     """Config-entry data with invented credentials.
@@ -305,7 +319,7 @@ if HAS_HASS_HARNESS:
     async def account_fixture(
         hass: HomeAssistant,
         mock_entry: MockConfigEntry,
-        parent_client: FakeClient,
+        account_client: FakeClient,
         # Requested for their side effects: one freezes the clock, the other
         # replaces the limiter's sleeper. Neither is read.
         school_day: FrozenDateTimeFactory,
@@ -327,7 +341,7 @@ if HAS_HASS_HARNESS:
         """
         with patch(
             "custom_components.carnet_scolaire.session.build_client",
-            return_value=parent_client,
+            return_value=account_client,
         ):
             assert await hass.config_entries.async_setup(mock_entry.entry_id)
             await hass.async_block_till_done()

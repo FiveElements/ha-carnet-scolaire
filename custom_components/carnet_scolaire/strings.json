@@ -727,6 +727,12 @@
     "todo_item_unknown": {
       "message": "That to-do item has no PRONOTE identifier, so it cannot be updated."
     },
+    "homework_tick_parent_account": {
+      "message": "PRONOTE does not record a homework tick sent from a parent account: only the student's own account can tick homework. Nothing was sent."
+    },
+    "write_not_applied": {
+      "message": "PRONOTE accepted the request but did not record it: the item read back unchanged. Try again later, or make the change in PRONOTE itself."
+    },
     "item_not_found": {
       "message": "That item is no longer on PRONOTE as it was last read: it was withdrawn or changed since. Nothing was sent. Refresh, then try again."
     },

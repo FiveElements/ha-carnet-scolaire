@@ -173,6 +173,20 @@ class ItemNotFound(Exception):  # noqa: N818 -- surfaced as a ServiceValidationE
 
     def __init__(self, item_id: str) -> None:
         super().__init__(f"no item with key {item_id} in this session")
+
+
+class WriteNotApplied(Exception):  # noqa: N818 -- surfaced as a HomeAssistantError
+    """PRONOTE accepted a write and the re-read shows it was not recorded.
+
+    The server answers a write it ignores exactly like one it records, so the
+    answer proves nothing: a tick from a parent session, or one addressed to a
+    stale ``N``, is acknowledged and dropped. Only reading the item back tells
+    the two apart, and a write that did not land is raised rather than
+    reported as a success.
+    """
+
+    def __init__(self, item_id: str) -> None:
+        super().__init__(f"the write to {item_id} was acknowledged and not recorded")
         self.item_id = item_id
 
 
@@ -2057,11 +2071,12 @@ class PronoteGateway:
     ) -> int:
         """Tick or untick one homework item, named by its minted key.
 
-        Two requests, not one. PRONOTE's ``N`` is re-encrypted by every login,
-        so the one a snapshot holds names nothing in a later session -- and the
-        server answers an unknown ``N`` normally and records nothing. Measured:
-        a tick sent at 22:59:58 with the ``N`` of a list read at 21:55, in a
-        session opened at 22:57, was accepted, billed and read back unticked.
+        The list is read before the post. PRONOTE's ``N`` is re-encrypted by
+        every login, so the one a snapshot holds names nothing in a later
+        session -- and the server answers an unknown ``N`` normally and records
+        nothing. Measured: a tick sent at 22:59:58 with the ``N`` of a list
+        read at 21:55, in a session opened at 22:57, was accepted, billed and
+        read back unticked.
         So the list is read again here, in the session that posts, and the key
         is looked up in it; an item that is no longer there raises
         :class:`ItemNotFound` instead of reporting a success.
@@ -2077,6 +2092,12 @@ class PronoteGateway:
         were accepted, billed, and read back unticked by the next collection,
         with no error anywhere. Maintained clients of the same protocol send
         ``E: 2`` on this request; ``pronotepy`` 2.15.7 predates that.
+
+        Three requests, then: the list is read a second time after the post,
+        because the server's answer proves nothing. A parent session's tick is
+        answered normally and recorded nowhere (measured on 2026-09-27), and
+        the only evidence that a tick landed is the item read back with the
+        requested state -- otherwise :class:`WriteNotApplied` is raised.
         """
         item = self._current_homework(client, homework_id)
         client.post(
@@ -2084,7 +2105,17 @@ class PronoteGateway:
             88,
             {"listeTAF": [{"N": item.ref, "E": _ENTITY_MODIFIED, "TAFFait": done}]},
         )
-        return 2
+        after = next(
+            (
+                candidate
+                for candidate in self.homework(client).facts.homework
+                if candidate.id == homework_id
+            ),
+            None,
+        )
+        if after is None or after.done != done:
+            raise WriteNotApplied(homework_id)
+        return 3
 
     def _current_homework(self, client: HardenedClient, homework_id: str) -> Homework:
         """Read the homework in this session and find one item by its key."""

@@ -62,7 +62,7 @@ ACTION_SCHEMA: Final = cv.DEVICE_ACTION_BASE_SCHEMA.extend(
 async def async_get_actions(
     hass: HomeAssistant, device_id: str
 ) -> list[dict[str, Any]]:
-    """Offer the refresh actions, and the writes only if they are enabled."""
+    """Offer the refresh actions, and the writes only if they can land."""
     account = _account(hass, device_id)
     if account is None:
         return []
@@ -70,6 +70,10 @@ async def async_get_actions(
     types = list(ACTION_TYPES)
     if not account.write_enabled:
         types = [name for name in types if name not in WRITE_ACTIONS]
+    if not account.can_tick_homework:
+        # PRONOTE records nothing a parent session ticks, so the editor does
+        # not offer an action whose every run would fail.
+        types = [name for name in types if name != ACTION_MARK_HOMEWORK_DONE]
 
     return [
         {
