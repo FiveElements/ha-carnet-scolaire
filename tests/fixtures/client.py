@@ -106,11 +106,15 @@ class FakeEncryption:
 
     def __init__(self, key: bytes = b"session-key") -> None:
         self.key = key
+        #: Everything encrypted, in order -- so a test can say *which* ``N`` an
+        #: address was built from, which the digest alone cannot show.
+        self.plaintexts: list[bytes] = []
 
     def aes_encrypt(self, data: bytes) -> bytes:
         """A reversible stand-in, not a cipher. Keyed, and that is what counts."""
         import hashlib
 
+        self.plaintexts.append(data)
         return hashlib.sha256(self.key + data).digest()
 
 

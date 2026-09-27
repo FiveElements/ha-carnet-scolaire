@@ -26,6 +26,7 @@ from homeassistant.exceptions import ServiceValidationError
 
 from .const import DOMAIN, Priority, Tier
 from .entity import PronoteEntity, async_add_per_student
+from .gateway import ItemNotFound
 from .ratelimit import TierDeferred
 
 if TYPE_CHECKING:
@@ -180,8 +181,17 @@ class PronoteHomeworkTodoList(PronoteEntity, TodoListEntity):
                 Priority.GESTURE,
                 work,
                 student_id=self.student.id,
-                cost=1,
+                # The list is read again before the post: the item's `N` is only
+                # valid in the session that read it (see `set_homework_done`).
+                cost=2,
             )
+        except ItemNotFound as missing:
+            # Raised, not swallowed: PRONOTE would have accepted a stale `N` and
+            # recorded nothing, and the card puts the checkbox back on an error.
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="item_not_found",
+            ) from missing
         except TierDeferred as deferred:
             # A tick that was silently postponed reads as a tick that did not
             # work, so this fails visibly instead.

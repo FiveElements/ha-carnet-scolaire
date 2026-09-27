@@ -55,6 +55,7 @@ from custom_components.carnet_scolaire.ratelimit import DeferReason, TierDeferre
 from .conftest import CHILDREN, REQUIRES_HASS, child_key
 from .fixtures import protocol
 from .fixtures.client import FakeClient, FakeThread
+from .keys import key_of, thread_key
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -620,7 +621,7 @@ async def test_ticking_a_homework_item_posts_it_and_asks_for_a_re_read(
         SERVICE_MARK_HOMEWORK_DONE,
         {
             "device_id": _child_device(hass, mock_entry, STUDENT_ONE),
-            "homework_id": "HOMEWORK-1",
+            "homework_id": key_of(writes_on, "HOMEWORK-1"),
             "done": True,
         },
         blocking=True,
@@ -630,6 +631,36 @@ async def test_ticking_a_homework_item_posts_it_and_asks_for_a_re_read(
         "listeTAF": [{"N": "HOMEWORK-1", "E": 2, "TAFFait": True}]
     }
     assert writes_on.scheduler.diagnostics()[str(Tier.HOMEWORK)]["boosted"] is True
+
+
+async def test_a_write_naming_an_item_no_longer_listed_is_refused(
+    hass: HomeAssistant,
+    mock_entry: MockConfigEntry,
+    writes_on: PronoteAccount,
+    parent_client: FakeClient,
+) -> None:
+    """PRONOTE would accept a stale ``N`` and record nothing; the service refuses.
+
+    The key an automation holds is minted from the content, so a withdrawn or
+    rewritten item matches nothing in the session that posts -- and that has to
+    read as a failure, or the automation's trace shows a write that never
+    happened.
+    """
+    del writes_on
+    with pytest.raises(ServiceValidationError) as raised:
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_MARK_HOMEWORK_DONE,
+            {
+                "device_id": _child_device(hass, mock_entry, STUDENT_ONE),
+                "homework_id": "hw-0000000000000000",
+                "done": True,
+            },
+            blocking=True,
+        )
+
+    assert raised.value.translation_key == "item_not_found"
+    assert "SaisieTAFFaitEleve" not in parent_client.posted_names
 
 
 async def test_marking_a_news_item_read_names_the_child_as_the_public(
@@ -649,13 +680,13 @@ async def test_marking_a_news_item_read_names_the_child_as_the_public(
         SERVICE_MARK_INFORMATION_READ,
         {
             "device_id": _child_device(hass, mock_entry, STUDENT_TWO),
-            "information_id": "INFO-1",
+            "information_id": key_of(writes_on, "INFORMATION-1", Tier.NEWS),
         },
         blocking=True,
     )
 
     body = parent_client.body_for("SaisieActualites")
-    assert body["listeActualites"][0]["N"] == "INFO-1"
+    assert body["listeActualites"][0]["N"] == "INFORMATION-1"
     assert body["listeActualites"][0]["lue"] is True
     assert body["listeActualites"][0]["public"] == {"N": STUDENT_TWO}
 
@@ -799,7 +830,7 @@ async def test_replying_to_a_closed_thread_is_refused(
             {
                 "device_id": _child_device(hass, mock_entry, STUDENT_ONE),
                 "message": "Merci",
-                "discussion_id": "THREAD-CLOSED",
+                "discussion_id": thread_key(parent_client, "THREAD-CLOSED"),
             },
             blocking=True,
         )
@@ -829,7 +860,7 @@ async def test_a_reply_is_billed_at_what_it_actually_costs(
         {
             "device_id": _child_device(hass, mock_entry, STUDENT_ONE),
             "message": "Merci",
-            "discussion_id": "THREAD-1",
+            "discussion_id": thread_key(parent_client, "THREAD-1"),
         },
         blocking=True,
     )

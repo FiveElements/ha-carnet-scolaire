@@ -727,6 +727,9 @@
     "todo_item_unknown": {
       "message": "That to-do item has no PRONOTE identifier, so it cannot be updated."
     },
+    "item_not_found": {
+      "message": "That item is no longer on PRONOTE as it was last read: it was withdrawn or changed since. Nothing was sent. Refresh, then try again."
+    },
     "todo_item_owned_by_pronote": {
       "message": "Only the tick can be changed. The subject, the wording and the due date of a homework item belong to the teacher, in PRONOTE."
     }

@@ -29,6 +29,7 @@ this is a bounded exception, not a policy.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 from html import unescape
 import logging
@@ -40,6 +41,7 @@ from zoneinfo import ZoneInfo
 from pronotepy import dataClasses
 from pronotepy.exceptions import DataError, ParsingError
 
+from . import item_keys
 from .const import (
     FUNC_ATTENDANCE,
     FUNC_EVALUATIONS,
@@ -158,6 +160,22 @@ class DiscussionNotFound(Exception):  # noqa: N818 -- surfaced as a ServiceValid
         self.discussion_id = discussion_id
 
 
+class ItemNotFound(Exception):  # noqa: N818 -- surfaced as a ServiceValidationError
+    """No item with that key is on PRONOTE in the current session.
+
+    The key is minted from the item's content (see :mod:`.item_keys`), so this
+    is what a write meets when the item was withdrawn or rewritten between the
+    collection that published the key and the gesture that sent it back. It is
+    raised rather than answered with success: PRONOTE itself accepts an unknown
+    ``N`` without complaint and records nothing, and a tick lost that way is
+    exactly the defect the key exists to end.
+    """
+
+    def __init__(self, item_id: str) -> None:
+        super().__init__(f"no item with key {item_id} in this session")
+        self.item_id = item_id
+
+
 class DiscussionIsClosed(Exception):  # noqa: N818 -- surfaced as a ServiceValidationError
     """PRONOTE closed the thread; ``pronotepy`` would refuse the reply."""
 
@@ -202,6 +220,117 @@ _LINE_BREAK_TAG: Final = re.compile(
     r"(?i)<\s*(?:br\s*/?|/\s*(?:p|div|li|tr|h[1-6]|blockquote))\s*>"
 )
 _ANY_TAG: Final = re.compile(r"<[^>]*>")
+
+
+def _homework_key(item: Homework) -> str:
+    """Subject, due date and statement -- never ``done``, which a tick flips.
+
+    The plain text rather than the HTML: a statement can embed an address on
+    the establishment's server, and such an address carries session material.
+    """
+    return item_keys.mint("hw", item.subject, item.due, item.description_text)
+
+
+def _attachment_key(attachment: HomeworkAttachment) -> str:
+    """Name and kind, disambiguated within one homework item."""
+    return item_keys.mint("att", attachment.name, str(attachment.kind))
+
+
+def _stamp_homework(items: list[Homework]) -> tuple[Homework, ...]:
+    """Key the homework and, inside each item, its documents."""
+    with_documents = [
+        dataclasses.replace(
+            item, attachments=item_keys.restamp(item.attachments, _attachment_key)
+        )
+        for item in items
+    ]
+    return item_keys.restamp(with_documents, _homework_key)
+
+
+def _lesson_key(lesson: Lesson) -> str:
+    """Subject and slot. A cancellation or a room change keeps the key."""
+    return item_keys.mint("lesson", lesson.subject, lesson.start, lesson.end)
+
+
+def _grade_key(grade: Grade) -> str:
+    """Everything a teacher sets when creating the grade -- not its value.
+
+    A corrected value is the same grade and must not be announced again.
+    """
+    return item_keys.mint(
+        "grade",
+        grade.subject,
+        grade.date,
+        grade.out_of,
+        grade.coefficient,
+        grade.comment,
+        grade.is_bonus,
+        grade.is_optional,
+    )
+
+
+def _absence_key(absence: Absence) -> str:
+    """When it started and ended; justification comes later and must not count."""
+    return item_keys.mint("absence", absence.from_date, absence.to_date)
+
+
+def _delay_key(delay: Delay) -> str:
+    """When it happened."""
+    return item_keys.mint("delay", delay.at)
+
+
+def _punishment_key(punishment: Punishment) -> str:
+    """What, by whom and when it was given; its schedule is filled in later."""
+    return item_keys.mint(
+        "punishment", punishment.nature, punishment.giver, punishment.given_at
+    )
+
+
+def _evaluation_key(evaluation: Evaluation) -> str:
+    """Name, subject, teacher and date; the levels are what changes."""
+    return item_keys.mint(
+        "evaluation",
+        evaluation.name,
+        evaluation.subject,
+        evaluation.teacher,
+        evaluation.date,
+    )
+
+
+def _information_key(information: Information) -> str:
+    """Title, author and creation date; never ``read``."""
+    return item_keys.mint(
+        "news", information.title, information.author, information.created
+    )
+
+
+def _message_key(message: Message) -> str:
+    """Author and time."""
+    return item_keys.mint("message", message.author, message.created)
+
+
+def _visible_threads(
+    threads: Iterable[dataClasses.Discussion],
+) -> list[dataClasses.Discussion]:
+    """Drop Drafts and Trash: nobody wants an automation on those."""
+    return [
+        thread
+        for thread in threads
+        if not ({"Drafts", "Trash"} & set(thread.labels or []))
+    ]
+
+
+def _thread_keys(threads: list[dataClasses.Discussion]) -> list[str]:
+    """Subject and creator, in listing order -- the unread count is what moves.
+
+    Minted from the upstream threads rather than restamped on DTOs, because the
+    comparison with the previous unread counts happens *before* any DTO exists,
+    and a reply has to find the same thread again from a fresh listing.
+    """
+    return item_keys.disambiguate(
+        item_keys.mint("discussion", thread.subject or None, thread.creator)
+        for thread in threads
+    )
 
 
 def _attachment(raw: Any, establishment_host: str | None) -> HomeworkAttachment:
@@ -755,12 +884,24 @@ class PronoteGateway:
         """
         weeks = self._timetable_weeks(client)
 
-        lessons: list[Lesson] = []
+        fetched: list[Lesson] = []
         calls = 0
         for week in weeks:
             raw_lessons, used = self._fetch_week(client, week)
             calls += used
-            lessons.extend(raw_lessons)
+            fetched.extend(raw_lessons)
+        # Keyed in a fixed order, so two entries sharing a slot and a subject --
+        # a cancelled original and its replacement -- get the same ordinals
+        # from one session to the next.
+        lessons = list(
+            item_keys.restamp(
+                sorted(
+                    fetched,
+                    key=lambda lesson: (lesson.start, lesson.place, lesson.num),
+                ),
+                _lesson_key,
+            )
+        )
 
         # A measurement, not an error trace: this path has decoded the colour
         # field since day one and published it nowhere, so nobody knew whether
@@ -1049,7 +1190,7 @@ class PronoteGateway:
         )
         if entries:
             _LOGGER.debug("homework entry fields: %s", _field_names(entries[0]))
-        return GatewayResult(HomeworkFacts(homework=tuple(items)), calls=1)
+        return GatewayResult(HomeworkFacts(homework=_stamp_homework(items)), calls=1)
 
     @staticmethod
     def _first_week(client: HardenedClient) -> int:
@@ -1165,7 +1306,9 @@ class PronoteGateway:
             MarksFacts(
                 period_id=period.id,
                 period_index=period.index,
-                grades=tuple(g for g in grades if g is not None),
+                grades=item_keys.restamp(
+                    [g for g in grades if g is not None], _grade_key
+                ),
                 averages=tuple(a for a in averages if a is not None),
                 overall_average=_number(_get(data, "moyGenerale", "V")),
                 class_overall_average=_number(_get(data, "moyGeneraleClasse", "V")),
@@ -1348,9 +1491,9 @@ class PronoteGateway:
         return GatewayResult(
             AttendanceFacts(
                 period_id=period.id,
-                absences=tuple(absences),
-                delays=tuple(delays),
-                punishments=tuple(punishments),
+                absences=item_keys.restamp(absences, _absence_key),
+                delays=item_keys.restamp(delays, _delay_key),
+                punishments=item_keys.restamp(punishments, _punishment_key),
             ),
             calls=1,
         )
@@ -1450,7 +1593,10 @@ class PronoteGateway:
                 items.append(evaluation)
 
         return GatewayResult(
-            EvaluationsFacts(period_id=period.id, evaluations=tuple(items)),
+            EvaluationsFacts(
+                period_id=period.id,
+                evaluations=item_keys.restamp(items, _evaluation_key),
+            ),
             calls=1,
         )
 
@@ -1515,7 +1661,10 @@ class PronoteGateway:
                 item = self._information(entry)
                 if item is not None:
                     items.append(item)
-        return GatewayResult(NewsFacts(information=tuple(items)), calls=1)
+        return GatewayResult(
+            NewsFacts(information=item_keys.restamp(items, _information_key)),
+            calls=1,
+        )
 
     def _information(self, entry: dict[str, Any]) -> Information | None:
         """Decode one news item or survey, tolerating absent optional fields."""
@@ -1565,20 +1714,18 @@ class PronoteGateway:
 
         # Drafts and Trash are filtered at the door: they are not conversations
         # anybody wants an automation on.
-        visible = [
-            thread
-            for thread in threads
-            if not ({"Drafts", "Trash"} & set(thread.labels or []))
-        ]
+        visible = _visible_threads(threads)
+        # `previous` is keyed by what the last snapshot published, which is the
+        # minted key: compared with the session's `N` instead, every thread with
+        # an unread message looked newly active after each reconnection.
+        keyed = list(zip(_thread_keys(visible), visible, strict=True))
 
         newly_active = [
-            thread
-            for thread in visible
-            if int(thread.unread or 0) > previous.get(str(thread.id), 0)
+            key
+            for key, thread in keyed
+            if int(thread.unread or 0) > previous.get(key, 0)
         ]
-        expandable = {
-            str(thread.id) for thread in newly_active[:MAX_DISCUSSION_EXPANSIONS]
-        }
+        expandable = set(newly_active[:MAX_DISCUSSION_EXPANSIONS])
         if len(newly_active) > MAX_DISCUSSION_EXPANSIONS:
             _LOGGER.debug(
                 "%d newly active discussions; expanding %d this cycle to stay "
@@ -1589,21 +1736,22 @@ class PronoteGateway:
 
         items: list[Discussion] = []
         opened: set[str] = set()
-        for thread in visible:
+        for key, thread in keyed:
             messages: tuple[Message, ...] = ()
-            if str(thread.id) in expandable:
+            if key in expandable:
                 messages, used = self._messages(thread)
                 calls += used
-                opened.add(str(thread.id))
+                opened.add(key)
             items.append(
                 Discussion(
-                    id=str(thread.id),
+                    id=key,
                     subject=thread.subject or None,
                     creator=thread.creator,
                     unread=int(thread.unread or 0),
                     closed=bool(thread.closed),
                     labels=tuple(thread.labels or ()),
                     messages=messages,
+                    ref=str(thread.id),
                 )
             )
 
@@ -1635,7 +1783,7 @@ class PronoteGateway:
                     content=message.content or None,
                 )
             )
-        return tuple(messages), 1
+        return item_keys.restamp(messages, _message_key), 1
 
     # -- menus -------------------------------------------------------------
 
@@ -1836,7 +1984,12 @@ class PronoteGateway:
         return data, 1
 
     def homework_attachment(
-        self, client: HardenedClient, *, attachment_id: str, name: str
+        self,
+        client: HardenedClient,
+        *,
+        homework_id: str,
+        attachment_id: str,
+        name: str,
     ) -> tuple[bytes, str | None, int]:
         """Download one homework document, under the lock, after ``set_child``.
 
@@ -1856,16 +2009,36 @@ class PronoteGateway:
         an HTML error page with a 200-looking shape, and a card would render a
         few kilobytes of PRONOTE's login screen as though it were the exercise.
         ``Attachment.save`` checks the status; the property does not.
+
+        Two requests: the homework is read again in this session first, because
+        the document's ``N`` -- what the encrypted segment is built from -- is
+        re-encrypted by every login, and a snapshot's value would sign an
+        address for a document this session does not know.
         """
+        try:
+            item = self._current_homework(client, homework_id)
+        except ItemNotFound as error:
+            raise AttachmentUnavailable(name, 404) from error
+        document = next(
+            (
+                candidate
+                for candidate in item.attachments
+                if candidate.id == attachment_id
+                and candidate.kind is AttachmentKind.FILE
+            ),
+            None,
+        )
+        if document is None:
+            raise AttachmentUnavailable(name, 404)
         attachment = dataClasses.Attachment(
-            client, {"L": name, "N": attachment_id, "G": _ATTACHMENT_FILE}
+            client, {"L": name, "N": document.ref, "G": _ATTACHMENT_FILE}
         )
         response = client.communication.session.get(attachment.url)
         if response.status_code != 200:
             raise AttachmentUnavailable(name, response.status_code)
         content: bytes = response.content
         declared = response.headers.get("content-type")
-        return content, declared, 1
+        return content, declared, 2
 
     def timetable_pdf_url(
         self,
@@ -1882,7 +2055,16 @@ class PronoteGateway:
     def set_homework_done(
         self, client: HardenedClient, homework_id: str, *, done: bool
     ) -> int:
-        """Tick or untick one homework item.
+        """Tick or untick one homework item, named by its minted key.
+
+        Two requests, not one. PRONOTE's ``N`` is re-encrypted by every login,
+        so the one a snapshot holds names nothing in a later session -- and the
+        server answers an unknown ``N`` normally and records nothing. Measured:
+        a tick sent at 22:59:58 with the ``N`` of a list read at 21:55, in a
+        session opened at 22:57, was accepted, billed and read back unticked.
+        So the list is read again here, in the session that posts, and the key
+        is looked up in it; an item that is no longer there raises
+        :class:`ItemNotFound` instead of reporting a success.
 
         Posted directly rather than through ``Homework.set_done`` so no
         ``pronotepy.Homework`` has to be kept alive across the DTO boundary --
@@ -1896,12 +2078,27 @@ class PronoteGateway:
         with no error anywhere. Maintained clients of the same protocol send
         ``E: 2`` on this request; ``pronotepy`` 2.15.7 predates that.
         """
+        item = self._current_homework(client, homework_id)
         client.post(
             "SaisieTAFFaitEleve",
             88,
-            {"listeTAF": [{"N": homework_id, "E": _ENTITY_MODIFIED, "TAFFait": done}]},
+            {"listeTAF": [{"N": item.ref, "E": _ENTITY_MODIFIED, "TAFFait": done}]},
         )
-        return 1
+        return 2
+
+    def _current_homework(self, client: HardenedClient, homework_id: str) -> Homework:
+        """Read the homework in this session and find one item by its key."""
+        item = next(
+            (
+                candidate
+                for candidate in self.homework(client).facts.homework
+                if candidate.id == homework_id
+            ),
+            None,
+        )
+        if item is None:
+            raise ItemNotFound(homework_id)
+        return item
 
     def reply_to_discussion(
         self, client: HardenedClient, discussion_id: str, content: str
@@ -1919,11 +2116,12 @@ class PronoteGateway:
         Billed honestly at three, because a write that under-reports its cost
         corrupts the very budget that protects the account (annexe B §8).
         """
+        visible = _visible_threads(client.discussions())
         thread = next(
             (
                 candidate
-                for candidate in client.discussions()
-                if str(candidate.id) == discussion_id
+                for key, candidate in zip(_thread_keys(visible), visible, strict=True)
+                if key == discussion_id
             ),
             None,
         )
@@ -1966,14 +2164,28 @@ class PronoteGateway:
         return 3
 
     def mark_information_read(self, client: HardenedClient, information_id: str) -> int:
-        """Mark one news item as read."""
+        """Mark one news item as read, named by its minted key.
+
+        Two requests: the news is read again in this session to find the item's
+        current ``N``, for the reason :meth:`set_homework_done` gives.
+        """
+        item = next(
+            (
+                candidate
+                for candidate in self.news(client).facts.information
+                if candidate.id == information_id
+            ),
+            None,
+        )
+        if item is None:
+            raise ItemNotFound(information_id)
         client.post(
             FUNC_NEWS_WRITE[0],
             FUNC_NEWS_WRITE[1],
             {
                 "listeActualites": [
                     {
-                        "N": information_id,
+                        "N": item.ref,
                         "validationDirecte": True,
                         "genrePublic": 4,
                         "public": {"N": client.info.id},
@@ -1983,7 +2195,7 @@ class PronoteGateway:
                 ]
             },
         )
-        return 1
+        return 2
 
 
 # ---------------------------------------------------------------------------

@@ -54,6 +54,26 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
+def _listed_file(
+    gateway: PronoteGateway, client: FakeClient, *, n: str = "ATTACHMENT-1"
+) -> tuple[str, str]:
+    """Serve one homework item carrying ``enonce.pdf``, and return both keys.
+
+    The keys are what a snapshot holds and what the relay is handed; the ``N``
+    is what the fake serves this session. ``n`` lets a test serve the same
+    document under another ``N``, which is what a reconnection does.
+    """
+    client.responses["PageCahierDeTexte"] = protocol.homework_response(
+        [protocol.homework(attachments=("enonce.pdf",))]
+    )
+    item = gateway.homework(client).facts.homework[0]
+    if n != "ATTACHMENT-1":
+        entry = protocol.homework(attachments=("enonce.pdf",))
+        entry["ListePieceJointe"]["V"][0]["N"] = n
+        client.responses["PageCahierDeTexte"] = protocol.homework_response([entry])
+    return item.id, item.attachments[0].id
+
+
 def test_the_address_is_built_by_upstream_and_carries_the_session(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:
@@ -66,11 +86,14 @@ def test_the_address_is_built_by_upstream_and_carries_the_session(
     upstream's construction was used, not that it produces any particular
     bytes.
     """
+    homework_id, attachment_id = _listed_file(gateway, client)
     content, declared, cost = gateway.homework_attachment(
-        client, attachment_id="ATTACHMENT-1", name="enonce.pdf"
+        client, homework_id=homework_id, attachment_id=attachment_id, name="enonce.pdf"
     )
 
-    assert cost == 1
+    # The homework is read again first: the `N` the address is built from is
+    # only valid in the session that read it.
+    assert cost == 2
     assert content == b"%PDF-1.4 not a real document"
     assert declared == "application/pdf"
 
@@ -90,16 +113,70 @@ def test_a_refused_download_is_an_error_and_not_an_error_page(
     dashboard would render a few kilobytes of HTML as though it were the
     exercise. Checked here rather than delegated for exactly that reason.
     """
+    homework_id, attachment_id = _listed_file(gateway, client)
     client.communication.session.response.status_code = 403
     client.communication.session.response.content = b"<html>login</html>"
 
     with pytest.raises(AttachmentUnavailable) as refusal:
         gateway.homework_attachment(
-            client, attachment_id="ATTACHMENT-1", name="enonce.pdf"
+            client,
+            homework_id=homework_id,
+            attachment_id=attachment_id,
+            name="enonce.pdf",
         )
 
     assert refusal.value.status == 403
     assert refusal.value.name == "enonce.pdf"
+
+
+def test_a_document_opened_after_a_reconnection_is_fetched_by_its_new_identifier(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """The address is built from the ``N`` of *this* session, never a snapshot's.
+
+    PRONOTE re-encrypts every ``N`` at each login, and the encrypted path
+    segment is built from it: a card opened before a reconnection held the key
+    of a document whose ``N`` no longer meant anything, and the relay built an
+    address for nothing. The fake's segment is a digest of what it was given,
+    so the new ``N`` is observable in the address.
+    """
+    homework_id, attachment_id = _listed_file(gateway, client, n="ATTACHMENT-NEXT")
+
+    gateway.homework_attachment(
+        client, homework_id=homework_id, attachment_id=attachment_id, name="enonce.pdf"
+    )
+
+    (address,) = client.communication.session.gets
+    assert b"ATTACHMENT-NEXT" in client.communication.encryption.plaintexts[-1]
+    assert address.endswith("?Session=SESSION-NUMBER")
+
+
+@pytest.mark.parametrize(
+    ("homework_known", "attachment_known"),
+    [
+        pytest.param(False, True, id="homework-gone"),
+        pytest.param(True, False, id="document-gone"),
+    ],
+)
+def test_a_document_no_longer_listed_is_a_404_and_fetches_nothing(
+    gateway: PronoteGateway,
+    client: FakeClient,
+    homework_known: bool,
+    attachment_known: bool,
+) -> None:
+    """A key that matches nothing in this session is refused before the wire."""
+    homework_id, attachment_id = _listed_file(gateway, client)
+
+    with pytest.raises(AttachmentUnavailable) as refusal:
+        gateway.homework_attachment(
+            client,
+            homework_id=homework_id if homework_known else "hw-0000000000000000",
+            attachment_id=attachment_id if attachment_known else "att-0",
+            name="enonce.pdf",
+        )
+
+    assert refusal.value.status == 404
+    assert client.communication.session.gets == []
 
 
 # ---------------------------------------------------------------------------
@@ -272,8 +349,9 @@ class TestWhatTheViewWillServe:
         located = _locate(account, fingerprint(item.id, document.id))
 
         assert located is not None
-        student_id, found = located
+        student_id, homework_id, found = located
         assert student_id == CHILDREN[0][0]
+        assert homework_id == item.id
         assert found.name == document.name
 
     async def test_an_unknown_fingerprint_resolves_to_nothing(
@@ -359,12 +437,16 @@ class TestWhatTheViewWillServe:
         document = next(a for a in item.attachments if a.kind is AttachmentKind.FILE)
 
         before = account.limiter.calls_today
-        content, content_type = await _fetch(account, document, CHILDREN[0][0])
+        reads = parent_client.posted_names.count("PageCahierDeTexte")
+        content, content_type = await _fetch(account, document, item.id, CHILDREN[0][0])
         after = account.limiter.calls_today
 
         assert content == b"%PDF-1.4 not a real document"
         assert content_type == "application/pdf"
-        assert after - before == 1
+        # Two: the homework is read again in this session to find the
+        # document's current `N`, then the bytes are fetched.
+        assert after - before == 2
+        assert parent_client.posted_names.count("PageCahierDeTexte") == reads + 1
         assert len(parent_client.communication.session.gets) == 1
 
 
@@ -472,12 +554,20 @@ class TestWhatTheDashboardReceives:
         attribute is written to the recorder, so publishing one puts a real
         PRONOTE identifier in a database that outlives the session.
         """
-        del account
         item = self._items(hass)[0]
         payload = repr(item["attachment_refs"])
+        snapshot = account.snapshot(Tier.HOMEWORK, CHILDREN[0][0])
+        assert snapshot is not None
+        (document,) = (
+            attachment
+            for homework in snapshot.data.homework
+            if homework.id == item["id"]
+            for attachment in homework.attachments
+            if attachment.ref == "ATTACHMENT-1"
+        )
 
         assert "ATTACHMENT-1" not in payload
-        assert fingerprint(item["id"], "ATTACHMENT-1") in payload
+        assert fingerprint(item["id"], document.id) in payload
 
     async def test_the_deprecated_key_keeps_links_and_no_longer_carries_files(
         self, hass: HomeAssistant, account: PronoteAccount
@@ -662,6 +752,12 @@ class TestHowARefusalIsAnswered:
         item = snapshot.data.homework[0]
         return fingerprint(item.id, item.attachments[0].id), item.attachments[0]
 
+    @staticmethod
+    def _homework_key(account: PronoteAccount) -> str:
+        snapshot = account.snapshot(Tier.HOMEWORK, CHILDREN[0][0])
+        assert snapshot is not None
+        return snapshot.data.homework[0].id
+
     async def test_a_click_is_run_at_the_priority_of_a_human_request(
         self, hass: HomeAssistant, account: PronoteAccount
     ) -> None:
@@ -686,7 +782,7 @@ class TestHowARefusalIsAnswered:
             return await original(name, priority, fn, **kwargs)
 
         with patch.object(account.extras.session, "run", spy):
-            await _fetch(account, document, CHILDREN[0][0])
+            await _fetch(account, document, self._homework_key(account), CHILDREN[0][0])
 
         assert seen == [Priority.GESTURE]
 
@@ -709,7 +805,9 @@ class TestHowARefusalIsAnswered:
 
         with patch.object(account.limiter, "_in_quiet_hours", return_value=True):
             refused = account.limiter.check("marks", Priority.HIGH)
-            content, _content_type = await _fetch(account, document, CHILDREN[0][0])
+            content, _content_type = await _fetch(
+                account, document, self._homework_key(account), CHILDREN[0][0]
+            )
 
         assert refused.reason is DeferReason.QUIET_HOURS
         assert content
@@ -788,7 +886,7 @@ class TestHowARefusalIsAnswered:
         )
         with patch(
             "custom_components.carnet_scolaire.attachment._locate",
-            return_value=(CHILDREN[0][0], link),
+            return_value=(CHILDREN[0][0], "hw-0000000000000000", link),
         ):
             response = await PronoteAttachmentView().get(
                 _FakeRequest(hass),  # type: ignore[arg-type]
@@ -1024,7 +1122,8 @@ class TestWhatTheBrowserGetsBack:
 
         snapshot = account.snapshot(Tier.HOMEWORK, CHILDREN[0][0])
         assert snapshot is not None
-        document = snapshot.data.homework[0].attachments[0]
+        item = snapshot.data.homework[0]
+        document = item.attachments[0]
 
         with (
             patch(
@@ -1033,7 +1132,7 @@ class TestWhatTheBrowserGetsBack:
             ),
             pytest.raises(AttachmentUnavailable) as raised,
         ):
-            await _fetch(account, document, CHILDREN[0][0])
+            await _fetch(account, document, item.id, CHILDREN[0][0])
 
         assert raised.value.status == 501
 
@@ -1072,13 +1171,15 @@ class TestWhatTheScanSkipsOverRatherThanStopsAt:
         assert snapshot is not None
         item = snapshot.data.homework[0]
         nameless, usable = item.attachments
-        assert nameless.id == ""
+        assert nameless.ref == ""
+        assert nameless.kind is AttachmentKind.OPAQUE
 
         assert _locate(account, fingerprint(item.id, "")) is None
+        assert _locate(account, fingerprint(item.id, nameless.id)) is None
 
         located = _locate(account, fingerprint(item.id, usable.id))
         assert located is not None
-        assert located[1].name == usable.name
+        assert located[2].name == usable.name
 
     async def test_a_child_whose_homework_never_collected_does_not_end_the_scan(
         self, hass: HomeAssistant, account: PronoteAccount
@@ -1103,9 +1204,13 @@ class TestWhatTheScanSkipsOverRatherThanStopsAt:
             return real(tier, student_id)
 
         with patch.object(account, "snapshot", missing_for_the_first):
-            located = _locate(
-                account, fingerprint(item.data.homework[0].id, "ATTACHMENT-2")
+            homework = item.data.homework[0]
+            (document,) = (
+                attachment
+                for attachment in homework.attachments
+                if attachment.ref == "ATTACHMENT-2"
             )
+            located = _locate(account, fingerprint(homework.id, document.id))
 
         assert located is not None
         assert located[0] == CHILDREN[1][0]

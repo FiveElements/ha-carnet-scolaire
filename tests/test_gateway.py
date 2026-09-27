@@ -22,6 +22,7 @@ payloads. See ``tests/fixtures/`` for why none of them came off a real server.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import logging
 from typing import Any
@@ -34,6 +35,7 @@ from custom_components.carnet_scolaire.gateway import (
     MAX_DISCUSSION_EXPANSIONS,
     DiscussionIsClosed,
     DiscussionNotFound,
+    ItemNotFound,
     PronoteGateway,
     ProtocolChanged,
     RecipientNotFound,
@@ -53,9 +55,14 @@ from custom_components.carnet_scolaire.gateway import (
     _shape,
     _strings,
     _supersedes,
+    _thread_keys,
     deduplicate_lessons,
 )
-from custom_components.carnet_scolaire.models import HomeworkAttachment, Lesson
+from custom_components.carnet_scolaire.models import (
+    DiscussionsFacts,
+    HomeworkAttachment,
+    Lesson,
+)
 
 from .clock import FakeClock  # noqa: TC001 -- a pytest fixture annotation
 from .fixtures import protocol
@@ -67,6 +74,40 @@ from .fixtures.client import (
 )
 
 PARIS = ZoneInfo("Europe/Paris")
+
+
+def _keyed(client: FakeClient, by_ref: dict[str, int]) -> dict[str, int]:
+    """Previous unread counts as a snapshot holds them: under the minted key.
+
+    The tests name threads by their `N` because that is what they build; the
+    gateway compares against what the last snapshot published, which is the
+    key, and a test written against the `N` would pass for the wrong reason.
+    """
+    keys = dict(
+        zip(
+            (str(thread.id) for thread in client.threads),
+            _thread_keys(client.threads),  # type: ignore[arg-type]
+            strict=True,
+        )
+    )
+    return {keys[ref]: count for ref, count in by_ref.items()}
+
+
+def _expanded_refs(facts: DiscussionsFacts) -> set[str | None]:
+    """The `N` of every thread whose messages were read this cycle."""
+    return {thread.ref for thread in facts.discussions if thread.id in facts.expanded}
+
+
+def _unkeyed(
+    attachments: tuple[HomeworkAttachment, ...],
+) -> tuple[HomeworkAttachment, ...]:
+    """What the decoder produced, minus the key minted from it.
+
+    These tests are about decoding one attachment; the key is
+    `tests/test_item_keys.py`'s business, and spelling a digest out here would
+    only make every one of them fail together the day the key's parts change.
+    """
+    return tuple(dataclasses.replace(attachment, id="") for attachment in attachments)
 
 
 def current_period(gateway: PronoteGateway, client: FakeClient) -> object:
@@ -520,7 +561,7 @@ def test_a_saturday_already_holds_the_monday_after_it(
         client.get_week(dt.date(2026, 3, 14)),
         next_week,
     )
-    assert [lesson.id for lesson in result.facts.lessons] == ["MONDAY-LESSON"]
+    assert [lesson.ref for lesson in result.facts.lessons] == ["MONDAY-LESSON"]
 
 
 def test_a_week_outside_the_school_year_is_never_asked_for(
@@ -729,7 +770,7 @@ def test_a_lesson_with_no_identifier_or_no_start_is_dropped(
     )
     lessons = gateway.timetable(client).facts.lessons
 
-    assert [lesson.id for lesson in lessons] == ["LESSON-3"]
+    assert [lesson.ref for lesson in lessons] == ["LESSON-3"]
 
 
 def test_a_null_inside_a_path_does_not_fail_the_tier(
@@ -767,8 +808,8 @@ def test_the_timetable_hands_out_both_the_deduplicated_and_the_raw_week(
     )
     facts = gateway.timetable(client).facts
 
-    assert [lesson.id for lesson in facts.lessons] == ["LESSON-2"]
-    assert {lesson.id for lesson in facts.all_lessons} == {"LESSON-1", "LESSON-2"}
+    assert [lesson.ref for lesson in facts.lessons] == ["LESSON-2"]
+    assert {lesson.ref for lesson in facts.all_lessons} == {"LESSON-1", "LESSON-2"}
 
 
 # ---------------------------------------------------------------------------
@@ -899,7 +940,7 @@ def test_one_undecodable_homework_item_costs_that_item(
     )
     items = gateway.homework(client).facts.homework
 
-    assert [item.id for item in items] == [
+    assert [item.ref for item in items] == [
         "HOMEWORK-1",
         "HOMEWORK-2",
         "HOMEWORK-3",
@@ -997,16 +1038,17 @@ def test_a_file_attachment_carries_its_name_and_no_address(
     )
     item = gateway.homework(client).facts.homework[0]
 
-    assert item.attachments == (
+    assert _unkeyed(item.attachments) == (
         HomeworkAttachment(
-            name="enonce.pdf", id="ATTACHMENT-1", kind=AttachmentKind.FILE
+            name="enonce.pdf", ref="ATTACHMENT-1", kind=AttachmentKind.FILE
         ),
     )
     assert item.attachments[0].url is None
     # Kept, and never published: it is what the encrypted path segment is built
     # from, so a document can still be *fetched* on demand even though its
     # address cannot be written down. See `attachment.py`.
-    assert item.attachments[0].id
+    assert item.attachments[0].ref
+    assert item.attachments[0].id.startswith("att-")
     assert not any("Session" in a.name for a in item.attachments)
 
 
@@ -1028,11 +1070,11 @@ def test_a_link_attachment_publishes_the_address_it_was_given(
     )
     item = gateway.homework(client).facts.homework[0]
 
-    assert item.attachments == (
+    assert _unkeyed(item.attachments) == (
         HomeworkAttachment(
             name="Le sujet en ligne",
             url="https://exemple.invalid/sujet",
-            id="ATTACHMENT-1",
+            ref="ATTACHMENT-1",
             kind=AttachmentKind.LINK,
         ),
     )
@@ -1054,8 +1096,8 @@ def test_a_link_with_no_address_in_the_payload_is_not_given_its_own_name(
     )
     item = gateway.homework(client).facts.homework[0]
 
-    assert item.attachments == (
-        HomeworkAttachment(name="Le sujet en ligne", id="ATTACHMENT-1"),
+    assert _unkeyed(item.attachments) == (
+        HomeworkAttachment(name="Le sujet en ligne", ref="ATTACHMENT-1"),
     )
 
 
@@ -1089,7 +1131,9 @@ def test_only_an_http_address_is_published(
     )
     item = gateway.homework(client).facts.homework[0]
 
-    assert item.attachments == (HomeworkAttachment(name="Le sujet", id="ATTACHMENT-1"),)
+    assert _unkeyed(item.attachments) == (
+        HomeworkAttachment(name="Le sujet", ref="ATTACHMENT-1"),
+    )
 
 
 def test_an_unusable_link_is_opaque_and_not_mistaken_for_a_file(
@@ -1134,7 +1178,9 @@ def test_a_link_on_the_establishments_own_server_is_not_published(
     )
     attachment = gateway.homework(client).facts.homework[0].attachments[0]
 
-    assert attachment == HomeworkAttachment(name="Le document", id="ATTACHMENT-1")
+    assert _unkeyed((attachment,)) == (
+        HomeworkAttachment(name="Le document", ref="ATTACHMENT-1"),
+    )
     assert attachment.kind is AttachmentKind.OPAQUE
     assert attachment.url is None
 
@@ -1597,8 +1643,8 @@ def test_an_undecodable_absence_or_delay_costs_only_itself(
     period = current_period(gateway, client)
     facts = gateway.attendance(client, period).facts  # type: ignore[arg-type]
 
-    assert [item.id for item in facts.absences] == ["A-GOOD"]
-    assert [item.id for item in facts.delays] == ["D-GOOD"]
+    assert [item.ref for item in facts.absences] == ["A-GOOD"]
+    assert [item.ref for item in facts.delays] == ["D-GOOD"]
 
 
 def test_an_absence_missing_a_required_field_is_dropped(
@@ -1670,7 +1716,7 @@ def test_one_undecodable_evaluation_costs_that_evaluation(
     period = current_period(gateway, client)
     evaluations = gateway.evaluations(client, period).facts.evaluations  # type: ignore[arg-type]
 
-    assert [item.id for item in evaluations] == ["E-GOOD"]
+    assert [item.ref for item in evaluations] == ["E-GOOD"]
 
 
 # ---------------------------------------------------------------------------
@@ -1713,7 +1759,7 @@ def test_one_undecodable_news_item_costs_that_item(
     )
     items = gateway.news(client).facts.information
 
-    assert [item.id for item in items] == ["I-1", "I-2", "I-3"]
+    assert [item.ref for item in items] == ["I-1", "I-2", "I-3"]
     assert items[0].author is None
     assert items[1].title is None
 
@@ -1778,7 +1824,9 @@ def test_the_thread_list_costs_one_request_and_bodies_cost_more(
         FakeThread("T-1", unread=0),
         FakeThread("T-2", unread=0),
     ]
-    result = gateway.discussions(client, previous_unread={"T-1": 0, "T-2": 0})
+    result = gateway.discussions(
+        client, previous_unread=_keyed(client, {"T-1": 0, "T-2": 0})
+    )
 
     assert result.calls == 1
     assert result.facts.expanded == frozenset()
@@ -1793,10 +1841,12 @@ def test_only_a_thread_whose_counter_rose_is_expanded(
         FakeThread("T-1", unread=2, messages=[FakeMessage("M-1")]),
         FakeThread("T-2", unread=0),
     ]
-    result = gateway.discussions(client, previous_unread={"T-1": 1, "T-2": 0})
+    result = gateway.discussions(
+        client, previous_unread=_keyed(client, {"T-1": 1, "T-2": 0})
+    )
 
     assert result.calls == 2
-    assert result.facts.expanded == frozenset({"T-1"})
+    assert _expanded_refs(result.facts) == {"T-1"}
     assert client.threads[0].message_reads == 1
     assert client.threads[1].message_reads == 0
 
@@ -1826,7 +1876,7 @@ def test_drafts_and_trash_are_filtered_at_the_door(
     ]
     facts = gateway.discussions(client, previous_unread={}).facts
 
-    assert [thread.id for thread in facts.discussions] == ["T-REAL"]
+    assert [thread.ref for thread in facts.discussions] == ["T-REAL"]
 
 
 def test_an_unexpandable_thread_is_reported_without_its_messages(
@@ -1857,7 +1907,7 @@ def test_a_message_without_a_creation_date_is_dropped(
     client.threads = [FakeThread("T-1", unread=2, messages=[good, bad])]
     facts = gateway.discussions(client, previous_unread={}).facts
 
-    assert [message.id for message in facts.discussions[0].messages] == ["M-GOOD"]
+    assert [message.ref for message in facts.discussions[0].messages] == ["M-GOOD"]
 
 
 def test_discussions_default_to_no_previous_counts(
@@ -1866,7 +1916,7 @@ def test_discussions_default_to_no_previous_counts(
     """The first cycle after a reload has nothing to compare against."""
     client.threads = [FakeThread("T-1", unread=1, messages=[FakeMessage("M-1")])]
     result = gateway.discussions(client)
-    assert result.facts.expanded == frozenset({"T-1"})
+    assert _expanded_refs(result.facts) == {"T-1"}
 
 
 # ---------------------------------------------------------------------------
@@ -2205,14 +2255,58 @@ def test_ticking_homework_posts_directly(
     """No ``pronotepy.Homework`` is kept alive across the DTO boundary.
 
     An object read after its session closed raises ``Erreur.G = 22`` (§3.1), so
-    the write is posted from the identifier rather than from a live object.
+    the write is posted from the identifier rather than from a live object --
+    the ``N`` found by reading the list again, which is the second request.
     """
-    calls = gateway.set_homework_done(client, "HOMEWORK-1", done=True)
+    key = gateway.homework(client).facts.homework[0].id
+    before = len(client.posted_names)
 
-    assert calls == 1
+    calls = gateway.set_homework_done(client, key, done=True)
+
+    assert calls == 2
+    assert client.posted_names[before:] == ["PageCahierDeTexte", "SaisieTAFFaitEleve"]
     assert client.body_for("SaisieTAFFaitEleve") == {
         "listeTAF": [{"N": "HOMEWORK-1", "E": 2, "TAFFait": True}]
     }
+
+
+def test_a_tick_after_a_reconnection_posts_the_new_sessions_identifier(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """The defect of 0.1.4, measured on a live instance on 2026-09-26.
+
+    PRONOTE re-encrypts every ``N`` at each login. The to-do list published the
+    ``N`` of a list read at 21:55; a session opened at 22:57; the tick sent at
+    22:59:58 named an assignment that session had never heard of, and PRONOTE
+    answered normally and recorded nothing. The next collection read it back
+    unticked. Here the same assignment comes back under another ``N``, and the
+    tick must carry *that* one.
+    """
+    key = gateway.homework(client).facts.homework[0].id
+    client.responses["PageCahierDeTexte"] = protocol.homework_response(
+        [protocol.homework(identifier="HOMEWORK-1-NEXT-SESSION")]
+    )
+
+    gateway.set_homework_done(client, key, done=True)
+
+    assert client.body_for("SaisieTAFFaitEleve") == {
+        "listeTAF": [{"N": "HOMEWORK-1-NEXT-SESSION", "E": 2, "TAFFait": True}]
+    }
+
+
+def test_a_tick_for_an_item_no_longer_listed_is_refused_and_posts_nothing(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """A rewritten statement is a new key, and the old one must fail loudly.
+
+    Answering with a success would repeat the defect in another form: PRONOTE
+    accepts an unknown ``N`` and records nothing, so the only honest outcome
+    for a key that matches nothing is an error the card can show.
+    """
+    with pytest.raises(ItemNotFound):
+        gateway.set_homework_done(client, "hw-0000000000000000", done=True)
+
+    assert "SaisieTAFFaitEleve" not in client.posted_names
 
 
 def test_replying_to_a_thread_costs_three_requests(
@@ -2226,7 +2320,8 @@ def test_replying_to_a_thread_costs_three_requests(
     to send.
     """
     client.threads = [FakeThread("T-1")]
-    calls = gateway.reply_to_discussion(client, "T-1", "Bien reçu")
+    (key,) = _thread_keys(client.threads)  # type: ignore[arg-type]
+    calls = gateway.reply_to_discussion(client, key, "Bien reçu")
 
     assert calls == 3
     assert client.threads[0].replies == ["Bien reçu"]
@@ -2245,8 +2340,9 @@ def test_replying_to_a_closed_thread_is_refused(
 ) -> None:
     """PRONOTE would accept the post and drop the message."""
     client.threads = [FakeThread("T-1", closed=True)]
+    (key,) = _thread_keys(client.threads)  # type: ignore[arg-type]
     with pytest.raises(DiscussionIsClosed):
-        gateway.reply_to_discussion(client, "T-1", "Bonjour")
+        gateway.reply_to_discussion(client, key, "Bonjour")
 
 
 def test_starting_a_thread_matches_recipients_by_name(
@@ -2291,14 +2387,32 @@ def test_a_recipient_with_no_name_does_not_crash_the_match(
 def test_marking_a_news_item_read_uses_the_write_tab(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:
-    """``SaisieActualites``, not ``PageActualites``. v1 had them swapped."""
-    calls = gateway.mark_information_read(client, "INFORMATION-1")
+    """``SaisieActualites``, not ``PageActualites``. v1 had them swapped.
 
-    assert calls == 1
+    Two requests: ``PageActualites`` is read first, to find the item's ``N`` in
+    this session -- the one a snapshot holds is dead after a reconnection.
+    """
+    key = gateway.news(client).facts.information[0].id
+    before = len(client.posted_names)
+
+    calls = gateway.mark_information_read(client, key)
+
+    assert calls == 2
+    assert client.posted_names[before:] == ["PageActualites", "SaisieActualites"]
     body = client.body_for("SaisieActualites")
     assert body["listeActualites"][0]["N"] == "INFORMATION-1"
     assert body["listeActualites"][0]["lue"] is True
     assert body["listeActualites"][0]["public"]["N"] == protocol.STUDENT_ID
+
+
+def test_marking_a_news_item_no_longer_listed_read_is_refused(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """Same rule as the tick: a key that matches nothing is an error."""
+    with pytest.raises(ItemNotFound):
+        gateway.mark_information_read(client, "news-0000000000000000")
+
+    assert "SaisieActualites" not in client.posted_names
 
 
 class TestTheColourInstruments:
