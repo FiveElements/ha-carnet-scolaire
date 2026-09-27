@@ -155,8 +155,8 @@
       "already_configured": "Ce compte est déjà configuré.",
       "reauth_successful": "Reconnexion réussie.",
       "reconfigure_successful": "Connexion mise à jour. L'entrée se recharge avec elle ; ses appareils, entités, historique et options sont inchangés.",
-      "reconfigure_wrong_account": "Ces informations ouvrent un autre compte que celui que suit cette entrée : rien n'a été modifié. Les appliquer aurait fait pointer cette entrée vers l'enfant de quelqu'un d'autre en conservant le nom et l'historique de celui-ci. Utilisez les informations du compte de cette entrée, ou ajoutez l'autre compte séparément.",
-      "wrong_account": "Ce QR code appartient à un autre compte PRONOTE : il n'a pas été appliqué. Reconnecter cette entrée avec lui l'aurait fait pointer vers l'enfant de quelqu'un d'autre en conservant le nom et l'historique de celui-ci. Générez un QR code depuis le compte que suit cette entrée, ou ajoutez l'autre compte séparément."
+      "reconfigure_wrong_account": "Ces informations ouvrent un compte qui ne suit aucun des enfants de cette entrée : rien n'a été modifié. Les appliquer aurait fait pointer cette entrée vers l'enfant de quelqu'un d'autre en conservant le nom et l'historique de celui-ci. Utilisez les informations du compte que suit cette entrée. Pour suivre un autre compte, ajoutez-le comme nouvelle entrée.",
+      "wrong_account": "Le compte atteint par cette connexion ne suit aucun des enfants de cette entrée : rien n'a été modifié. S'y reconnecter aurait fait pointer cette entrée vers l'enfant de quelqu'un d'autre en conservant le nom et l'historique de celui-ci. Reconnectez-vous avec le compte que suit cette entrée. Pour suivre un autre compte, ajoutez-le comme nouvelle entrée."
     }
   },
   "options": {

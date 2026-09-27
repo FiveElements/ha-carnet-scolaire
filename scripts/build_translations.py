@@ -527,18 +527,19 @@ CONFIG_EN: dict[str, Any] = {
             "entities, history and options are unchanged."
         ),
         "reconfigure_wrong_account": (
-            "These details sign in to a different account from the one this "
-            "entry follows, so nothing was changed: applying them would have "
-            "pointed this entry at somebody else's child while keeping this "
-            "child's name and history. Use the details of this entry's own "
-            "account, or add the other account separately."
+            "These details sign in to an account that follows none of this "
+            "entry's children, so nothing was changed: applying them would "
+            "have pointed this entry at somebody else's child while keeping "
+            "this child's name and history. Use the details of the account "
+            "this entry follows. To follow another account, add it as a new "
+            "entry."
         ),
         "wrong_account": (
-            "That QR code belongs to a different PRONOTE account, so it was "
-            "not applied: reconnecting this one with it would have pointed it "
-            "at somebody else's child while keeping this child's name and "
-            "history. Generate a QR code from the account this entry follows, "
-            "or add the other account separately."
+            "The account this login reached follows none of this entry's "
+            "children, so nothing was changed: reconnecting with it would have "
+            "pointed this entry at somebody else's child while keeping this "
+            "child's name and history. Reconnect with the account this entry "
+            "follows. To follow another account, add it as a new entry."
         ),
     },
 }
@@ -914,18 +915,20 @@ CONFIG_FR: dict[str, Any] = {
             "appareils, entités, historique et options sont inchangés."
         ),
         "reconfigure_wrong_account": (
-            "Ces informations ouvrent un autre compte que celui que suit cette "
-            "entrée : rien n'a été modifié. Les appliquer aurait fait pointer "
-            "cette entrée vers l'enfant de quelqu'un d'autre en conservant le "
-            "nom et l'historique de celui-ci. Utilisez les informations du "
-            "compte de cette entrée, ou ajoutez l'autre compte séparément."
+            "Ces informations ouvrent un compte qui ne suit aucun des enfants "
+            "de cette entrée : rien n'a été modifié. Les appliquer aurait fait "
+            "pointer cette entrée vers l'enfant de quelqu'un d'autre en "
+            "conservant le nom et l'historique de celui-ci. Utilisez les "
+            "informations du compte que suit cette entrée. Pour suivre un "
+            "autre compte, ajoutez-le comme nouvelle entrée."
         ),
         "wrong_account": (
-            "Ce QR code appartient à un autre compte PRONOTE : il n'a pas été "
-            "appliqué. Reconnecter cette entrée avec lui l'aurait fait pointer "
-            "vers l'enfant de quelqu'un d'autre en conservant le nom et "
-            "l'historique de celui-ci. Générez un QR code depuis le compte "
-            "que suit cette entrée, ou ajoutez l'autre compte séparément."
+            "Le compte atteint par cette connexion ne suit aucun des enfants "
+            "de cette entrée : rien n'a été modifié. S'y reconnecter aurait "
+            "fait pointer cette entrée vers l'enfant de quelqu'un d'autre en "
+            "conservant le nom et l'historique de celui-ci. Reconnectez-vous "
+            "avec le compte que suit cette entrée. Pour suivre un autre "
+            "compte, ajoutez-le comme nouvelle entrée."
         ),
     },
 }

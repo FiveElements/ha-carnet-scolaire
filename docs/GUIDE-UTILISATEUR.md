@@ -1698,8 +1698,11 @@ Ces messages apparaissent dans **Paramètres → Système → Réparations**.
   l'identifiant et le mot de passe, et la question de sécurité si le site la
   pose. Les nouvelles informations sont essayées **une fois** avant tout
   enregistrement, et elles doivent ouvrir **le même compte** : l'adresse peut
-  changer de page, pas de serveur, et un identifiant EcoleDirecte différent
-  est refusé sans rien envoyer. Appareils, entités, historique, enfants suivis
+  changer de page, pas de serveur, et le compte connecté doit suivre au moins
+  un des enfants de l'entrée (pour un compte élève, l'élève lui-même) — sinon
+  rien n'est modifié, et un autre compte s'ajoute comme nouvelle entrée. Un
+  identifiant EcoleDirecte différent est refusé sans rien envoyer. La même
+  vérification des enfants s'applique à la reconnexion. Appareils, entités, historique, enfants suivis
   et options sont conservés ; le PIN et le contenu du QR code ne le sont jamais.
 - **Recharger** : le menu **⋮** de l'intégration, **Recharger**. Utile après une
   mise à jour, ou pour retenter la récupération de la photo.
