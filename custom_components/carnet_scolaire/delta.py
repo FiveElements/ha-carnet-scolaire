@@ -270,9 +270,13 @@ class DeltaDetector:
         """
         events: list[DeltaEvent] = []
 
+        # Each collection is named by the period's position, as for grades,
+        # and for the same reason: the period's `N` is re-encrypted by every
+        # login, and a renamed collection primed instead of comparing -- an
+        # absence recorded across a reconnection was never announced.
         new_absences = self._new_ids(
             student_id,
-            f"absences:{facts.period_id}",
+            f"absences:{facts.period_index}",
             (item.id for item in facts.absences),
         )
         if new_absences:
@@ -287,7 +291,7 @@ class DeltaDetector:
 
         new_delays = self._new_ids(
             student_id,
-            f"delays:{facts.period_id}",
+            f"delays:{facts.period_index}",
             (item.id for item in facts.delays),
         )
         if new_delays:
@@ -302,7 +306,7 @@ class DeltaDetector:
 
         new_punishments = self._new_ids(
             student_id,
-            f"punishments:{facts.period_id}",
+            f"punishments:{facts.period_index}",
             (item.id for item in facts.punishments),
         )
         if new_punishments:
@@ -322,10 +326,14 @@ class DeltaDetector:
     # -- evaluations -------------------------------------------------------
 
     def evaluations(self, student_id: str, facts: EvaluationsFacts) -> list[DeltaEvent]:
-        """New competency evaluations, by identifier."""
+        """New competency evaluations, by identifier.
+
+        The collection is named by the period's position, never its session
+        ``N``; see :meth:`attendance`.
+        """
         new = self._new_ids(
             student_id,
-            f"evaluations:{facts.period_id}",
+            f"evaluations:{facts.period_index}",
             (item.id for item in facts.evaluations),
         )
         if not new:

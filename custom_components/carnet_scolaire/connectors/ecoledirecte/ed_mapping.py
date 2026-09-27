@@ -460,6 +460,7 @@ def attendance_facts(
     )
     return AttendanceFacts(
         period_id="",
+        period_index=0,
         absences=tuple(absences),
         delays=tuple(delays),
         punishments=punishments,

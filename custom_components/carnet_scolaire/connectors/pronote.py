@@ -406,12 +406,14 @@ def _empty_marks() -> MarksFacts:
 
 def _empty_attendance() -> AttendanceFacts:
     """Return the typed empty value for an unknown current period."""
-    return AttendanceFacts(period_id="", absences=(), delays=(), punishments=())
+    return AttendanceFacts(
+        period_id="", period_index=0, absences=(), delays=(), punishments=()
+    )
 
 
 def _empty_evaluations() -> EvaluationsFacts:
     """Return the typed empty value for an unknown current period."""
-    return EvaluationsFacts(period_id="", evaluations=())
+    return EvaluationsFacts(period_id="", period_index=0, evaluations=())
 
 
 def _bind_marks(

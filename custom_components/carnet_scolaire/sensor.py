@@ -840,7 +840,8 @@ def _class_average(facts: MarksFacts, _account: PronoteAccount) -> StateValue:
 def _period_attributes(facts: MarksFacts, account: PronoteAccount) -> dict[str, Any]:
     """Which period an average belongs to."""
     period = next(
-        (item for item in account.state.periods if item.id == facts.period_id), None
+        (item for item in account.state.periods if item.index == facts.period_index),
+        None,
     )
     return {"period": period.name if period else None, "out_of": 20}
 
@@ -875,7 +876,8 @@ def _report_attributes(facts: MarksFacts, account: PronoteAccount) -> dict[str, 
     if facts.report is None:
         return {}
     period = next(
-        (item for item in account.state.periods if item.id == facts.period_id), None
+        (item for item in account.state.periods if item.index == facts.period_index),
+        None,
     )
     return {
         "subjects": [
@@ -1644,19 +1646,25 @@ def _history_sensors(account: PronoteAccount, student: Student) -> list[SensorEn
     return entities
 
 
-def _history_grades(facts: HistoryFacts, period_id: str) -> tuple[Any, dict[str, Any]]:
+def _history_grades(
+    facts: HistoryFacts, period_index: int
+) -> tuple[Any, dict[str, Any]]:
     """Grades of one closed period."""
-    marks = next((item for item in facts.marks if item.period_id == period_id), None)
+    marks = next(
+        (item for item in facts.marks if item.period_index == period_index), None
+    )
     if marks is None:
         return None, {}
     return len(marks.grades), {"items": [_grade_dict(grade) for grade in marks.grades]}
 
 
 def _history_averages(
-    facts: HistoryFacts, period_id: str
+    facts: HistoryFacts, period_index: int
 ) -> tuple[Any, dict[str, Any]]:
     """Per-subject averages of one closed period."""
-    marks = next((item for item in facts.marks if item.period_id == period_id), None)
+    marks = next(
+        (item for item in facts.marks if item.period_index == period_index), None
+    )
     if marks is None:
         return None, {}
     return len(marks.averages), {
@@ -1664,17 +1672,25 @@ def _history_averages(
     }
 
 
-def _history_overall(facts: HistoryFacts, period_id: str) -> tuple[Any, dict[str, Any]]:
+def _history_overall(
+    facts: HistoryFacts, period_index: int
+) -> tuple[Any, dict[str, Any]]:
     """Overall average of one closed period."""
-    marks = next((item for item in facts.marks if item.period_id == period_id), None)
+    marks = next(
+        (item for item in facts.marks if item.period_index == period_index), None
+    )
     if marks is None:
         return None, {}
     return marks.overall_average, {"class_average": marks.class_overall_average}
 
 
-def _history_report(facts: HistoryFacts, period_id: str) -> tuple[Any, dict[str, Any]]:
+def _history_report(
+    facts: HistoryFacts, period_index: int
+) -> tuple[Any, dict[str, Any]]:
     """Report card of one closed period."""
-    marks = next((item for item in facts.marks if item.period_id == period_id), None)
+    marks = next(
+        (item for item in facts.marks if item.period_index == period_index), None
+    )
     if marks is None or marks.report is None:
         return None, {}
     return len(marks.report.subjects), {
@@ -1692,11 +1708,11 @@ def _history_report(facts: HistoryFacts, period_id: str) -> tuple[Any, dict[str,
 
 
 def _history_absences(
-    facts: HistoryFacts, period_id: str
+    facts: HistoryFacts, period_index: int
 ) -> tuple[Any, dict[str, Any]]:
     """Absences of one closed period."""
     record = next(
-        (item for item in facts.attendance if item.period_id == period_id), None
+        (item for item in facts.attendance if item.period_index == period_index), None
     )
     if record is None:
         return None, {}
@@ -1705,10 +1721,12 @@ def _history_absences(
     }
 
 
-def _history_delays(facts: HistoryFacts, period_id: str) -> tuple[Any, dict[str, Any]]:
+def _history_delays(
+    facts: HistoryFacts, period_index: int
+) -> tuple[Any, dict[str, Any]]:
     """Late arrivals of one closed period."""
     record = next(
-        (item for item in facts.attendance if item.period_id == period_id), None
+        (item for item in facts.attendance if item.period_index == period_index), None
     )
     if record is None:
         return None, {}
@@ -1716,11 +1734,11 @@ def _history_delays(facts: HistoryFacts, period_id: str) -> tuple[Any, dict[str,
 
 
 def _history_punishments(
-    facts: HistoryFacts, period_id: str
+    facts: HistoryFacts, period_index: int
 ) -> tuple[Any, dict[str, Any]]:
     """Punishments of one closed period."""
     record = next(
-        (item for item in facts.attendance if item.period_id == period_id), None
+        (item for item in facts.attendance if item.period_index == period_index), None
     )
     if record is None:
         return None, {}
@@ -1730,11 +1748,11 @@ def _history_punishments(
 
 
 def _history_evaluations(
-    facts: HistoryFacts, period_id: str
+    facts: HistoryFacts, period_index: int
 ) -> tuple[Any, dict[str, Any]]:
     """Competency evaluations of one closed period."""
     record = next(
-        (item for item in facts.evaluations if item.period_id == period_id), None
+        (item for item in facts.evaluations if item.period_index == period_index), None
     )
     if record is None:
         return None, {}
@@ -1747,7 +1765,7 @@ def _history_evaluations(
 
 
 _HISTORY_EXTRACTORS: Final[
-    dict[str, Callable[[HistoryFacts, str], tuple[Any, dict[str, Any]]]]
+    dict[str, Callable[[HistoryFacts, int], tuple[Any, dict[str, Any]]]]
 ] = {
     "grades_period": _history_grades,
     "averages_period": _history_averages,
@@ -1905,7 +1923,7 @@ class PronoteHistorySensor(PronoteEntity, SensorEntity):
         *,
         period: Period,
         key: str,
-        extract: Callable[[HistoryFacts, str], tuple[Any, dict[str, Any]]],
+        extract: Callable[[HistoryFacts, int], tuple[Any, dict[str, Any]]],
     ) -> None:
         super().__init__(account, coordinator, student, f"{key}_p{period.index}")
         self._period = period
@@ -1921,7 +1939,7 @@ class PronoteHistorySensor(PronoteEntity, SensorEntity):
         facts = self.facts
         if not isinstance(facts, HistoryFacts):
             return None
-        value, _ = self._extract(facts, self._period.id)
+        value, _ = self._extract(facts, self._period.index)
         return value  # type: ignore[no-any-return]
 
     @property
@@ -1930,7 +1948,7 @@ class PronoteHistorySensor(PronoteEntity, SensorEntity):
         attributes = dict(super().extra_state_attributes)
         facts = self.facts
         if isinstance(facts, HistoryFacts):
-            _, extra = self._extract(facts, self._period.id)
+            _, extra = self._extract(facts, self._period.index)
             attributes.update(extra)
         attributes["period"] = self._period.name
         attributes["period_index"] = self._period.index
