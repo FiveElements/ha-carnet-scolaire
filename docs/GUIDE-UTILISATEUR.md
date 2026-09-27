@@ -1628,7 +1628,7 @@ même chose, sans une entité de plus à garder cohérente.
 | --- | --- | --- |
 | **PRONOTE a refusé ces identifiants.** *Réessayer en boucle un mot de passe erroné est précisément ce qui fait bloquer une adresse : vérifiez-les avant de recommencer.* | Identifiant ou mot de passe incorrect. En mode ENT, c'est souvent qu'on a saisi les identifiants PRONOTE au lieu de ceux du portail. | Vérifiez-les en vous connectant d'abord dans un navigateur. **Ne réessayez pas au hasard.** |
 | **PRONOTE demande le code PIN à deux facteurs de ce compte.** | Le compte est protégé par un PIN, qui n'est jamais conservé. | Saisissez-le dans le champ prévu du formulaire. |
-| **L'adresse a répondu, mais sans page de session PRONOTE.** *Vérifiez l'adresse, et que l'espace est bien ouvert en ce moment.* | L'adresse joint un serveur, mais ce n'est pas un espace PRONOTE utilisable. Cause impossible à déterminer : mauvaise adresse, maintenance, changement d'URL par l'établissement, page d'erreur. | Vérifiez l'adresse dans un navigateur. Elle doit se terminer par `eleve.html` ou `parent.html`. Réessayez plus tard si l'espace est fermé. |
+| **L'adresse a répondu, mais sans page de session PRONOTE.** *Vérifiez l'adresse, et que l'espace est bien ouvert en ce moment.* | L'adresse joint un serveur, mais ce n'est pas un espace PRONOTE utilisable. Cause impossible à déterminer : mauvaise adresse, maintenance, changement d'URL par l'établissement, page d'erreur. | Vérifiez l'adresse dans un navigateur. Elle doit se terminer par `eleve.html` ou `parent.html`. Réessayez plus tard si l'espace est fermé. Si l'entrée existe déjà, corrigez l'adresse par **Reconfigurer** (§ [10.4](#104-comment-recharger-ou-reconfigurer)) plutôt qu'en la supprimant. |
 | **Le QR code ou son code à quatre chiffres a été refusé.** *Un QR code n'est utilisable qu'une fois : générez-en un nouveau dans l'application.* | Le QR code a déjà servi, ou le code à quatre chiffres ne correspond pas. | Générez un nouveau QR code dans l'application mobile et recommencez. |
 | **Cela ne ressemble pas au contenu d'un QR code PRONOTE.** *Il doit s'agir d'un objet JSON avec login, jeton et url.* | Le texte collé n'est pas le contenu du QR code : image, texte tronqué, ou lecture partielle. | Rescannez le QR code avec un lecteur qui affiche le texte brut, et copiez-le **en entier**. |
 | **Impossible de joindre le serveur.** | Problème réseau, ou serveur injoignable. | Vérifiez la connexion internet de Home Assistant, puis réessayez. |
@@ -1689,6 +1689,18 @@ Ces messages apparaissent dans **Paramètres → Système → Réparations**.
   deux facteurs ; un compte enrôlé par QR code demande **un nouveau QR code**,
   parce qu'il n'a pas de mot de passe et que son jeton d'appareil, une fois
   refusé, ne peut pas être réparé autrement.
+- **Reconfigurer la connexion** : le menu **⋮** de l'intégration,
+  **Reconfigurer**. C'est le chemin pour corriger l'adresse PRONOTE, changer
+  d'identifiant ou de portail ENT, ou passer d'un mode de connexion à un autre
+  (QR code, identifiant et mot de passe, ENT) — sans supprimer l'entrée. Pour
+  PRONOTE, on choisit le mode puis on retrouve le formulaire de l'ajout,
+  prérempli sauf le mot de passe, qui est redemandé ; pour EcoleDirecte,
+  l'identifiant et le mot de passe, et la question de sécurité si le site la
+  pose. Les nouvelles informations sont essayées **une fois** avant tout
+  enregistrement, et elles doivent ouvrir **le même compte** : l'adresse peut
+  changer de page, pas de serveur, et un identifiant EcoleDirecte différent
+  est refusé sans rien envoyer. Appareils, entités, historique, enfants suivis
+  et options sont conservés ; le PIN et le contenu du QR code ne le sont jamais.
 - **Recharger** : le menu **⋮** de l'intégration, **Recharger**. Utile après une
   mise à jour, ou pour retenter la récupération de la photo.
 

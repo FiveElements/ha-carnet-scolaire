@@ -18,6 +18,15 @@
           "ent": "Connexion par l'ENT"
         }
       },
+      "reconfigure": {
+        "title": "Modifier la connexion PRONOTE",
+        "description": "Cette entrée se connecte à {url}. Choisissez comment elle doit se connecter désormais : le même mode pour corriger l'adresse, l'identifiant ou le portail, ou un autre. Le formulaire suivant redemande le mot de passe ou le QR code : aucun des deux n'est réaffiché.\n\nLes nouvelles informations sont essayées une fois avant tout enregistrement, et doivent ouvrir ce même compte. Les enfants suivis, les options et l'historique sont conservés.",
+        "menu_options": {
+          "qr_code": "QR code de l'application mobile (recommandé)",
+          "credentials": "Identifiant et mot de passe",
+          "ent": "Connexion par l'ENT"
+        }
+      },
       "qr_code": {
         "title": "Enrôler avec un QR code",
         "description": "Dans l'application mobile PRONOTE, ouvrez le menu du compte et générez un QR code, en choisissant un code à quatre chiffres lorsqu'il vous est demandé.\n\nL'application affiche le QR code sous forme d'image, alors que le champ ci-dessous attend le JSON qu'elle encode. Utilisez donc un lecteur de QR code — l'appareil photo de votre téléphone ou n'importe quelle application de scan — pour le lire, puis partagez ou copiez le texte obtenu et collez-le ci-dessous avec le même code à quatre chiffres.\n\nUn QR code est à usage unique **et périme en quelques minutes** : l'ordre compte donc. Ouvrez d'abord ce formulaire, générez le QR code ensuite, et validez immédiatement. Regénérez-en un si cette tentative échoue — l'ancien est dépensé de toute façon.",
@@ -145,6 +154,8 @@
     "abort": {
       "already_configured": "Ce compte est déjà configuré.",
       "reauth_successful": "Reconnexion réussie.",
+      "reconfigure_successful": "Connexion mise à jour. L'entrée se recharge avec elle ; ses appareils, entités, historique et options sont inchangés.",
+      "reconfigure_wrong_account": "Ces informations ouvrent un autre compte que celui que suit cette entrée : rien n'a été modifié. Les appliquer aurait fait pointer cette entrée vers l'enfant de quelqu'un d'autre en conservant le nom et l'historique de celui-ci. Utilisez les informations du compte de cette entrée, ou ajoutez l'autre compte séparément.",
       "wrong_account": "Ce QR code appartient à un autre compte PRONOTE : il n'a pas été appliqué. Reconnecter cette entrée avec lui l'aurait fait pointer vers l'enfant de quelqu'un d'autre en conservant le nom et l'historique de celui-ci. Générez un QR code depuis le compte que suit cette entrée, ou ajoutez l'autre compte séparément."
     }
   },

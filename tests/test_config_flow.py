@@ -2306,3 +2306,562 @@ async def test_the_same_ecoledirecte_account_cannot_be_added_twice(
     assert aborted["type"] is FlowResultType.ABORT
     assert aborted["reason"] == "already_configured"
     assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+
+
+# ---------------------------------------------------------------------------
+# Reconfiguration
+#
+# Removing and re-adding the entry used to be the only way to correct an
+# address, move to the ENT or to a QR code -- and it took the devices, the
+# entity ids, the automations written against them, the options and the history
+# with it. Reconfiguration keeps the entry and swaps only how it connects, which
+# makes two failures possible that the add flow cannot have: applying a login
+# that opened *another* account, and losing on the way something the entry
+# already held. Every test below is about one of those two.
+# ---------------------------------------------------------------------------
+
+#: The address as a mistaken first set-up stored it: the mobile page, which a
+#: parent copies from a link on the phone. Same host and same account as
+#: `TRIMMED_URL` -- the correction reconfiguration exists for.
+MISTAKEN_URL = "https://demo.example.invalid/pronote/mobile.parent.html"
+
+RECONFIGURE_OPTIONS: dict[str, Any] = {
+    OPT_WRITE_OPERATIONS_ENABLED: False,
+    "tier_interval_marks": 7200,
+}
+
+
+@pytest.fixture(name="ent_entry")
+def ent_entry_fixture(hass: HomeAssistant) -> MockConfigEntry:
+    """An ENT entry, set up against the mistaken address, following one child."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="PRONOTE",
+        data={
+            CONF_PRONOTE_URL: MISTAKEN_URL,
+            CONF_LOGIN_MODE: LoginMode.ENT.value,
+            "username": "portal-user-under-test",
+            "password": "not-a-real-portal-password",
+            CONF_ENT: "ac_reunion",
+            CONF_CHILDREN: ["STUDENT-2"],
+            CONF_CHILD_KEYS: [
+                {"key": "child-2", "resource_id": "STUDENT-2", "name": "Enfant Deux"}
+            ],
+        },
+        options=dict(RECONFIGURE_OPTIONS),
+        unique_id=f"{MISTAKEN_URL}::46#not-a-real-signature",
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+def _reconfigured_outcome(
+    account_id: str = f"{TRIMMED_URL}::46#a-rotated-signature",
+) -> dict[str, Any]:
+    """What the probe hands back after a reconfigured login, children included.
+
+    Two children, although the entry follows one: a finish that merged these
+    would widen the selection, which is what the assertions on `children` catch.
+    """
+    return {
+        "account_id": account_id,
+        "children": [("STUDENT-1", "Enfant Un"), ("STUDENT-2", "Enfant Deux")],
+        "title": "PRONOTE",
+        "username": "parent-under-test",
+        "password": "not-a-real-password",
+        CONF_CLIENT_IDENTIFIER: "not-a-real-fresh-client-id",
+    }
+
+
+def _suggested(result: Any, key: str) -> Any:
+    """The value a form pre-fills in ``key``, or ``None``."""
+    for marker in result["data_schema"].schema:
+        if str(marker) == key:
+            return (marker.description or {}).get("suggested_value")
+    return None
+
+
+async def _reconfigure_to(
+    hass: HomeAssistant, entry: MockConfigEntry, method: str
+) -> dict[str, Any]:
+    """Open a PRONOTE reconfiguration and pick one of the three methods."""
+    result = await entry.start_reconfigure_flow(hass)
+    assert result["type"] is FlowResultType.MENU
+    assert result["step_id"] == "reconfigure"
+    return dict(
+        await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"next_step_id": method}
+        )
+    )
+
+
+async def test_reconfiguring_offers_the_three_methods_and_names_the_address(
+    hass: HomeAssistant, ent_entry: MockConfigEntry
+) -> None:
+    """The menu is the add flow's, and it says which account is being changed.
+
+    The address is the trimmed form, because a placeholder is rendered on
+    screen and a stored query string is exactly what must never be shown.
+    """
+    result = await ent_entry.start_reconfigure_flow(hass)
+
+    assert result["type"] is FlowResultType.MENU
+    assert set(result["menu_options"]) == {"qr_code", "credentials", "ent"}
+    assert (result["description_placeholders"] or {})["url"] == MISTAKEN_URL
+
+
+async def test_a_reconfigured_address_is_trimmed_and_nothing_else_is_lost(
+    hass: HomeAssistant, ent_entry: MockConfigEntry, no_spacing: None
+) -> None:
+    """The ordinary case: same method, corrected address, entry kept whole.
+
+    Checks the promises at once, because each of them fails silently: the
+    pasted query string does not reach the entry, the options -- writes off, a
+    tuned tier -- are the user's and not the flow's, and the followed child
+    stays the only one even though the probe announces two.
+    """
+    form = await _reconfigure_to(hass, ent_entry, "ent")
+    assert form["step_id"] == "ent"
+    # Pre-filled from the entry, except the password, which is never sent
+    # back to a browser.
+    assert _suggested(form, CONF_PRONOTE_URL) == MISTAKEN_URL
+    assert _suggested(form, "username") == "portal-user-under-test"
+    assert _suggested(form, CONF_ENT) == "ac_reunion"
+    assert _suggested(form, "password") is None
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        return_value=_reconfigured_outcome(),
+    ) as probe:
+        done = await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {
+                CONF_PRONOTE_URL: PASTED_URL,
+                "username": "portal-user-under-test",
+                "password": "not-a-real-portal-password",
+                CONF_ENT: "ac_reunion",
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert done["type"] is FlowResultType.ABORT
+    assert done["reason"] == "reconfigure_successful"
+    assert probe.call_count == 1
+    assert probe.call_args.args[0][CONF_PRONOTE_URL] == TRIMMED_URL
+    assert ent_entry.data[CONF_PRONOTE_URL] == TRIMMED_URL
+    assert ent_entry.data[CONF_ENT] == "ac_reunion"
+    assert ent_entry.data[CONF_CLIENT_IDENTIFIER] == "not-a-real-fresh-client-id"
+    assert ent_entry.data[CONF_CHILDREN] == ["STUDENT-2"]
+    assert ent_entry.data[CONF_CHILD_KEYS][0]["key"] == "child-2"
+    assert dict(ent_entry.options) == RECONFIGURE_OPTIONS
+    # The stored identity is left alone, as re-authentication leaves it.
+    assert ent_entry.unique_id == f"{MISTAKEN_URL}::46#not-a-real-signature"
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+
+
+async def test_moving_off_the_ent_drops_the_portal_it_logged_in_through(
+    hass: HomeAssistant, ent_entry: MockConfigEntry, no_spacing: None
+) -> None:
+    """A mode change must not leave the old mode's keys behind.
+
+    `flow_login` picks the ENT whenever the entry names one, so an entry moved
+    to direct credentials that kept its `ent` would go on sending the new
+    PRONOTE password to the regional portal -- reported as a refused login, at
+    every restart, with the right password in hand. And the PIN given for
+    this one login is not kept (§8.1).
+    """
+    form = await _reconfigure_to(hass, ent_entry, "credentials")
+    assert form["step_id"] == "credentials"
+    assert _suggested(form, CONF_PRONOTE_URL) == MISTAKEN_URL
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        return_value=_reconfigured_outcome(),
+    ) as probe:
+        done = await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {
+                CONF_PRONOTE_URL: TRIMMED_URL,
+                "username": "parent-under-test",
+                "password": "not-a-real-password",
+                CONF_ACCOUNT_PIN: "0000",
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert done["reason"] == "reconfigure_successful"
+    assert probe.call_args.args[0][CONF_ACCOUNT_PIN] == "0000"
+    assert ent_entry.data[CONF_LOGIN_MODE] == LoginMode.CREDENTIALS.value
+    assert CONF_ENT not in ent_entry.data
+    assert CONF_ACCOUNT_PIN not in ent_entry.data
+    assert "account_id" not in ent_entry.data
+    assert ent_entry.data["password"] == "not-a-real-password"
+
+
+async def test_a_refused_reconfiguration_says_why_and_changes_nothing_until_it_works(
+    hass: HomeAssistant, ent_entry: MockConfigEntry, no_spacing: None
+) -> None:
+    """The probe comes first, and a refusal re-displays the form, pre-filled.
+
+    Saving first and discovering the mistake at the reload would leave a
+    working entry broken by a typo -- the opposite of what the form is for.
+    One attempt per submission, as everywhere in this flow.
+    """
+    before = dict(ent_entry.data)
+    form = await _reconfigure_to(hass, ent_entry, "credentials")
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        side_effect=[ProbeInvalidCredentials(), _reconfigured_outcome()],
+    ) as probe:
+        refused = await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {
+                CONF_PRONOTE_URL: TRIMMED_URL,
+                "username": "parent-under-test",
+                "password": "a-typo-not-real",
+            },
+        )
+        assert refused["type"] is FlowResultType.FORM
+        assert refused["step_id"] == "credentials"
+        assert refused["errors"] == {"base": "invalid_auth"}
+        assert _suggested(refused, "username") == "portal-user-under-test"
+        assert dict(ent_entry.data) == before
+
+        done = await hass.config_entries.flow.async_configure(
+            refused["flow_id"],
+            {
+                CONF_PRONOTE_URL: TRIMMED_URL,
+                "username": "parent-under-test",
+                "password": "not-a-real-password",
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert probe.call_count == 2
+    assert done["reason"] == "reconfigure_successful"
+    assert ent_entry.data["password"] == "not-a-real-password"
+
+
+async def test_a_refused_ent_reconfiguration_comes_back_to_the_ent_form(
+    hass: HomeAssistant, ent_entry: MockConfigEntry, no_spacing: None
+) -> None:
+    """The re-displayed form is the one the user was on, still pre-filled."""
+    form = await _reconfigure_to(hass, ent_entry, "ent")
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        side_effect=ProbeInvalidCredentials(),
+    ):
+        refused = await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {
+                CONF_PRONOTE_URL: TRIMMED_URL,
+                "username": "portal-user-under-test",
+                "password": "a-typo-not-real",
+                CONF_ENT: "ac_reunion",
+            },
+        )
+
+    assert refused["step_id"] == "ent"
+    assert refused["errors"] == {"base": "invalid_auth"}
+    assert _suggested(refused, CONF_ENT) == "ac_reunion"
+
+
+@pytest.mark.parametrize(
+    "account_id",
+    [
+        # Another resource at the same establishment: a sibling's or another
+        # family's account.
+        f"{TRIMMED_URL}::47#not-a-real-signature",
+        # The same resource number at another establishment -- local numbers,
+        # so a different account altogether.
+        "https://other.example.invalid/pronote/parent.html::46#not-a-real-signature",
+    ],
+)
+async def test_a_reconfiguration_that_opens_another_account_is_refused(
+    hass: HomeAssistant, ent_entry: MockConfigEntry, no_spacing: None, account_id: str
+) -> None:
+    """The failure reconfiguration makes possible, and must not commit.
+
+    A parent with children in two establishments holds two sets of working
+    credentials. Typing the other set would succeed as a login, and applying it
+    would keep this entry's devices, entity ids and history while quietly
+    following somebody else's child. So the login is checked against the
+    entry's identity -- host and resource number, the path being the very thing
+    a correction may change -- and nothing is written when it does not match.
+    """
+    before = dict(ent_entry.data)
+    form = await _reconfigure_to(hass, ent_entry, "credentials")
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        return_value=_reconfigured_outcome(account_id=account_id),
+    ):
+        done = await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {
+                CONF_PRONOTE_URL: TRIMMED_URL,
+                "username": "parent-under-test",
+                "password": "not-a-real-password",
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert done["type"] is FlowResultType.ABORT
+    assert done["reason"] == "reconfigure_wrong_account"
+    assert dict(ent_entry.data) == before
+    assert dict(ent_entry.options) == RECONFIGURE_OPTIONS
+
+
+async def test_a_qr_reconfiguration_keeps_the_device_and_no_single_use_secret(
+    hass: HomeAssistant, qr_entry: MockConfigEntry, no_spacing: None
+) -> None:
+    """A fresh QR code on an enrolled entry: same device, new token, no payload.
+
+    The UUID is reused because upstream requires it not to change between
+    logins (`async_step_reauth_qr` explains); the payload, its four-digit code
+    and the account PIN are single-use and §8.1 promises they are not kept.
+    """
+    form = await _reconfigure_to(hass, qr_entry, "qr_code")
+    assert form["step_id"] == "qr_code"
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        return_value=_qr_outcome(),
+    ) as probe:
+        done = await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {
+                CONF_QR_PAYLOAD: json.dumps(QR_PAYLOAD),
+                CONF_QR_PIN: "1234",
+                CONF_ACCOUNT_PIN: "0000",
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert done["reason"] == "reconfigure_successful"
+    assert probe.call_args.args[0][CONF_UUID] == QR_ENTRY_DATA[CONF_UUID]
+    assert qr_entry.data[CONF_UUID] == QR_ENTRY_DATA[CONF_UUID]
+    assert qr_entry.data["password"] == "not-a-real-fresh-token"
+    for secret in (CONF_QR_PAYLOAD, CONF_QR_PIN, CONF_ACCOUNT_PIN, "account_id"):
+        assert secret not in qr_entry.data
+    assert qr_entry.data[CONF_CHILDREN] == QR_ENTRY_DATA[CONF_CHILDREN]
+
+
+async def test_moving_a_password_entry_to_a_qr_code_enrols_a_new_device(
+    hass: HomeAssistant, ent_entry: MockConfigEntry, no_spacing: None
+) -> None:
+    """An entry with no device identity gets one, as the add flow gives it.
+
+    The other half of the UUID rule: reuse one if the entry has it, never send
+    an empty one -- `qrcode_login` would enrol a device with no identifier.
+    """
+    form = await _reconfigure_to(hass, ent_entry, "qr_code")
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        return_value=_qr_outcome(account_id=f"{TRIMMED_URL}::46#not-a-real-signature"),
+    ) as probe:
+        done = await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {CONF_QR_PAYLOAD: json.dumps(QR_PAYLOAD), CONF_QR_PIN: "1234"},
+        )
+        await hass.async_block_till_done()
+
+    assert done["reason"] == "reconfigure_successful"
+    assert probe.call_args.args[0][CONF_UUID]
+    assert ent_entry.data[CONF_LOGIN_MODE] == LoginMode.QR_CODE.value
+    assert CONF_ENT not in ent_entry.data
+
+
+async def test_a_qr_entry_moved_to_a_password_is_not_offered_its_enrolment_login(
+    hass: HomeAssistant, qr_entry: MockConfigEntry
+) -> None:
+    """On a QR entry the stored username is the enrolment's, not the person's.
+
+    Suggesting it on the password form would invite submitting a login the
+    PRONOTE page has never heard of -- and spending an attempt on the guard
+    rail doing it.
+    """
+    form = await _reconfigure_to(hass, qr_entry, "credentials")
+
+    assert _suggested(form, "username") is None
+    assert _suggested(form, CONF_PRONOTE_URL) == TRIMMED_URL
+
+
+async def test_a_successful_reconfiguration_lifts_the_hold_of_the_old_details(
+    hass: HomeAssistant, ent_entry: MockConfigEntry, no_spacing: None
+) -> None:
+    """The typical entry being reconfigured is one that stopped logging in.
+
+    Its saved limiter state carries the hold those failures earned, and the
+    reload that applies the correction reads it back: left in place, it refuses
+    the proven new details until it expires -- or, for the MFA hold, for good.
+    """
+    limiter_state_store(hass)[ent_entry.entry_id] = {"held": "by-the-old-details"}
+    form = await _reconfigure_to(hass, ent_entry, "credentials")
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        return_value=_reconfigured_outcome(),
+    ):
+        await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {
+                CONF_PRONOTE_URL: TRIMMED_URL,
+                "username": "parent-under-test",
+                "password": "not-a-real-password",
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert ent_entry.entry_id not in limiter_state_store(hass)
+
+
+@pytest.fixture(name="ed_entry")
+def ed_entry_fixture(hass: HomeAssistant) -> MockConfigEntry:
+    """An EcoleDirecte entry with a remembered QCM answer and tuned options."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="EcoleDirecte",
+        unique_id="ecoledirecte:demo.example.invalid",
+        data={
+            CONF_SOURCE: "ecoledirecte",
+            "username": "demo.example.invalid",
+            "password": "old-password-not-real",
+            "qcm_json": {"Couleur préférée ?": "Bleu"},
+            CONF_CHILD_KEYS: [
+                {"key": "child-1", "resource_id": "1", "name": "Enfant Un"}
+            ],
+        },
+        options={"tier_interval_marks": 7200},
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def test_an_ecoledirecte_entry_is_reconfigured_through_its_own_form(
+    hass: HomeAssistant, ed_entry: MockConfigEntry, no_spacing: None
+) -> None:
+    """One way in, so no menu: the add flow's form, pre-filled, then the entry.
+
+    The remembered QCM answer goes with the attempt, as at every collection, so
+    a question already answered is not asked again; and the PRONOTE probe is
+    never reached, because an EcoleDirecte entry has nothing to say to it.
+    """
+    form = await ed_entry.start_reconfigure_flow(hass)
+    assert form["type"] is FlowResultType.FORM
+    assert form["step_id"] == "ecoledirecte"
+    assert _suggested(form, "username") == "demo.example.invalid"
+    assert _suggested(form, "password") is None
+
+    with (
+        patch(
+            "custom_components.carnet_scolaire.config_flow._probe",
+            side_effect=AssertionError("no PRONOTE probe for an ED entry"),
+        ),
+        patch(
+            "custom_components.carnet_scolaire.config_flow._probe_ecoledirecte",
+            return_value={"students": (("1", "Enfant Un"),)},
+        ) as probe,
+    ):
+        done = await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {"username": "demo.example.invalid", "password": "not-a-real-password"},
+        )
+        await hass.async_block_till_done()
+
+    assert done["type"] is FlowResultType.ABORT
+    assert done["reason"] == "reconfigure_successful"
+    assert probe.call_args.args[3] == {"Couleur préférée ?": "Bleu"}
+    assert ed_entry.data["password"] == "not-a-real-password"
+    assert ed_entry.data[CONF_CHILD_KEYS][0]["key"] == "child-1"
+    assert dict(ed_entry.options) == {"tier_interval_marks": 7200}
+
+
+async def test_another_ecoledirecte_identifier_is_refused_before_any_login(
+    hass: HomeAssistant, ed_entry: MockConfigEntry, no_spacing: None
+) -> None:
+    """The identifier *is* the identity, so a different one is known in advance.
+
+    Checked with Home Assistant's own unique-id mismatch rule, and before the
+    probe rather than after it: nothing needs to be sent to learn the answer,
+    and a login spent learning it would draw on the daily allowance.
+    """
+    before = dict(ed_entry.data)
+    form = await ed_entry.start_reconfigure_flow(hass)
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe_ecoledirecte",
+        return_value={"students": (("1", "Enfant Un"),)},
+    ) as probe:
+        done = await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {"username": "other.example.invalid", "password": "not-a-real-password"},
+        )
+
+    assert done["type"] is FlowResultType.ABORT
+    assert done["reason"] == "reconfigure_wrong_account"
+    assert probe.call_count == 0
+    assert dict(ed_entry.data) == before
+
+
+async def test_an_ecoledirecte_reconfiguration_can_pass_through_the_qcm(
+    hass: HomeAssistant, ed_entry: MockConfigEntry, no_spacing: None
+) -> None:
+    """A new question on the way is answered in the flow, then saved with it.
+
+    And the entry is not touched while the question is pending: the answer is
+    only kept once the login it belongs to has succeeded.
+    """
+    before = dict(ed_entry.data)
+    form = await ed_entry.start_reconfigure_flow(hass)
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe_ecoledirecte",
+        side_effect=ConnectorChallengeRequired(
+            ChallengeKind.QCM,
+            question="Ville de naissance ?",
+            propositions=("Lyon", "Nantes"),
+        ),
+    ):
+        challenged = await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {"username": "demo.example.invalid", "password": "not-a-real-password"},
+        )
+    assert challenged["step_id"] == "ecoledirecte_qcm"
+    assert dict(ed_entry.data) == before
+
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe_ecoledirecte",
+        return_value={"students": (("1", "Enfant Un"),)},
+    ):
+        done = await hass.config_entries.flow.async_configure(
+            challenged["flow_id"], {"choice": "Nantes"}
+        )
+        await hass.async_block_till_done()
+
+    assert done["reason"] == "reconfigure_successful"
+    assert ed_entry.data["qcm_json"] == {"Ville de naissance ?": "Nantes"}
+    assert ed_entry.data["password"] == "not-a-real-password"
+
+
+async def test_a_refused_ecoledirecte_reconfiguration_keeps_the_entry_as_it_was(
+    hass: HomeAssistant, ed_entry: MockConfigEntry, no_spacing: None
+) -> None:
+    """A wrong password re-displays the pre-filled form and writes nothing."""
+    before = dict(ed_entry.data)
+    form = await ed_entry.start_reconfigure_flow(hass)
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe_ecoledirecte",
+        side_effect=ConnectorCredentialsError(),
+    ):
+        refused = await hass.config_entries.flow.async_configure(
+            form["flow_id"],
+            {"username": "demo.example.invalid", "password": "a-typo-not-real"},
+        )
+
+    assert refused["type"] is FlowResultType.FORM
+    assert refused["errors"] == {"base": "ed_invalid_auth"}
+    assert _suggested(refused, "username") == "demo.example.invalid"
+    assert dict(ed_entry.data) == before

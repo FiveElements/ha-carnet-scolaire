@@ -123,10 +123,14 @@ rules:
       the binary sensors) and per service; tests/test_translations.py fails
       on an entity or service without one.
   reconfiguration-flow:
-    status: todo
+    status: done
     comment: >
-      Options and reauth exist; there is no async_step_reconfigure to change
-      the URL or ENT without removing the entry.
+      async_step_reconfigure reuses the add flow's steps and probe: PRONOTE
+      picks a login mode (QR, credentials, ENT) and may correct the address
+      or the portal; EcoleDirecte re-enters its password, QCM included. One
+      probe before saving, the same account enforced (host and resource
+      number for PRONOTE, _abort_if_unique_id_mismatch for EcoleDirecte),
+      then async_update_reload_and_abort; options and children untouched.
   repair-issues: done
   stale-devices:
     status: done
