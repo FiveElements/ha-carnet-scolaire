@@ -28,6 +28,7 @@
           "account_pin": "Two-factor PIN (if your account uses one)"
         },
         "data_description": {
+          "qr_payload": "The text a QR code reader returns when it scans the code the app draws: a JSON object with login, jeton and url. Paste it whole, not a photo or a link to the picture.",
           "device_name": "The name PRONOTE shows for this Home Assistant in the list of devices connected to the account -- only there. It does not name the device in Home Assistant, which takes the pupil's name from PRONOTE.",
           "qr_pin": "The one you chose in the app while generating the QR code. Not the account PIN below -- both are four digits, and they are different codes.",
           "account_pin": "The two-factor PIN set on the PRONOTE account itself, if it has one. Also four digits, and not the code above. Used for this login only and never stored. You will be asked for it again if PRONOTE requires it."
@@ -43,6 +44,9 @@
           "account_pin": "Two-factor PIN (if your account uses one)"
         },
         "data_description": {
+          "pronote_url": "The address of the establishment's PRONOTE page as your browser shows it, ending in parent.html for a parent account or eleve.html for a pupil's. Anything after .html is dropped before it is stored.",
+          "username": "The username typed on the PRONOTE login page itself -- not the one of a regional portal (ENT).",
+          "password": "The PRONOTE password of that account. It is stored, since this method has no other way to log in again; the QR code method avoids that.",
           "account_pin": "Used for this login only and never stored. You will be asked for it again if PRONOTE requires it."
         }
       },
@@ -54,6 +58,12 @@
           "username": "Username",
           "password": "Password",
           "ent": "Portal"
+        },
+        "data_description": {
+          "pronote_url": "The address of the establishment's PRONOTE page, ending in parent.html or eleve.html: the page the portal opens once you are logged in, not the portal's own address.",
+          "username": "The username typed on the regional portal (ENT), not a PRONOTE one.",
+          "password": "The password of that portal account. It is stored, since a federated login goes through the portal again every time.",
+          "ent": "The portal your establishment signs you in through. Pick it from the list rather than typing a name: an unknown name is refused."
         }
       },
       "ecoledirecte": {
@@ -62,6 +72,10 @@
         "data": {
           "username": "Username",
           "password": "Password"
+        },
+        "data_description": {
+          "username": "The username typed on the EcoleDirecte login page, for a parent or a pupil account.",
+          "password": "The EcoleDirecte password of that account. It is stored, since EcoleDirecte issues no durable device token."
         }
       },
       "ecoledirecte_qcm": {
@@ -69,6 +83,9 @@
         "description": "EcoleDirecte asks: {question}\n\nSelect the remembered answer. No account is created until the login succeeds.",
         "data": {
           "choice": "Answer"
+        },
+        "data_description": {
+          "choice": "The answer EcoleDirecte expects for this account, as its own site asks it on a new device. It is remembered, so the question is not asked at every login."
         }
       },
       "children": {
@@ -76,6 +93,9 @@
         "description": "Each child you follow multiplies the number of daily requests to the server, so select only the ones you want.",
         "data": {
           "children": "Children"
+        },
+        "data_description": {
+          "children": "Each ticked child gets its own device and entities. Untick a child you do not need: every child adds the same number of requests a day."
         }
       },
       "reauth_confirm": {
@@ -84,6 +104,10 @@
         "data": {
           "password": "Password",
           "account_pin": "Two-factor PIN"
+        },
+        "data_description": {
+          "password": "Leave empty to keep the stored password, for instance when PRONOTE is only asking for the two-factor PIN.",
+          "account_pin": "The two-factor PIN set on the PRONOTE account, when PRONOTE asks for it. Used for this login only and never stored."
         }
       },
       "reauth_qr": {
@@ -96,6 +120,7 @@
           "account_pin": "Two-factor PIN (if your account uses one)"
         },
         "data_description": {
+          "qr_payload": "The text a QR code reader returns when it scans the code the app draws: a JSON object with login, jeton and url. Paste it whole, not a photo or a link to the picture.",
           "device_name": "The name PRONOTE shows for this Home Assistant in the list of devices connected to the account -- only there. It does not name the device in Home Assistant, which takes the pupil's name from PRONOTE.",
           "qr_pin": "The one you chose in the app while generating the QR code. Not the account PIN below -- both are four digits, and they are different codes.",
           "account_pin": "The two-factor PIN set on the PRONOTE account itself, if it has one. Also four digits, and not the code above. Used for this login only and never stored. You will be asked for it again if PRONOTE requires it."
@@ -183,6 +208,28 @@
           "enabled_static": "Rarely-changing data - enabled",
           "interval_history": "Closed periods - interval",
           "enabled_history": "Closed periods - enabled"
+        },
+        "data_description": {
+          "interval_timetable": "Minutes between two collections of this category. Shorter means fresher data and more requests a day.",
+          "enabled_timetable": "Off stops collecting this category altogether and saves its requests; its entities stop updating.",
+          "interval_homework": "Minutes between two collections of this category. Shorter means fresher data and more requests a day.",
+          "enabled_homework": "Off stops collecting this category altogether and saves its requests; its entities stop updating.",
+          "interval_news": "Minutes between two collections of this category. Shorter means fresher data and more requests a day.",
+          "enabled_news": "Off stops collecting this category altogether and saves its requests; its entities stop updating.",
+          "interval_discussions": "Minutes between two collections of this category. Shorter means fresher data and more requests a day.",
+          "enabled_discussions": "Off stops collecting this category altogether and saves its requests; its entities stop updating.",
+          "interval_marks": "Minutes between two collections of this category. Shorter means fresher data and more requests a day.",
+          "enabled_marks": "Off stops collecting this category altogether and saves its requests; its entities stop updating.",
+          "interval_attendance": "Minutes between two collections of this category. Shorter means fresher data and more requests a day.",
+          "enabled_attendance": "Off stops collecting this category altogether and saves its requests; its entities stop updating.",
+          "interval_evaluations": "Minutes between two collections of this category. Shorter means fresher data and more requests a day.",
+          "enabled_evaluations": "Off stops collecting this category altogether and saves its requests; its entities stop updating.",
+          "interval_menus": "Minutes between two collections of this category. Shorter means fresher data and more requests a day.",
+          "enabled_menus": "Off stops collecting this category altogether and saves its requests; its entities stop updating.",
+          "interval_static": "Minutes between two collections of this category. Shorter means fresher data and more requests a day.",
+          "enabled_static": "Off stops collecting this category altogether and saves its requests; its entities stop updating.",
+          "interval_history": "Minutes between two collections of this category. Shorter means fresher data and more requests a day.",
+          "enabled_history": "Off stops collecting this category altogether and saves its requests; its entities stop updating."
         }
       },
       "rate_limit": {
@@ -220,7 +267,9 @@
           "backoff_max": "Ceiling on that doubling.",
           "connect_timeout": "The upstream library sets no timeout at all, so this is applied by this integration.",
           "read_timeout": "How long to wait for a response before abandoning a request.",
-          "quiet_hours_enabled": "Stop collecting overnight. Roughly a third of the daily budget, spent on data nobody reads while asleep."
+          "quiet_hours_enabled": "Stop collecting overnight. Roughly a third of the daily budget, spent on data nobody reads while asleep.",
+          "quiet_start": "When scheduled collection pauses each evening. A button press, a service call and the refill after a restart still go through.",
+          "quiet_end": "When scheduled collection resumes in the morning."
         }
       }
     }
