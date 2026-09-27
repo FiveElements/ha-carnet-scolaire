@@ -1235,6 +1235,23 @@ l'identifiant PRONOTE : comparer des identifiants ferait lire chaque rotation
 en a déjà un. L'appareil n'est jamais créé explicitement — il apparaît parce
 qu'une entité porte le `DeviceInfo` qui le nomme.
 
+Les **périodes** tournent comme le reste : le `N` de chaque entrée de
+`ListePeriodes`, et le `periodeParDefaut` qui désigne la période en cours, est
+rechiffré à chaque connexion. Or les faits de session qui les portent ne sont
+relus qu'à la mise en place et quand l'appairage recommence — pas à chaque
+connexion, qui peut survenir au milieu de n'importe quel appel. Chaque requête
+bornée à une période (notes, bulletin, présences, évaluations, périodes closes)
+repasse donc par (`PronoteGateway.in_this_session`, `gateway.py`), dans l'appel
+et sur le client qui le place : la période y est retrouvée **par sa position**,
+et le `N` posté est celui de la session en cours. Sans cela, le lot qui se
+reconnectait postait le `N` de la session précédente sur un compte parent, et
+un compte élève — dont la liste d'enfants ne change jamais, donc dont les faits
+n'étaient jamais relus — le faisait à chaque collecte jusqu'au redémarrage.
+Aucune requête de plus : `ListePeriodes` est déjà en mémoire depuis la
+connexion. Une position que la session ne liste plus fait échouer le palier
+(`PeriodNotInSession`, `gateway.py`) plutôt que de poster l'ancien `N` ou de
+publier une collecte vide.
+
 Le retrait automatique reste hors sujet : voir `stale-devices` dans
 `quality_scale.yaml`, et `async_remove_config_entry_device` pour la suppression
 manuelle d'un appareil périmé.
