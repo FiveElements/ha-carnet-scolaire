@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any, Final, cast
 import uuid as uuid_module
 
 from homeassistant.config_entries import (
+    SOURCE_RECONFIGURE,
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
@@ -68,9 +69,11 @@ from .connectors.factory import source_from_entry_data
 from .connectors.protocol import Source
 from .const import (
     BRAND_LOGO_URL,
+    CHILD_NAME,
     CONF_ACCOUNT_PIN,
     CONF_CHILD_KEYS,
     CONF_CHILDREN,
+    CONF_CLIENT_IDENTIFIER,
     CONF_DEVICE_NAME,
     CONF_ENT,
     CONF_LOGIN_MODE,
@@ -129,7 +132,7 @@ from .options import (
     tier_intervals,
 )
 from .ratelimit import REQUESTS_PER_LOGIN, LoginOutcome, LoginRefusedByLimiter
-from .urls import public_url
+from .urls import public_url, url_host
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -148,6 +151,7 @@ STEP_ECOLEDIRECTE_QCM: Final = "ecoledirecte_qcm"
 STEP_CHILDREN: Final = "children"
 STEP_REAUTH_CONFIRM: Final = "reauth_confirm"
 STEP_REAUTH_QR: Final = "reauth_qr"
+STEP_RECONFIGURE: Final = "reconfigure"
 
 
 def _ent_options() -> list[SelectOptionDict]:
@@ -245,14 +249,16 @@ REAUTH_SCHEMA: Final = vol.Schema(
 #: Keys that must never reach a config entry, wherever the entry comes from.
 #: The QR payload is single-use and PRONOTE invalidates it on enrolment; its
 #: four-digit code and the account's two-factor PIN are never persisted (§8.1);
-#: `account_id` exists only long enough to set the unique id.
+#: `account_id` exists only long enough to set the unique id, and
+#: `account_name` -- the pupil's name on a pupil's own login -- only long
+#: enough to check a reconnection reached the same child.
 #:
 #: One set rather than a literal per call site, because there were two call
 #: sites and only one list: the re-authentication path stripped the PIN and
 #: nothing else, so a QR re-enrolment would have persisted the payload it had
 #: just promised not to keep.
 _NEVER_PERSISTED: Final = frozenset(
-    {CONF_QR_PAYLOAD, CONF_QR_PIN, CONF_ACCOUNT_PIN, "account_id"}
+    {CONF_QR_PAYLOAD, CONF_QR_PIN, CONF_ACCOUNT_PIN, "account_id", "account_name"}
 )
 _ED_PERSISTED: Final = frozenset(
     {CONF_SOURCE, "username", "password", "qcm_json", CONF_CHILD_KEYS}
@@ -343,20 +349,22 @@ def _reset_ed_entry_penalties(hass: HomeAssistant, entry_id: str | None) -> None
 
 
 def _account_identity(account_id: str | None) -> tuple[str, str]:
-    """The parts of an account id that identify it *stably*.
+    """The parts of an account id that survive from one session to the next.
 
     ``flow_login._account_id`` builds ``<establishment url>::<PRONOTE resource
-    N>``, and the ``N`` of a parent resource is regularly written
-    ``46#<signature>`` -- an establishment-local number followed by an opaque
-    blob. That blob is undocumented and is not reliably stable across
-    enrolments, so comparing the whole string would answer "is this the same
-    *session*" where the question is "is this the same *account*" -- and a
-    parent re-enrolling their own account from a fresh QR code would be told it
-    belongs to somebody else, with no way out but deleting the entry.
+    N>``, and the ``N`` is written ``<prefix>#<signature>``. Only the part after
+    ``#`` changes, at every session, so comparing the whole string would answer
+    "is this the same *session*" where the question is "is this the same
+    *account*" -- and a parent re-enrolling their own account from a fresh QR
+    code would be told it belongs to somebody else.
 
-    So the address and the number are compared and the signature is dropped.
-    ``<url>::46`` is still a real identity -- resource 46 at that establishment
-    -- and it cannot collide with a sibling, who carries a different number.
+    What is left is **not** an account identity, and an earlier version of this
+    docstring said it was. The prefix is almost certainly a PRONOTE *resource
+    type* rather than a number of its own: measured on a live instance, every
+    child carries ``46#…`` and every homework ``147#…``. Two accounts of one
+    establishment therefore read the same here. This pair says *which
+    establishment and which kind of resource*, nothing more; whether the login
+    reached the same family is :func:`_shares_a_followed_child`'s question.
 
     The stored ``unique_id`` is deliberately left alone: every existing entry
     holds the full form, and narrowing it would orphan them.
@@ -366,8 +374,142 @@ def _account_identity(account_id: str | None) -> tuple[str, str]:
 
 
 def _same_account(existing_unique_id: str | None, account_id: Any) -> bool:
-    """Whether a fresh login landed on the account an entry already follows."""
+    """Whether a fresh login landed at the same address and kind of resource.
+
+    Necessary, not sufficient: see :func:`_account_identity`. Another account
+    of the same establishment passes this test, which is why every caller also
+    asks :func:`_shares_a_followed_child`.
+    """
     return _account_identity(existing_unique_id) == _account_identity(str(account_id))
+
+
+def _same_account_on_host(existing_unique_id: str | None, account_id: Any) -> bool:
+    """Whether a reconfigured login landed at the entry's establishment.
+
+    Necessary, not sufficient, like :func:`_same_account`: another account of
+    the same establishment passes it, and :func:`_shares_a_followed_child` is
+    what tells the two apart.
+
+    Looser than :func:`_same_account` in exactly one respect, and only because
+    reconfiguring exists to allow it: the *path* of the address may change.
+    Correcting ``eleve.html`` into ``parent.html``, or pasting the page an ENT
+    opens instead of a copied deep link, is the ordinary reason somebody opens
+    this form -- and ``flow_login._account_id`` writes the whole address into
+    the identity, so comparing it would refuse the very correction the form is
+    for.
+
+    The host and the resource prefix are still both required: the host because
+    ``46#…`` exists at every school, the prefix because it is what
+    :func:`_same_account` compares too. An identity this function cannot read,
+    with no host, is refused rather than waved through.
+    """
+    old_url, old_resource = _account_identity(existing_unique_id)
+    new_url, new_resource = _account_identity(str(account_id))
+    old_host = url_host(old_url)
+    return (
+        bool(old_host)
+        and bool(old_resource)
+        and old_host == url_host(new_url)
+        and old_resource == new_resource
+    )
+
+
+def _normalised_name(value: object) -> str:
+    """A name as compared: runs of whitespace collapsed, case folded.
+
+    Exact otherwise, deliberately. No accent folding, no edit distance: a fuzzy
+    match between two children's names is exactly the kind of "close enough"
+    that would let a sibling's -- or a namesake's -- account through.
+    """
+    return " ".join(str(value).split()).casefold()
+
+
+def _followed_names(entry_data: Mapping[str, Any]) -> frozenset[str]:
+    """The children's names an entry has on record, normalised.
+
+    Read from the minted key table (`CHILD_NAME` in each record), which
+    `PronoteAccount._async_pair_children` writes from the names PRONOTE
+    announces -- the same source the probe reads. `CONF_CHILDREN` is not a
+    fallback: it holds resource identifiers, never names, so there is nothing
+    in it to compare with.
+    """
+    names: set[str] = set()
+    for record in entry_data.get(CONF_CHILD_KEYS) or ():
+        if isinstance(record, dict):
+            name = _normalised_name(record.get(CHILD_NAME) or "")
+            if name:
+                names.add(name)
+    return frozenset(names)
+
+
+def _shares_a_followed_child(
+    entry_data: Mapping[str, Any], outcome: Mapping[str, Any]
+) -> bool:
+    """Whether a fresh login reached the family this entry follows.
+
+    The account identity cannot answer this (:func:`_account_identity`), so
+    the children do. A parent login must announce at least one child whose
+    name the entry already records; a pupil's own login, which announces no
+    child, must carry the name of the one child the entry follows.
+
+    An entry with no readable name -- one created before the key table
+    existed and never set up since -- has nothing to compare, and is passed
+    on the establishment check alone rather than refused: refusing it would
+    leave its owner no way to repair it but deleting it, which is the outcome
+    this check exists to prevent. That fallback is weaker, and knowingly so.
+
+    Nothing identifying is logged: the counts say which way the check went,
+    and a child's name must never reach a log a user is asked to attach to a
+    public issue (§8.2).
+    """
+    followed = _followed_names(entry_data)
+    if not followed:
+        return True
+    children = outcome.get(CONF_CHILDREN) or ()
+    if children:
+        announced = {_normalised_name(name) for _, name in children}
+        shared = bool(announced & followed)
+    else:
+        pupil = _normalised_name(outcome.get("account_name") or "")
+        shared = len(followed) == 1 and pupil in followed
+    if not shared:
+        _LOGGER.debug(
+            "the login reached none of the children this entry follows "
+            "(%d announced, %d on record)",
+            len(children) or 1,
+            len(followed),
+        )
+    return shared
+
+
+def _is_same_account(entry: ConfigEntry, outcome: Mapping[str, Any]) -> bool:
+    """The re-authentication identity check: same address, same family."""
+    return _same_account(
+        entry.unique_id, outcome["account_id"]
+    ) and _shares_a_followed_child(entry.data, outcome)
+
+
+#: What a PRONOTE reconfiguration replaces in the entry's data: the keys that
+#: say *how* it connects. Everything else -- the followed children, the minted
+#: child keys, anything the running account persisted -- is kept.
+#:
+#: Dropped from the old data rather than overwritten by the new, because a mode
+#: change does not re-supply every key: an entry moved from ENT to direct
+#: credentials would otherwise keep its `ent` and go on logging in through the
+#: portal it had just been moved off, and one moved off a QR code would keep
+#: the device identity of an enrolment it no longer uses.
+_CONNECTION_KEYS: Final = frozenset(
+    {
+        CONF_LOGIN_MODE,
+        CONF_PRONOTE_URL,
+        "username",
+        "password",
+        CONF_ENT,
+        CONF_UUID,
+        CONF_CLIENT_IDENTIFIER,
+        CONF_DEVICE_NAME,
+    }
+)
 
 
 def _probe(data: dict[str, Any]) -> dict[str, Any]:
@@ -519,8 +661,10 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_QR_PAYLOAD: payload,
                     CONF_QR_PIN: user_input[CONF_QR_PIN],
                     # Must not change between logins, so it is generated once
-                    # here and persisted with the entry.
-                    CONF_UUID: uuid_module.uuid4().hex,
+                    # here and persisted with the entry -- and reused when an
+                    # existing entry is reconfigured, for the reason
+                    # `async_step_reauth_qr` gives.
+                    CONF_UUID: self._reconfigured_uuid() or uuid_module.uuid4().hex,
                     CONF_DEVICE_NAME: user_input.get(CONF_DEVICE_NAME),
                     CONF_ACCOUNT_PIN: user_input.get(CONF_ACCOUNT_PIN),
                 }
@@ -554,7 +698,7 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id=STEP_CREDENTIALS,
-            data_schema=CREDENTIALS_SCHEMA,
+            data_schema=self._suggest(CREDENTIALS_SCHEMA),
             errors=errors,
         )
 
@@ -576,7 +720,7 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self._async_try_login(errors)
 
         return self.async_show_form(
-            step_id=STEP_ENT, data_schema=_ent_schema(), errors=errors
+            step_id=STEP_ENT, data_schema=self._suggest(_ent_schema()), errors=errors
         )
 
     # -- EcoleDirecte ------------------------------------------------------
@@ -597,7 +741,7 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self._async_try_ecoledirecte(errors)
         return self.async_show_form(
             step_id=STEP_ECOLEDIRECTE,
-            data_schema=ECOLEDIRECTE_SCHEMA,
+            data_schema=self._suggest(ECOLEDIRECTE_SCHEMA),
             errors=errors,
         )
 
@@ -626,6 +770,16 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def _async_try_ecoledirecte(self, errors: dict[str, str]) -> ConfigFlowResult:
+        if self.source == SOURCE_RECONFIGURE:
+            # Checked *before* the login, where Home Assistant's own pattern
+            # checks after it: an EcoleDirecte entry's identity is the
+            # identifier typed in this very form, so a different one is known
+            # to be refused before anything is sent, and spending a login on
+            # learning it would draw on a budget for nothing.
+            await self.async_set_unique_id(
+                f"{Source.ECOLEDIRECTE.value}:{self._data['username']}"
+            )
+            self._abort_if_unique_id_mismatch(reason="reconfigure_wrong_account")
         try:
             outcome = await _probe_ecoledirecte(
                 self.hass,
@@ -650,6 +804,15 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
             students = list(outcome["students"])
             if self._reauth_entry is not None:
                 return self._async_finish_ed_reauth(self._reauth_entry)
+            if self.source == SOURCE_RECONFIGURE:
+                entry = self._get_reconfigure_entry()
+                # The proven credentials replace the ones whose failures put
+                # the entry on hold; left in place, that hold would refuse the
+                # very reload that applies the correction.
+                _reset_ed_entry_penalties(self.hass, entry.entry_id)
+                return self._async_finish_ed_reauth(
+                    entry, reason="reconfigure_successful"
+                )
             await self.async_set_unique_id(
                 f"{Source.ECOLEDIRECTE.value}:{self._data['username']}"
             )
@@ -661,7 +824,7 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
             return self._async_create()
         return self.async_show_form(
             step_id=STEP_ECOLEDIRECTE,
-            data_schema=ECOLEDIRECTE_SCHEMA,
+            data_schema=self._suggest(ECOLEDIRECTE_SCHEMA),
             errors=errors,
         )
 
@@ -763,6 +926,12 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
 
             outcome = await self._async_probe(self._data, errors)
             if outcome is not None:
+                # The address and username are the entry's, but the account
+                # behind a username can change hands -- a pupil's login handed
+                # down to a sibling, a parent space reassigned by the school --
+                # and the children are what says who this entry follows.
+                if not _is_same_account(entry, outcome):
+                    return self.async_abort(reason="wrong_account")
                 return self._async_finish_reauth(entry, outcome)
 
         return self.async_show_form(
@@ -828,7 +997,7 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
                     # its devices, its entity ids and its history -- at somebody
                     # else's child, so the identity is checked rather than
                     # assumed.
-                    if not _same_account(entry.unique_id, outcome["account_id"]):
+                    if not _is_same_account(entry, outcome):
                         return self.async_abort(reason="wrong_account")
                     return self._async_finish_reauth(entry, outcome)
 
@@ -879,8 +1048,15 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
             reload_even_if_entry_is_unchanged=False,
         )
 
-    def _async_finish_ed_reauth(self, entry: ConfigEntry) -> ConfigFlowResult:
-        """Persist ED credentials without importing a Pronote probe payload."""
+    def _async_finish_ed_reauth(
+        self, entry: ConfigEntry, *, reason: str = "reauth_successful"
+    ) -> ConfigFlowResult:
+        """Persist ED credentials without importing a Pronote probe payload.
+
+        Shared by re-authentication and reconfiguration, which for EcoleDirecte
+        replace the same three keys. The minted child keys come from the entry
+        and the options are not passed, so both survive either path.
+        """
         merged = {
             **dict(entry.data),
             "username": self._data["username"],
@@ -891,7 +1067,136 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_update_reload_and_abort(
             entry,
             data=persisted,
-            reason="reauth_successful",
+            reason=reason,
+            reload_even_if_entry_is_unchanged=False,
+        )
+
+    # -- reconfiguration ---------------------------------------------------
+
+    async def async_step_reconfigure(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002 -- a menu, not a form
+    ) -> ConfigFlowResult:
+        """Change how an existing entry connects, without removing it.
+
+        Removing and re-adding an entry was the only way to correct an address,
+        switch to the ENT or move to a QR code, and it cost everything attached
+        to the entry: its devices, its entity ids, the automations and the
+        history written against them, the options, the children deliberately
+        left unticked.
+
+        No form of its own. PRONOTE gets the add flow's three-way menu and then
+        the add flow's own steps -- the same schemas, the same probe, the same
+        limiter, the same error messages -- which branch at the very end, in
+        :meth:`_async_try_login`, to :meth:`_async_finish_reconfigure`.
+        EcoleDirecte has one way in and goes straight to its form. A second copy
+        of each form would be a second place for the rules about what is
+        trimmed, what is charged and what is never stored to drift apart.
+        """
+        entry = self._get_reconfigure_entry()
+        if source_from_entry_data(dict(entry.data)) is Source.ECOLEDIRECTE:
+            # The remembered QCM answers go with the attempt, as they do at
+            # every collection: the identifier cannot change (see
+            # `_async_try_ecoledirecte`), so they still belong to this account,
+            # and dropping them would ask a question it has already answered.
+            self._ecoledirecte_qcm = dict(entry.data.get("qcm_json") or {})
+            return await self.async_step_ecoledirecte()
+        return self.async_show_menu(
+            step_id=STEP_RECONFIGURE,
+            menu_options=[STEP_QR_CODE, STEP_CREDENTIALS, STEP_ENT],
+            description_placeholders={
+                "url": public_url(entry.data.get(CONF_PRONOTE_URL))
+            },
+        )
+
+    def _reconfigured_uuid(self) -> str | None:
+        """The device UUID of the entry being reconfigured, if it has one."""
+        if self.source != SOURCE_RECONFIGURE:
+            return None
+        value = self._get_reconfigure_entry().data.get(CONF_UUID)
+        return str(value) if value else None
+
+    def _suggest(self, schema: vol.Schema) -> vol.Schema:
+        """Pre-fill a reused add-flow form with what the entry already holds.
+
+        Only while reconfiguring, and only the address, the username and the
+        portal -- never the password. Suggested values travel to the browser,
+        and on a QR-enrolled entry the stored "password" is the live access
+        token. So a reconfiguration asks for the password again, which is also
+        what proves the person changing the connection knows it.
+
+        The username is not suggested from a QR-enrolled entry either: there it
+        is the enrolment's own login, meaningless on a password form.
+
+        Suggested rather than defaulted: a default is submitted as displayed,
+        and a field emptied by the user would come back filled.
+        """
+        if self.source != SOURCE_RECONFIGURE:
+            return schema
+        stored = self._get_reconfigure_entry().data
+        suggested: dict[str, Any] = {}
+        if stored.get(CONF_PRONOTE_URL):
+            suggested[CONF_PRONOTE_URL] = public_url(stored[CONF_PRONOTE_URL])
+        if stored.get(CONF_LOGIN_MODE) != LoginMode.QR_CODE.value and stored.get(
+            "username"
+        ):
+            suggested["username"] = stored["username"]
+        if stored.get(CONF_ENT):
+            suggested[CONF_ENT] = stored[CONF_ENT]
+        return self.add_suggested_values_to_schema(schema, suggested)
+
+    def _async_finish_reconfigure(self, outcome: dict[str, Any]) -> ConfigFlowResult:
+        """Check the login landed on this entry's account, then apply it.
+
+        The identity check is the one thing reconfiguration adds to the add
+        flow, and the reason it is not ``_abort_if_unique_id_mismatch``: that
+        compares the whole ``unique_id``, which holds the full address and the
+        rotating signature of the PRONOTE resource. It would refuse a corrected
+        path and, on a re-enrolment, the right account with a fresh signature --
+        see :func:`_same_account_on_host`. The stored ``unique_id`` is
+        left as it is, for the reason :func:`_account_identity` gives.
+
+        What is written: the entry's data minus its connection keys, then the
+        new connection, then what the login exported (the fresh token, the
+        client identifier). ``children`` is the entry's, for the reason
+        :meth:`_async_finish_reauth` gives; the options are not passed, so the
+        children selection's budget, the write switch and every tier setting
+        survive untouched. ``_NEVER_PERSISTED`` is applied last.
+        """
+        entry = self._get_reconfigure_entry()
+        if not (
+            _same_account_on_host(entry.unique_id, outcome["account_id"])
+            and _shares_a_followed_child(entry.data, outcome)
+        ):
+            return self.async_abort(reason="reconfigure_wrong_account")
+
+        merged = {
+            key: value
+            for key, value in entry.data.items()
+            if key not in _CONNECTION_KEYS
+        }
+        merged.update(self._data)
+        merged.update(
+            {key: value for key, value in outcome.items() if key != CONF_CHILDREN}
+        )
+        # Trimmed again after the merge: the probe exports the address the
+        # library logged in with, and only the trimmed form may be stored.
+        merged[CONF_PRONOTE_URL] = public_url(merged.get(CONF_PRONOTE_URL))
+        persisted = {
+            key: value
+            for key, value in merged.items()
+            if key not in _NEVER_PERSISTED and value is not None
+        }
+        # The holds a failing entry carries were earned by the parameters this
+        # login has just replaced. Left in place, they would refuse the reload
+        # that applies the correction -- the MFA hold has no other exit at all.
+        clear_login_penalties(self.hass, entry.entry_id)
+        # `reload_even_if_entry_is_unchanged=False` for the reason
+        # `_async_finish_reauth` gives.
+        return self.async_update_reload_and_abort(
+            entry,
+            data=persisted,
+            reason="reconfigure_successful",
             reload_even_if_entry_is_unchanged=False,
         )
 
@@ -902,6 +1207,11 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         outcome = await self._async_probe(self._data, errors)
         if outcome is None:
             return self._async_reshow(errors)
+        if self.source == SOURCE_RECONFIGURE:
+            # Before `async_set_unique_id` below, which belongs to the add
+            # flow: it would abort `already_configured` on the very entry being
+            # reconfigured.
+            return self._async_finish_reconfigure(outcome)
 
         # Everything except `children`, which is deliberately *not* merged.
         #
@@ -935,11 +1245,13 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
             )
         if mode == LoginMode.ENT.value:
             return self.async_show_form(
-                step_id=STEP_ENT, data_schema=_ent_schema(), errors=errors
+                step_id=STEP_ENT,
+                data_schema=self._suggest(_ent_schema()),
+                errors=errors,
             )
         return self.async_show_form(
             step_id=STEP_CREDENTIALS,
-            data_schema=CREDENTIALS_SCHEMA,
+            data_schema=self._suggest(CREDENTIALS_SCHEMA),
             errors=errors,
         )
 

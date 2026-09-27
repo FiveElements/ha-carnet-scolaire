@@ -55,6 +55,9 @@ def probe_account(data: Mapping[str, Any]) -> dict[str, Any]:
     ``children``
         ``(id, name)`` pairs -- empty for a student account, one or more for a
         parent account.
+    ``account_name``
+        The name on the account itself: the pupil's, on a student account. Used
+        only to check a reconnection reached the same child, never persisted.
     ``title``
         What to call the entry.
     the rotated credentials
@@ -271,6 +274,10 @@ def _describe(client: HardenedClient, data: Mapping[str, Any]) -> dict[str, Any]
 
     described: dict[str, Any] = {
         "account_id": _account_id(client, data),
+        # Read by the reconnection identity check on a pupil's own login, which
+        # announces no child; dropped before anything is persisted
+        # (`config_flow._NEVER_PERSISTED`).
+        "account_name": account_name,
         "children": children,
         "title": (
             f"{establishment} - {account_name}" if establishment else account_name

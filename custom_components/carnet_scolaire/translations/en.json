@@ -18,6 +18,15 @@
           "ent": "Federated login (ENT)"
         }
       },
+      "reconfigure": {
+        "title": "Change the PRONOTE connection",
+        "description": "This entry connects to {url}. Choose how it should connect from now on -- the same method to correct the address, the username or the portal, or another one. The next form asks for the password or the QR code again: neither is shown back.\n\nThe new details are tried once before anything is saved, and must open this same account. The children you follow, the options and the history are kept.",
+        "menu_options": {
+          "qr_code": "QR code from the mobile app (recommended)",
+          "credentials": "Username and password",
+          "ent": "Federated login (ENT)"
+        }
+      },
       "qr_code": {
         "title": "Enrol with a QR code",
         "description": "In the PRONOTE mobile app, open the account menu and generate a QR code, choosing a four-digit code when asked.\n\nThe app draws the QR code as a picture, and the field below wants the JSON it encodes. So scan it with a QR code reader — your phone's camera or any scanner app — and share or copy the text it gives you, then paste that text below with the same four-digit code.\n\nA QR code is single-use **and expires within minutes**, so the order matters: open this form first, generate the QR code second, and submit straight away. Generate a new one if this attempt fails -- the old one is spent either way.",
@@ -145,7 +154,9 @@
     "abort": {
       "already_configured": "This account is already configured.",
       "reauth_successful": "Reconnected.",
-      "wrong_account": "That QR code belongs to a different PRONOTE account, so it was not applied: reconnecting this one with it would have pointed it at somebody else's child while keeping this child's name and history. Generate a QR code from the account this entry follows, or add the other account separately."
+      "reconfigure_successful": "Connection updated. The entry is reloading with it; its devices, entities, history and options are unchanged.",
+      "reconfigure_wrong_account": "These details sign in to an account that follows none of this entry's children, so nothing was changed: applying them would have pointed this entry at somebody else's child while keeping this child's name and history. Use the details of the account this entry follows. To follow another account, add it as a new entry.",
+      "wrong_account": "The account this login reached follows none of this entry's children, so nothing was changed: reconnecting with it would have pointed this entry at somebody else's child while keeping this child's name and history. Reconnect with the account this entry follows. To follow another account, add it as a new entry."
     }
   },
   "options": {

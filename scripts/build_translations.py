@@ -206,6 +206,23 @@ CONFIG_EN: dict[str, Any] = {
                 "ent": "Federated login (ENT)",
             },
         },
+        "reconfigure": {
+            "title": "Change the PRONOTE connection",
+            "description": (
+                "This entry connects to {url}. Choose how it should connect "
+                "from now on -- the same method to correct the address, the "
+                "username or the portal, or another one. The next form asks "
+                "for the password or the QR code again: neither is shown "
+                "back.\n\nThe new details are tried once before anything is "
+                "saved, and must open this same account. The children you "
+                "follow, the options and the history are kept."
+            ),
+            "menu_options": {
+                "qr_code": "QR code from the mobile app (recommended)",
+                "credentials": "Username and password",
+                "ent": "Federated login (ENT)",
+            },
+        },
         "qr_code": {
             "title": "Enrol with a QR code",
             "description": (
@@ -505,12 +522,24 @@ CONFIG_EN: dict[str, Any] = {
     "abort": {
         "already_configured": "This account is already configured.",
         "reauth_successful": "Reconnected.",
+        "reconfigure_successful": (
+            "Connection updated. The entry is reloading with it; its devices, "
+            "entities, history and options are unchanged."
+        ),
+        "reconfigure_wrong_account": (
+            "These details sign in to an account that follows none of this "
+            "entry's children, so nothing was changed: applying them would "
+            "have pointed this entry at somebody else's child while keeping "
+            "this child's name and history. Use the details of the account "
+            "this entry follows. To follow another account, add it as a new "
+            "entry."
+        ),
         "wrong_account": (
-            "That QR code belongs to a different PRONOTE account, so it was "
-            "not applied: reconnecting this one with it would have pointed it "
-            "at somebody else's child while keeping this child's name and "
-            "history. Generate a QR code from the account this entry follows, "
-            "or add the other account separately."
+            "The account this login reached follows none of this entry's "
+            "children, so nothing was changed: reconnecting with it would have "
+            "pointed this entry at somebody else's child while keeping this "
+            "child's name and history. Reconnect with the account this entry "
+            "follows. To follow another account, add it as a new entry."
         ),
     },
 }
@@ -537,6 +566,24 @@ CONFIG_FR: dict[str, Any] = {
                 "mobile PRONOTE est le plus fiable : il enrôle ce Home "
                 "Assistant comme appareil et évite de conserver votre mot de "
                 "passe."
+            ),
+            "menu_options": {
+                "qr_code": "QR code de l'application mobile (recommandé)",
+                "credentials": "Identifiant et mot de passe",
+                "ent": "Connexion par l'ENT",
+            },
+        },
+        "reconfigure": {
+            "title": "Modifier la connexion PRONOTE",
+            "description": (
+                "Cette entrée se connecte à {url}. Choisissez comment elle "
+                "doit se connecter désormais : le même mode pour corriger "
+                "l'adresse, l'identifiant ou le portail, ou un autre. Le "
+                "formulaire suivant redemande le mot de passe ou le QR code : "
+                "aucun des deux n'est réaffiché.\n\nLes nouvelles informations "
+                "sont essayées une fois avant tout enregistrement, et doivent "
+                "ouvrir ce même compte. Les enfants suivis, les options et "
+                "l'historique sont conservés."
             ),
             "menu_options": {
                 "qr_code": "QR code de l'application mobile (recommandé)",
@@ -863,12 +910,25 @@ CONFIG_FR: dict[str, Any] = {
     "abort": {
         "already_configured": "Ce compte est déjà configuré.",
         "reauth_successful": "Reconnexion réussie.",
+        "reconfigure_successful": (
+            "Connexion mise à jour. L'entrée se recharge avec elle ; ses "
+            "appareils, entités, historique et options sont inchangés."
+        ),
+        "reconfigure_wrong_account": (
+            "Ces informations ouvrent un compte qui ne suit aucun des enfants "
+            "de cette entrée : rien n'a été modifié. Les appliquer aurait fait "
+            "pointer cette entrée vers l'enfant de quelqu'un d'autre en "
+            "conservant le nom et l'historique de celui-ci. Utilisez les "
+            "informations du compte que suit cette entrée. Pour suivre un "
+            "autre compte, ajoutez-le comme nouvelle entrée."
+        ),
         "wrong_account": (
-            "Ce QR code appartient à un autre compte PRONOTE : il n'a pas été "
-            "appliqué. Reconnecter cette entrée avec lui l'aurait fait pointer "
-            "vers l'enfant de quelqu'un d'autre en conservant le nom et "
-            "l'historique de celui-ci. Générez un QR code depuis le compte "
-            "que suit cette entrée, ou ajoutez l'autre compte séparément."
+            "Le compte atteint par cette connexion ne suit aucun des enfants "
+            "de cette entrée : rien n'a été modifié. S'y reconnecter aurait "
+            "fait pointer cette entrée vers l'enfant de quelqu'un d'autre en "
+            "conservant le nom et l'historique de celui-ci. Reconnectez-vous "
+            "avec le compte que suit cette entrée. Pour suivre un autre "
+            "compte, ajoutez-le comme nouvelle entrée."
         ),
     },
 }
