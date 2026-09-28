@@ -5,10 +5,11 @@
 #
 # Sur quoi elle s'appuie : les déclencheurs d'appareil de l'intégration
 # (device_trigger.py:58, types `lesson_canceled`, `lesson_restored`,
-# `lesson_moved`, `room_changed`, `teacher_changed`, `lesson_status_changed`).
+# `lesson_replaced`, `lesson_moved`, `room_changed`, `teacher_changed`,
+# `lesson_status_changed`).
 # On choisit un appareil d'enfant, pas une entité : les déclencheurs
 # d'appareil sont indépendants de la langue d'installation
-# (docs/SPECIFICATION.md §10.8). Le tri entre les six types se fait avec une
+# (docs/SPECIFICATION.md §10.8). Le tri entre les sept types se fait avec une
 # condition `trigger` native, dont la liste d'identifiants vient directement
 # du sélecteur -- zéro Jinja.
 #
@@ -17,6 +18,12 @@
 # l'automatisation « pas de cours en première heure, dors » le matin où le
 # cours est rétabli (const.py:325). Ici, si « Annulation levée » n'est pas
 # coché, ce cas ne passe jamais.
+#
+# Le second piège : PRONOTE sert un remplacement, un changement de salle
+# et un « cours maintenu » comme le cours d'origine marqué annulé PLUS le
+# cours qui le remplace. L'intégration en fait `lesson_replaced`, jamais
+# `lesson_canceled` : l'enfant a cours. Cochez « Cours remplacé » pour en
+# être prévenu ; le message nomme alors le cours de remplacement.
 #
 # Home Assistant n'offre aucun mécanisme de traduction des blueprints : la
 # version anglaise de ce même blueprint est ../en/lesson_canceled.yaml. La
@@ -76,6 +83,10 @@ blueprint:
                   value: lesson_canceled
                 - label: Annulation levée (le cours a finalement lieu)
                   value: lesson_restored
+                - label: >-
+                    Cours remplacé (remplacement, changement de salle,
+                    cours maintenu)
+                  value: lesson_replaced
                 - label: Cours déplacé
                   value: lesson_moved
                 - label: Changement de salle
@@ -141,6 +152,12 @@ triggers:
     device_id: !input child_device
     type: lesson_restored
     id: lesson_restored
+  - alias: Cours remplacé
+    trigger: device
+    domain: carnet_scolaire
+    device_id: !input child_device
+    type: lesson_replaced
+    id: lesson_replaced
   - alias: Cours déplacé
     trigger: device
     domain: carnet_scolaire
@@ -196,6 +213,7 @@ variables:
     {% set labels = {
       'lesson_canceled': 'annulé',
       'lesson_restored': 'finalement assuré',
+      'lesson_replaced': 'remplacé',
       'lesson_moved': 'déplacé',
       'room_changed': 'change de salle',
       'teacher_changed': 'change de professeur',
@@ -205,8 +223,11 @@ variables:
     {{ (trigger.event.data.attributes.start | as_datetime | as_local).strftime('%H:%M') }}
   title: Emploi du temps modifié
   message: >-
-    {{ trigger.event.data.attributes.subject }} de {{ lesson_at }} :
-    {{ change_label }}.
+    {% set a = trigger.event.data.attributes %}
+    {{ a.subject }} de {{ lesson_at }} : {{ change_label }}
+    {%- if trigger.id == 'lesson_replaced' %} par {{ a.replacement_subject }}
+    {%- if a.replacement_classroom %} en salle {{ a.replacement_classroom }}{% endif %}
+    {%- endif %}.
 
 actions:
   - alias: Exécuter l'action de notification choisie

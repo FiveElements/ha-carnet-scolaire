@@ -472,6 +472,12 @@ EVENT_LESSON_CANCELED: Final = "lesson_canceled"
 #: opposite event -- so an automation that notifies "no school first period,
 #: sleep in" fired on the morning the lesson was reinstated.
 EVENT_LESSON_RESTORED: Final = "lesson_restored"
+#: Cancelled, with another lesson taught on the slot: a substitution, a room
+#: change or a "cours maintenu", which PRONOTE all serve as the original flagged
+#: ``estAnnule`` plus the entry replacing it. The child still has a lesson, so
+#: reporting it as ``lesson_canceled`` announced an absent teacher on a morning
+#: with an evaluation in another room.
+EVENT_LESSON_REPLACED: Final = "lesson_replaced"
 EVENT_LESSON_MOVED: Final = "lesson_moved"
 #: Only the ``Statut`` label moved -- no flag, no time, no room, no teacher.
 #:
@@ -491,6 +497,7 @@ EVENT_EVALUATION_ADDED: Final = "evaluation_added"
 LESSON_EVENT_TYPES: Final = (
     EVENT_LESSON_CANCELED,
     EVENT_LESSON_RESTORED,
+    EVENT_LESSON_REPLACED,
     EVENT_LESSON_MOVED,
     EVENT_ROOM_CHANGED,
     EVENT_TEACHER_CHANGED,

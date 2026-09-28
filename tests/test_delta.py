@@ -28,6 +28,7 @@ from custom_components.carnet_scolaire.const import (
     EVENT_INFORMATION_ADDED,
     EVENT_LESSON_CANCELED,
     EVENT_LESSON_MOVED,
+    EVENT_LESSON_REPLACED,
     EVENT_LESSON_RESTORED,
     EVENT_LESSON_STATUS_CHANGED,
     EVENT_MESSAGE_RECEIVED,
@@ -847,7 +848,21 @@ def test_a_memo_correction_fires_nothing() -> None:
     assert events == []
 
 
-def test_a_substitution_is_not_announced_as_a_cancellation() -> None:
+def _replaced_slot() -> tuple[Lesson, Lesson]:
+    """The original flagged cancelled, and the evaluation taught in its place."""
+    cancelled = a_lesson(id="LESSON-1", num=0, canceled=True, status="Cours annulé")
+    replacement = a_lesson(
+        id="LESSON-2",
+        num=1,
+        subject="Évaluation",
+        subject_id="SUBJECT-EVAL",
+        classrooms=("Salle informatique",),
+        status="Changement de salle",
+    )
+    return cancelled, replacement
+
+
+def test_a_substitution_is_a_replacement_not_a_cancellation() -> None:
     """The child still has a lesson on that slot.
 
     PRONOTE serves the original with ``estAnnule`` set **plus** a replacement
@@ -856,36 +871,101 @@ def test_a_substitution_is_not_announced_as_a_cancellation() -> None:
     another room was announced as an absent teacher.
     """
     detector = DeltaDetector()
-    original = a_lesson(id="LESSON-1", num=0)
-    detector.timetable(
-        STUDENT,
-        TimetableFacts(
-            lessons=(original,), all_lessons=(original,), weeks_fetched=(28,)
-        ),
-    )
+    detector.timetable(STUDENT, timetable(a_lesson(id="LESSON-1", num=0)))
 
-    cancelled = a_lesson(id="LESSON-1", num=0, canceled=True, status="Cours annulé")
-    replacement = a_lesson(
-        id="LESSON-2",
-        num=1,
-        subject="Évaluation",
-        subject_id="SUBJECT-EVAL",
-        status="Cours maintenu",
-    )
+    events = detector.timetable(STUDENT, timetable(*_replaced_slot()))
+
+    assert [event.event_type for event in events] == [EVENT_LESSON_REPLACED]
+    attributes = events[0].attributes
+    assert attributes["subject"] == "Mathématiques"
+    assert attributes["replacement_subject"] == "Évaluation"
+    assert attributes["replacement_classroom"] == "Salle informatique"
+    assert attributes["replacement_status"] == "Changement de salle"
+    assert attributes["replacement_teachers"] == ["Prof. Un"]
+
+
+def test_a_replaced_slot_is_announced_once() -> None:
+    """Nothing about the original is news once another lesson holds its slot."""
+    detector = DeltaDetector()
+    detector.timetable(STUDENT, timetable(a_lesson(id="LESSON-1", num=0)))
+    detector.timetable(STUDENT, timetable(*_replaced_slot()))
+    cancelled, replacement = _replaced_slot()
+
+    relabelled = dataclasses.replace(cancelled, status="Prof. absent")
+
+    assert detector.timetable(STUDENT, timetable(relabelled, replacement)) == []
+
+
+def test_a_cancellation_that_finds_a_replacement_is_reported_as_one() -> None:
+    """Cancelled first, replaced a collection later: the family must hear it."""
+    cancelled, replacement = _replaced_slot()
+    detector = DeltaDetector()
+    detector.timetable(STUDENT, timetable(a_lesson(id="LESSON-1", num=0)))
+    assert [
+        e.event_type for e in detector.timetable(STUDENT, timetable(cancelled))
+    ] == [EVENT_LESSON_CANCELED]
+
+    events = detector.timetable(STUDENT, timetable(cancelled, replacement))
+
+    assert [event.event_type for event in events] == [EVENT_LESSON_REPLACED]
+
+
+def test_a_withdrawn_replacement_leaves_a_cancellation() -> None:
+    """The slot is empty again, and that is the news."""
+    cancelled, replacement = _replaced_slot()
+    detector = DeltaDetector()
+    detector.timetable(STUDENT, timetable(cancelled, replacement))
+
+    events = detector.timetable(STUDENT, timetable(cancelled))
+
+    assert [event.event_type for event in events] == [EVENT_LESSON_CANCELED]
+
+
+def test_a_replaced_lesson_given_back_is_restored() -> None:
+    """The original taught after all: the same transition as any cancellation."""
+    cancelled, replacement = _replaced_slot()
+    detector = DeltaDetector()
+    detector.timetable(STUDENT, timetable(cancelled, replacement))
+
+    events = detector.timetable(STUDENT, timetable(a_lesson(id="LESSON-1", num=0)))
+
+    assert [event.event_type for event in events] == [EVENT_LESSON_RESTORED]
+
+
+def test_the_replacement_shown_is_the_one_pronote_displays() -> None:
+    """Two entries taught on the slot: the higher ``num`` wins, as on screen."""
+    cancelled, replacement = _replaced_slot()
+    later = dataclasses.replace(replacement, id="LESSON-3", num=2, subject="Permanence")
+    detector = DeltaDetector()
+    detector.timetable(STUDENT, timetable(a_lesson(id="LESSON-1", num=0)))
+
+    events = detector.timetable(STUDENT, timetable(cancelled, replacement, later))
+
+    assert events[0].attributes["replacement_subject"] == "Permanence"
+
+
+def test_a_cancelled_replacement_empties_its_slot_once() -> None:
+    """Only a *taught* entry covers a slot, and one empty slot is one event.
+
+    Both entries end up cancelled: the replacement by its own cancellation, the
+    original by losing its cover. Two announcements for one slot is how a
+    family hears "cancelled" twice for the same hour.
+    """
+    cancelled, replacement = _replaced_slot()
+    detector = DeltaDetector()
+    detector.timetable(STUDENT, timetable(cancelled, replacement))
+
     events = detector.timetable(
-        STUDENT,
-        TimetableFacts(
-            lessons=(replacement,),
-            all_lessons=(cancelled, replacement),
-            weeks_fetched=(28,),
-        ),
+        STUDENT, timetable(cancelled, dataclasses.replace(replacement, canceled=True))
     )
 
-    assert events == []
+    assert [(event.event_type, event.attributes["lesson_id"]) for event in events] == [
+        (EVENT_LESSON_CANCELED, "LESSON-2")
+    ]
 
 
 def test_a_cancellation_beside_a_cancelled_neighbour_is_still_announced() -> None:
-    """Only a *taught* entry covers a slot; two cancelled ones leave it empty."""
+    """The neighbour lost its cover too, but the slot empties once."""
     detector = DeltaDetector()
     other = a_lesson(id="LESSON-2", subject="Anglais", canceled=True)
     detector.timetable(STUDENT, timetable(a_lesson(), other))
@@ -1044,6 +1124,12 @@ def test_every_lesson_event_type_is_declared_on_the_entity() -> None:
     detector.forget(STUDENT)
     detector.timetable(STUDENT, timetable(a_lesson(canceled=True)))
     for event in detector.timetable(STUDENT, timetable(a_lesson())):
+        seen.add(event.event_type)
+
+    # `lesson_replaced` needs a second entry, taught on the same slot.
+    detector.forget(STUDENT)
+    detector.timetable(STUDENT, timetable(a_lesson()))
+    for event in detector.timetable(STUDENT, timetable(*_replaced_slot())):
         seen.add(event.event_type)
 
     assert seen == set(LESSON_EVENT_TYPES)

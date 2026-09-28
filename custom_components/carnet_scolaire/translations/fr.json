@@ -533,6 +533,7 @@
             "state": {
               "lesson_canceled": "Un cours a été annulé",
               "lesson_restored": "Un cours annulé est rétabli",
+              "lesson_replaced": "Un cours a été remplacé",
               "lesson_moved": "Un cours a été déplacé",
               "room_changed": "Une salle a changé",
               "teacher_changed": "Un professeur a changé",
@@ -879,6 +880,7 @@
       "homework_added": "Un devoir a été ajouté",
       "lesson_canceled": "Un cours a été annulé",
       "lesson_restored": "Un cours annulé est rétabli",
+      "lesson_replaced": "Un cours a été remplacé",
       "lesson_moved": "Un cours a été déplacé",
       "room_changed": "Une salle a changé",
       "teacher_changed": "Un professeur a changé",

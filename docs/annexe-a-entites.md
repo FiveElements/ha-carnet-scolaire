@@ -543,7 +543,7 @@ la nature du changement ; les attributs portent le contexte.
 | --- | --- | --- | --- |
 | `event.<é>_nouvelle_note` | `grade_added` | `subject`, `grade`, `out_of`, `coefficient`, `date`, `class_average`, `status`, `grade_id` | `marks` |
 | `event.<é>_nouveau_devoir` | `homework_added` | `subject`, `description`, `due`, `id` | `homework` |
-| `event.<é>_cours_modifie` | `lesson_canceled`, `lesson_restored`, `lesson_moved`, `room_changed`, `teacher_changed`, `lesson_status_changed` | `subject`, `start`, `end`, `previous_start`, `previous_end`, `classroom`, `previous_classroom`, `teachers`, `previous_teachers`, `status`, `canceled`, `lesson_id` | `timetable` |
+| `event.<é>_cours_modifie` | `lesson_canceled`, `lesson_restored`, `lesson_replaced`, `lesson_moved`, `room_changed`, `teacher_changed`, `lesson_status_changed` | `subject`, `start`, `end`, `previous_start`, `previous_end`, `classroom`, `previous_classroom`, `teachers`, `previous_teachers`, `status`, `canceled`, `lesson_id` ; sur `lesson_replaced` seulement : `replacement_subject`, `replacement_classroom`, `replacement_teachers`, `replacement_status` | `timetable` |
 | `event.<é>_nouvelle_actualite` | `information_added` | `author`, `title`, `category`, `survey`, `information_id` | `news` |
 | `event.<é>_nouvelle_absence` | `absence_added` | `from_date`, `to_date`, `justified`, `reasons`, `hours`, `days`, `absence_id` | `attendance` |
 | `event.<é>_nouveau_retard` | `delay_added` | `date`, `justified`, `justification`, `reasons`, `minutes`, `delay_id` | `attendance` |

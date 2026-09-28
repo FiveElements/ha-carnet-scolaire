@@ -4,10 +4,10 @@
 # changes room, changes teacher or changes status -- with the time and subject.
 #
 # What it leans on: the integration's device triggers (device_trigger.py:58,
-# types `lesson_canceled`, `lesson_restored`, `lesson_moved`, `room_changed`,
-# `teacher_changed`, `lesson_status_changed`). You pick a child's device, not
+# types `lesson_canceled`, `lesson_restored`, `lesson_replaced`,
+# `lesson_moved`, `room_changed`, `teacher_changed`, `lesson_status_changed`). You pick a child's device, not
 # an entity: device triggers are independent of the installation language
-# (docs/SPECIFICATION.md §10.8). Sorting the six types apart is done with a
+# (docs/SPECIFICATION.md §10.8). Sorting the seven types apart is done with a
 # native `trigger` condition whose id list comes straight from the selector --
 # zero Jinja.
 #
@@ -16,6 +16,12 @@
 # fires the "no first period, sleep in" automation on the very morning the
 # lesson is reinstated (const.py:325). Here, if "Cancellation lifted" is not
 # ticked, that case never gets through.
+#
+# The second trap: PRONOTE serves a substitution, a room change and a
+# "cours maintenu" as the original flagged cancelled PLUS the lesson
+# replacing it. The integration reports that as `lesson_replaced`, never
+# `lesson_canceled`: the child still has a lesson. Tick "Lesson replaced"
+# to hear about it; the message then names the replacement.
 #
 # Home Assistant has no translation mechanism for blueprints: the French
 # version of this very blueprint is ../fr/lesson_canceled.yaml. The duplication
@@ -74,6 +80,10 @@ blueprint:
                   value: lesson_canceled
                 - label: Cancellation lifted (the lesson is back on)
                   value: lesson_restored
+                - label: >-
+                    Lesson replaced (substitution, room change, lesson
+                    kept on)
+                  value: lesson_replaced
                 - label: Lesson moved
                   value: lesson_moved
                 - label: Room changed
@@ -139,6 +149,12 @@ triggers:
     device_id: !input child_device
     type: lesson_restored
     id: lesson_restored
+  - alias: Lesson replaced
+    trigger: device
+    domain: carnet_scolaire
+    device_id: !input child_device
+    type: lesson_replaced
+    id: lesson_replaced
   - alias: Lesson moved
     trigger: device
     domain: carnet_scolaire
@@ -194,6 +210,7 @@ variables:
     {% set labels = {
       'lesson_canceled': 'cancelled',
       'lesson_restored': 'back on after all',
+      'lesson_replaced': 'replaced',
       'lesson_moved': 'moved',
       'room_changed': 'has a new room',
       'teacher_changed': 'has a new teacher',
@@ -203,8 +220,11 @@ variables:
     {{ (trigger.event.data.attributes.start | as_datetime | as_local).strftime('%H:%M') }}
   title: Timetable changed
   message: >-
-    {{ trigger.event.data.attributes.subject }} at {{ lesson_at }}:
-    {{ change_label }}.
+    {% set a = trigger.event.data.attributes %}
+    {{ a.subject }} at {{ lesson_at }}: {{ change_label }}
+    {%- if trigger.id == 'lesson_replaced' %} by {{ a.replacement_subject }}
+    {%- if a.replacement_classroom %} in room {{ a.replacement_classroom }}{% endif %}
+    {%- endif %}.
 
 actions:
   - alias: Run the chosen notification action
