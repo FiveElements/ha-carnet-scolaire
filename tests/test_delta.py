@@ -847,13 +847,13 @@ def test_a_memo_correction_fires_nothing() -> None:
     assert events == []
 
 
-def test_a_substitution_reports_the_cancellation_of_the_original() -> None:
-    """Run over the de-duplicated week, this was literally unobservable.
+def test_a_substitution_is_not_announced_as_a_cancellation() -> None:
+    """The child still has a lesson on that slot.
 
     PRONOTE serves the original with ``estAnnule`` set **plus** a replacement
-    with a higher ``num``; de-duplication keeps the replacement, so the entry
-    carrying the cancellation had been discarded one layer down. The delta
-    therefore reads ``all_lessons``.
+    with a higher ``num`` -- which is also how it serves a room change and a
+    "cours maintenu". Reported as ``lesson_canceled``, a morning evaluation in
+    another room was announced as an absent teacher.
     """
     detector = DeltaDetector()
     original = a_lesson(id="LESSON-1", num=0)
@@ -864,9 +864,13 @@ def test_a_substitution_reports_the_cancellation_of_the_original() -> None:
         ),
     )
 
-    cancelled = a_lesson(id="LESSON-1", num=0, canceled=True)
+    cancelled = a_lesson(id="LESSON-1", num=0, canceled=True, status="Cours annulé")
     replacement = a_lesson(
-        id="LESSON-2", num=1, subject="Anglais", subject_id="SUBJECT-ANGLAIS"
+        id="LESSON-2",
+        num=1,
+        subject="Évaluation",
+        subject_id="SUBJECT-EVAL",
+        status="Cours maintenu",
     )
     events = detector.timetable(
         STUDENT,
@@ -877,7 +881,92 @@ def test_a_substitution_reports_the_cancellation_of_the_original() -> None:
         ),
     )
 
+    assert events == []
+
+
+def test_a_cancellation_beside_a_cancelled_neighbour_is_still_announced() -> None:
+    """Only a *taught* entry covers a slot; two cancelled ones leave it empty."""
+    detector = DeltaDetector()
+    other = a_lesson(id="LESSON-2", subject="Anglais", canceled=True)
+    detector.timetable(STUDENT, timetable(a_lesson(), other))
+
+    events = detector.timetable(STUDENT, timetable(a_lesson(canceled=True), other))
+
     assert [event.event_type for event in events] == [EVENT_LESSON_CANCELED]
+
+
+def test_a_weekly_course_is_not_compared_with_its_sitting_next_week() -> None:
+    """One weekly course carries one ``N`` in both weeks the timetable fetches.
+
+    A map from ``N`` to a single key kept next week's sitting, so every
+    collection compared this week's lesson with it: a move each time, and a
+    cancellation re-announced every twenty minutes for a lesson cancelled this
+    week and not the next.
+    """
+    next_week = a_lesson(
+        id="lesson-next",
+        ref="N-1",
+        start=dt.datetime(2026, 3, 19, 8, 0, tzinfo=PARIS),
+        end=dt.datetime(2026, 3, 19, 9, 0, tzinfo=PARIS),
+    )
+    detector = DeltaDetector()
+    this_week = a_lesson(id="lesson-this", ref="N-1", canceled=True)
+    detector.timetable(STUDENT, timetable(this_week, next_week))
+
+    events = detector.timetable(STUDENT, timetable(this_week, next_week))
+
+    assert events == []
+
+
+def test_a_weekly_course_moved_this_week_is_followed_to_its_new_slot() -> None:
+    """Its twin next week stays put, so the ``N`` still names one vacated slot."""
+    next_week = a_lesson(
+        id="lesson-next",
+        ref="N-1",
+        start=dt.datetime(2026, 3, 19, 8, 0, tzinfo=PARIS),
+        end=dt.datetime(2026, 3, 19, 9, 0, tzinfo=PARIS),
+    )
+    detector = DeltaDetector()
+    detector.timetable(
+        STUDENT, timetable(a_lesson(id="lesson-this", ref="N-1"), next_week)
+    )
+
+    moved = a_lesson(
+        id="lesson-moved",
+        ref="N-1",
+        start=dt.datetime(2026, 3, 12, 14, 0, tzinfo=PARIS),
+        end=dt.datetime(2026, 3, 12, 15, 0, tzinfo=PARIS),
+    )
+    events = detector.timetable(STUDENT, timetable(moved, next_week))
+
+    assert [event.event_type for event in events] == [EVENT_LESSON_MOVED]
+    assert events[0].attributes["previous_start"] == "2026-03-12T08:00:00+01:00"
+
+
+def test_two_vacated_sittings_of_one_course_are_not_guessed_between() -> None:
+    """Both sittings moved at once: the ``N`` no longer says which is which."""
+    detector = DeltaDetector()
+    detector.timetable(
+        STUDENT,
+        timetable(
+            a_lesson(id="lesson-a", ref="N-1"),
+            a_lesson(
+                id="lesson-b",
+                ref="N-1",
+                start=dt.datetime(2026, 3, 19, 8, 0, tzinfo=PARIS),
+                end=dt.datetime(2026, 3, 19, 9, 0, tzinfo=PARIS),
+            ),
+        ),
+    )
+
+    moved = a_lesson(
+        id="lesson-c",
+        ref="N-1",
+        start=dt.datetime(2026, 3, 12, 14, 0, tzinfo=PARIS),
+        end=dt.datetime(2026, 3, 12, 15, 0, tzinfo=PARIS),
+    )
+
+    assert detector.timetable(STUDENT, timetable(moved)) == []
 
 
 @pytest.mark.parametrize(

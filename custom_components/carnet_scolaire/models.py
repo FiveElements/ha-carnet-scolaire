@@ -674,7 +674,9 @@ class TimetableFacts:
     ``estAnnule`` set **plus** a replacement with a higher ``num``, so the
     winner is the replacement -- and running the delta on winners alone made
     the cancellation of the original literally unobservable, because the entry
-    carrying it had been dropped one layer down.
+    carrying it had been dropped one layer down. The detector now also reads
+    it to tell such a *covered* slot, where the child still has a lesson, from
+    an emptied one -- only the second is announced as cancelled.
 
     It costs a few extra objects per week and no extra request.
     """

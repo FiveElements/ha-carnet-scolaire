@@ -143,10 +143,11 @@ class DeltaDetector:
         self._seen_ids: dict[tuple[str, str], set[str]] = {}
         #: Per student, per lesson key: the last signature seen for it.
         self._lesson_signatures: dict[str, dict[str, _LessonMemo]] = {}
-        #: Per student, the session ``N`` -> key map of the last timetable. A
-        #: moved lesson keeps its ``N`` inside one session but not its key,
-        #: which is built from the slot; see :meth:`timetable`.
-        self._lesson_refs: dict[str, dict[str, str]] = {}
+        #: Per student, the session ``N`` -> keys map of the last timetable --
+        #: keys, plural, because one weekly course has one ``N`` for every
+        #: sitting. A moved lesson keeps its ``N`` inside one session but not
+        #: its key, which is built from the slot; see :meth:`timetable`.
+        self._lesson_refs: dict[str, dict[str, list[str]]] = {}
         self._unread: dict[str, dict[str, int]] = {}
 
     # -- generic append-only handling --------------------------------------
@@ -434,6 +435,16 @@ class DeltaDetector:
         login, and pairing on it alone meant a cancellation published across a
         reconnection was compared with nothing and never announced.
 
+        The ``N`` names the *course*, not one sitting of it: the same weekly
+        lesson carries the same ``N`` in both weeks fetched. So the ``N`` only
+        arbitrates when the key cannot -- an entry whose own key is among the
+        entries sharing its ``N`` is paired with itself, and the ``N`` decides
+        only between entries whose slot has gone. A map from ``N`` to one key
+        kept next week's sitting, and every collection compared this week's
+        lessons with their twins seven days on: a move for each of them, a
+        cancellation for each lesson cancelled this week and not the next,
+        re-announced every twenty minutes.
+
         Note what is *not* emitted: an entry appearing for the first time is not
         a change. A newly published timetable week would otherwise fire an
         event for every lesson in it.
@@ -442,9 +453,11 @@ class DeltaDetector:
         previous_refs = self._lesson_refs.get(student_id, {})
         current = {lesson.id: _LessonMemo.of(lesson) for lesson in facts.all_lessons}
         self._lesson_signatures[student_id] = current
-        self._lesson_refs[student_id] = {
-            lesson.ref: lesson.id for lesson in facts.all_lessons if lesson.ref
-        }
+        refs: dict[str, list[str]] = {}
+        for lesson in facts.all_lessons:
+            if lesson.ref:
+                refs.setdefault(lesson.ref, []).append(lesson.id)
+        self._lesson_refs[student_id] = refs
 
         if memos is None:
             _LOGGER.debug(
@@ -457,12 +470,48 @@ class DeltaDetector:
 
         events: list[DeltaEvent] = []
         for lesson in facts.all_lessons:
-            same_session = previous_refs.get(lesson.ref) if lesson.ref else None
-            before = memos.get(same_session or lesson.id)
+            before = memos.get(_previous_key(lesson, previous_refs, current))
             if before is None or before.signature == current[lesson.id].signature:
                 continue
-            events.extend(_lesson_events(lesson, before))
+            events.extend(
+                _lesson_events(lesson, before, covered=_is_covered(lesson, facts))
+            )
         return events
+
+
+def _previous_key(
+    lesson: Lesson, previous_refs: dict[str, list[str]], current: dict[str, Any]
+) -> str:
+    """The key this entry had in the previous timetable.
+
+    Its own key, unless the ``N`` says it came from a slot that has since
+    emptied -- that is a move, and only the ``N`` can see it. Any other answer
+    pairs one sitting of a weekly course with another sitting of the same
+    course, which shares the ``N``.
+    """
+    candidates = previous_refs.get(lesson.ref, []) if lesson.ref else []
+    if not candidates or lesson.id in candidates:
+        return lesson.id
+    vacated = [key for key in candidates if key not in current]
+    return vacated[0] if len(vacated) == 1 else lesson.id
+
+
+def _is_covered(lesson: Lesson, facts: TimetableFacts) -> bool:
+    """Whether another entry, not cancelled, is taught during this one.
+
+    That is how PRONOTE serves a substitution, a room change and a "cours
+    maintenu": the original flagged ``estAnnule`` **plus** the entry that
+    replaces it on the slot. The child still has a lesson then, and announcing
+    the original as cancelled told a family the teacher was absent on a morning
+    the child had an evaluation in another room.
+    """
+    return any(
+        other is not lesson
+        and not other.canceled
+        and other.start < lesson.end
+        and lesson.start < other.end
+        for other in facts.all_lessons
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -498,7 +547,9 @@ class _LessonMemo:
         )
 
 
-def _lesson_events(lesson: Lesson, before: _LessonMemo) -> list[DeltaEvent]:
+def _lesson_events(
+    lesson: Lesson, before: _LessonMemo, *, covered: bool = False
+) -> list[DeltaEvent]:
     """Turn one entry's change into the specific event types it represents.
 
     A single change can legitimately be more than one thing -- a lesson moved
@@ -520,6 +571,12 @@ def _lesson_events(lesson: Lesson, before: _LessonMemo) -> list[DeltaEvent]:
     def emit(event_type: str) -> None:
         events.append(DeltaEvent("lesson_changed", event_type, dict(context)))
 
+    # A cancelled entry whose slot is taught by its replacement is not a
+    # cancellation for anyone reading the event, and not a status change
+    # either -- the status only says what became of the original. See
+    # `_is_covered`.
+    if covered and lesson.canceled:
+        return []
     if lesson.canceled and not before.canceled:
         emit(EVENT_LESSON_CANCELED)
     elif before.canceled and not lesson.canceled:
@@ -546,7 +603,8 @@ def _lesson_events(lesson: Lesson, before: _LessonMemo) -> list[DeltaEvent]:
         emit(EVENT_LESSON_STATUS_CHANGED)
 
     # Every component of `Lesson.change_signature` now maps to a branch above,
-    # so this list cannot come back empty for a lesson whose signature moved.
+    # so this list cannot come back empty for a lesson whose signature moved --
+    # a covered cancellation, which returned early, is the one silence meant.
     # That invariant is *checked*, in `tests/test_delta.py`, rather than
     # guarded by a runtime log nobody reads: adding a field to the signature
     # without adding a branch here fails CI, which is the moment it can still

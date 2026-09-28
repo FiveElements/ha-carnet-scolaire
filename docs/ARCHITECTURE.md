@@ -2311,12 +2311,24 @@ vérifiées :
   inatteignable — un cours déplacé change de clé et se lit comme deux entrées
   distinctes — tandis qu'un décalage de la grille horaire de l'établissement
   déplaçait `start` pour tous les cours de tous les créneaux et déclenchait un
-  `lesson_moved` pour la semaine entière ;
+  `lesson_moved` pour la semaine entière. Le `N` nomme toutefois le **cours**,
+  pas une séance : un cours hebdomadaire porte le même `N` dans les deux
+  semaines collectées. Il ne sert donc qu'à retrouver une séance dont le
+  créneau s'est vidé (`_previous_key`) ; une entrée dont la clé figure parmi
+  celles du `N` est appariée à elle-même. Une table `N` → clé unique gardait la
+  séance de la semaine suivante, et chaque collecte comparait un cours à son
+  jumeau sept jours plus tard : un `lesson_moved` par cours, et un
+  `lesson_canceled` réannoncé toutes les vingt minutes pour un cours annulé
+  cette semaine et pas la suivante ;
 * il tourne sur la semaine **non dédoublonnée** (`facts.all_lessons`), parce
   que sur un remplacement PRONOTE sert l'entrée originale avec `estAnnule`
   *plus* un remplacement au `num` supérieur, et le dédoublonnage garde le
   remplacement — donc l'entrée portant l'annulation avait été écartée une
-  couche plus bas et l'annulation était **inobservable** ;
+  couche plus bas et l'annulation était **inobservable**. Un créneau
+  **couvert** — une autre entrée non annulée y est enseignée — n'émet
+  pourtant pas `lesson_canceled` (`_is_covered`) : c'est ainsi que PRONOTE sert
+  aussi « Changement de salle » et « Cours maintenu », l'enfant a cours, et
+  l'annonce d'une annulation y faisait lire un professeur absent ;
 * `subject_id` est retiré de la clé de dédoublonnage, qui vaut
   `(date, place)` (`models.py`) : l'inclure défaisait le dédoublonnage
   qu'il sert, puisqu'une substitution — le cas pour lequel la règle est écrite —
