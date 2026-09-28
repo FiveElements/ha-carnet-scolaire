@@ -2311,12 +2311,25 @@ vérifiées :
   inatteignable — un cours déplacé change de clé et se lit comme deux entrées
   distinctes — tandis qu'un décalage de la grille horaire de l'établissement
   déplaçait `start` pour tous les cours de tous les créneaux et déclenchait un
-  `lesson_moved` pour la semaine entière ;
+  `lesson_moved` pour la semaine entière. Le `N` nomme toutefois le **cours**,
+  pas une séance : un cours hebdomadaire porte le même `N` dans les deux
+  semaines collectées. Il ne sert donc qu'à retrouver une séance dont le
+  créneau s'est vidé (`_previous_key`) ; une entrée dont la clé figure parmi
+  celles du `N` est appariée à elle-même. Une table `N` → clé unique gardait la
+  séance de la semaine suivante, et chaque collecte comparait un cours à son
+  jumeau sept jours plus tard : un `lesson_moved` par cours, et un
+  `lesson_canceled` réannoncé toutes les vingt minutes pour un cours annulé
+  cette semaine et pas la suivante ;
 * il tourne sur la semaine **non dédoublonnée** (`facts.all_lessons`), parce
   que sur un remplacement PRONOTE sert l'entrée originale avec `estAnnule`
   *plus* un remplacement au `num` supérieur, et le dédoublonnage garde le
   remplacement — donc l'entrée portant l'annulation avait été écartée une
-  couche plus bas et l'annulation était **inobservable** ;
+  couche plus bas et l'annulation était **inobservable**. Un créneau
+  **couvert** — une autre entrée non annulée y est enseignée — n'émet
+  pourtant pas `lesson_canceled` mais `lesson_replaced` (`_replacement`,
+  §12.4) : c'est ainsi que PRONOTE sert aussi « Changement de salle » et
+  « Cours maintenu », l'enfant a cours, et l'annonce d'une annulation y
+  faisait lire un professeur absent ;
 * `subject_id` est retiré de la clé de dédoublonnage, qui vaut
   `(date, place)` (`models.py`) : l'inclure défaisait le dédoublonnage
   qu'il sert, puisqu'une substitution — le cas pour lequel la règle est écrite —
@@ -2333,17 +2346,17 @@ uniquement la **couche sur laquelle le détecteur travaille** qui change : la
 passerelle expose les deux vues, `lessons` dédoublonnée pour l'affichage et
 `all_lessons` pour le delta.
 
-### 12.4 Les types d'événement du cours modifié sont six et non quatre — divergence close
+### 12.4 Les types d'événement du cours modifié sont sept et non quatre — divergence close
 
 Cette divergence est **résolue** dans le même sens que la §12.9 : c'est
 l'annexe qui a bougé, parce que c'est le code qui avait raison.
 
 L'annexe A §4 ne déclarait que quatre `event_types` sur
 `event.<élève>_cours_modifie` : `lesson_canceled`, `lesson_moved`,
-`room_changed`, `teacher_changed`. Le code en déclare **six**
+`room_changed`, `teacher_changed`. Le code en déclare **sept**
 (`LESSON_EVENT_TYPES`, `const.py`), et le tableau de l'annexe les porte
 désormais tous — avec, au passage, les douze attributs de contexte réellement
-émis par `_lesson_context` au lieu de sept. Les deux qui manquaient :
+émis par `_lesson_context` au lieu de sept. Les trois qui manquaient :
 
 * **`lesson_restored`** — une annulation **levée**, le cours est rétabli. Son
   absence est ce qui faisait déclencher `lesson_canceled` pour l'événement
@@ -2358,12 +2371,22 @@ désormais tous — avec, au passage, les douze attributs de contexte réellemen
   simplement pas une annulation, ce qu'il était rapporté comme étant
   (`const.py`).
 
-Corollaire côté automatisations : `TRIGGER_TYPES` (`device_trigger.py`) expose **quatorze**
-types de déclencheur, dont ces deux-là. Chacun n'est proposé — et accepté à la
+* **`lesson_replaced`** — le cours est annulé, mais une autre entrée est
+  enseignée sur son créneau : remplacement, « Changement de salle », « Cours
+  maintenu », que PRONOTE sert tous comme l'original marqué `estAnnule`
+  plus l'entrée qui le remplace (`_replacement`, `delta.py`). L'enfant a
+  cours ; le rapporter en `lesson_canceled` annonçait un professeur absent
+  un matin d'évaluation dans une autre salle. L'évènement ajoute quatre
+  attributs `replacement_*` (`_replacement_context`). Un créneau vidé deux
+  fois — le remplaçant annulé à son tour — ne produit qu'un `lesson_canceled`,
+  celui du remplaçant.
+
+Corollaire côté automatisations : `TRIGGER_TYPES` (`device_trigger.py`) expose **quinze**
+types de déclencheur, dont ces trois-là. Chacun n'est proposé — et accepté à la
 validation — que si la source collecte le palier qui le produit : `TRIGGER_TIER`
 lit ce palier sur les entités `event` (`EVENTS`, `event.py`) plutôt que de le
 redire, si bien qu'une entrée EcoleDirecte, sans actualités, messagerie ni
-évaluations, en reçoit onze.
+évaluations, en reçoit douze.
 
 Ce qui reste à surveiller n'est plus l'annexe mais la **duplication** : la même
 liste vit maintenant dans `const.py`, dans le tableau du § 4.10 du guide et dans

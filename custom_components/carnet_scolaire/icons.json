@@ -260,6 +260,7 @@
             "state": {
               "lesson_canceled": "mdi:calendar-remove",
               "lesson_restored": "mdi:calendar-check",
+              "lesson_replaced": "mdi:swap-horizontal",
               "lesson_moved": "mdi:calendar-arrow-right",
               "room_changed": "mdi:door",
               "teacher_changed": "mdi:human-male-board",

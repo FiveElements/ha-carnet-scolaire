@@ -49,6 +49,7 @@ from .const import (
     EVENT_INFORMATION_ADDED,
     EVENT_LESSON_CANCELED,
     EVENT_LESSON_MOVED,
+    EVENT_LESSON_REPLACED,
     EVENT_LESSON_RESTORED,
     EVENT_LESSON_STATUS_CHANGED,
     EVENT_MESSAGE_RECEIVED,
@@ -67,7 +68,7 @@ if TYPE_CHECKING:
     from .connectors.protocol import ConnectorCapabilities
 
 #: One trigger per event type, not per entity. A user thinking "a room
-#: changed" should not have to know that six different changes share one
+#: changed" should not have to know that seven different changes share one
 #: ``event`` entity (annexe A §4) -- and the count was itself wrong here,
 #: which is the argument for the trigger list: `LESSON_EVENT_TYPES` is the
 #: only place that knows how many there are.
@@ -76,6 +77,7 @@ TRIGGER_TYPES: Final = (
     EVENT_HOMEWORK_ADDED,
     EVENT_LESSON_CANCELED,
     EVENT_LESSON_RESTORED,
+    EVENT_LESSON_REPLACED,
     EVENT_LESSON_MOVED,
     EVENT_ROOM_CHANGED,
     EVENT_TEACHER_CHANGED,

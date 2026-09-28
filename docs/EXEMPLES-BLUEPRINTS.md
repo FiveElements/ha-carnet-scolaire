@@ -88,6 +88,7 @@ YAML**. Effacez le contenu et collez le bloc.
 - [7. Menu de la cantine](#7-menu-de-la-cantine)
 - [8. Retour de l'école](#8-retour-de-lécole)
 - [9. Retour du midi](#9-retour-du-midi)
+- [10. Seulement les vraies heures de retour](#10-seulement-les-vraies-heures-de-retour)
 - [Deux recettes qui ne sont pas des blueprints](#deux-recettes-qui-ne-sont-pas-des-blueprints)
 
 ---
@@ -267,6 +268,7 @@ créneaux sont les bords de la journée.
       - lesson_canceled
       - lesson_restored
       - lesson_moved
+      - lesson_replaced
       - room_changed
       - teacher_changed
       - lesson_status_changed
@@ -280,6 +282,38 @@ créneaux sont les bords de la journée.
 
 Une notification persistante s'empile dans l'interface sans faire sonner un
 téléphone — le bon compromis quand on veut tout voir sans être interrompu.
+
+### Variante : être prévenu des remplacements et des changements de salle
+
+Pour un remplacement, un « Changement de salle » ou un « Cours maintenu »,
+PRONOTE envoie le cours d'origine marqué annulé **et** le cours qui le
+remplace. L'intégration n'en fait **pas** une annulation — l'enfant a cours —
+mais un `lesson_replaced`, qui ne passe que s'il est coché :
+
+```yaml
+    changes:
+      - lesson_canceled
+      - lesson_restored
+      - lesson_replaced
+      - room_changed
+    only_day_edges: false
+    notify_action:
+      - action: notify.mobile_app_telephone
+        data:
+          title: "{{ title }}"
+          message: "{{ message }}"
+```
+
+Le message devient « Mathématiques de 14:00 : remplacé par Eval maths en salle
+informatique. » : le blueprint lit le cours de remplacement dans les attributs
+`replacement_subject` et `replacement_classroom` de l'évènement.
+`room_changed` couvre l'autre cas, celui d'un cours qui change de salle **sans**
+être remplacé.
+
+Sans `lesson_replaced` dans la liste, ces créneaux ne notifient rien du tout —
+c'est le réglage par défaut, et c'est voulu : une annonce « cours annulé »
+un matin où l'enfant a une évaluation dans une autre salle se lit comme un
+professeur absent.
 
 ---
 
@@ -563,6 +597,91 @@ redémarrage de Home Assistant pendant cette attente la perd.
 Les jours sans pause du midi — journée continue, journée qui s'arrête à midi,
 week-end, vacances — le capteur n'a pas de valeur et rien ne s'arme. Une
 journée qui s'arrête à midi relève du blueprint « Retour de l'école ».
+
+---
+
+## 10. Seulement les vraies heures de retour
+
+**Le cas.** Ne pas entendre parler de chaque annulation ou changement de salle,
+mais être prévenu **une fois**, à l'heure réelle, des deux moments où l'enfant
+sort : la fin de la matinée quand il rentre déjeuner, et la fin de la journée.
+Une annulation qui ne change aucune de ces deux heures — un cours de 10h30
+annulé entre deux autres — ne produit rien ; une annulation qui les avance —
+le dernier cours du matin ou de l'après-midi qui saute — déplace l'annonce, et
+le message le dit.
+
+La recette tient en deux automatisations, sans le blueprint « Cours annulé ou
+modifié » :
+
+```yaml
+# 1. Fin de la journée, à l'heure réelle.
+alias: Fin des cours d'Enfant Un
+description: Annonce la vraie fin de journée, annulations comprises.
+use_blueprint:
+  path: FiveElements/end_of_day.yaml
+  input:
+    end_of_lessons_sensor: sensor.enfant_un_fin_des_cours
+    offset:
+      hours: 0
+      minutes: 0
+      seconds: 0
+    only_when_shortened: false
+    earliest_time: "11:00:00"
+    latest_time: "20:00:00"
+    arrival_action:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: person.enfant_un
+            state: home
+      - action: tts.speak
+        target:
+          entity_id: tts.google_translate_fr_fr
+        data:
+          media_player_entity_id: media_player.salon
+          message: "{{ message }}"
+```
+
+```yaml
+# 2. Retour du midi, à l'heure réelle.
+alias: Retour du midi d'Enfant Un
+description: Annonce la vraie fin de matinée, annulations comprises.
+use_blueprint:
+  path: FiveElements/midday_return.yaml
+  input:
+    morning_end_sensor: sensor.enfant_un_fin_de_matinee
+    include_cancellations: true
+    midday_action:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: person.enfant_un
+            state: home
+      - action: tts.speak
+        target:
+          entity_id: tts.google_translate_fr_fr
+        data:
+          media_player_entity_id: media_player.salon
+          message: "{{ message }}"
+```
+
+**Pourquoi c'est « une seule fois ».** Les deux blueprints se déclenchent sur
+l'**heure** portée par un capteur (« Fin des cours », « Fin de matinée »), pas
+sur un évènement de changement. Une annulation publiée dans la journée recule ou
+avance cette heure, et le déclencheur se reprogramme seul ; il ne part qu'une
+fois, quand l'heure arrive. Dix collectes qui revoient la même annulation ne
+changent pas l'heure et ne produisent rien.
+
+**Pourquoi c'est « la vraie heure ».** Les deux capteurs sont calculés sur ce
+que l'enfant a réellement : cours annulés et dispenses exclus, et un créneau
+remplacé — changement de salle, cours maintenu — compté comme un cours, puisque
+l'enfant y est. Un jour où la dernière heure de l'après-midi est une évaluation
+à la place d'un cours annulé, la fin de journée ne bouge pas.
+
+**Ce qu'on retire.** Si une automatisation « Cours annulé ou modifié » existe
+déjà, désactivez-la plutôt que de la supprimer : elle se réactive en un clic le
+jour où l'on veut à nouveau le détail. Les jours sans pause du midi, le
+capteur « Fin de matinée » n'a pas de valeur et seule l'annonce du soir part.
 
 ---
 

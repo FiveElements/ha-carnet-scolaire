@@ -768,7 +768,7 @@ fois par changement détecté et portent ce changement dans leurs attributs.
 | --- | --- | --- |
 | **Nouvelle note** | `grade_added` | `subject`, `grade`, `out_of`, `coefficient`, `date`, `class_average`, `status`, `grade_id` |
 | **Nouveau devoir** | `homework_added` | `subject`, `description`, `due`, `id` |
-| **Cours modifié** | `lesson_canceled`, `lesson_restored`, `lesson_moved`, `room_changed`, `teacher_changed`, `lesson_status_changed` | `subject`, `start`, `end`, `previous_start`, `previous_end`, `classroom`, `previous_classroom`, `teachers`, `previous_teachers`, `status`, `canceled`, `lesson_id` |
+| **Cours modifié** | `lesson_canceled`, `lesson_restored`, `lesson_replaced`, `lesson_moved`, `room_changed`, `teacher_changed`, `lesson_status_changed` | `subject`, `start`, `end`, `previous_start`, `previous_end`, `classroom`, `previous_classroom`, `teachers`, `previous_teachers`, `status`, `canceled`, `lesson_id` ; sur `lesson_replaced` seulement : `replacement_subject`, `replacement_classroom`, `replacement_teachers`, `replacement_status` |
 | **Nouvelle actualité** | `information_added` | `author`, `title`, `category`, `survey`, `information_id` |
 | **Nouvelle absence** | `absence_added` | `from_date`, `to_date`, `justified`, `reasons`, `hours`, `days`, `absence_id` |
 | **Nouveau retard** | `delay_added` | `date`, `justified`, `justification`, `reasons`, `minutes`, `delay_id` |
@@ -785,6 +785,11 @@ Quatre choses à savoir :
   est rétabli, c'est un évènement à part entière. Une automatisation qui annonce
   « pas de cours en première heure » ne se déclenchera pas le matin où le cours
   est rétabli.
+- **Un cours remplacé n'est pas un cours annulé.** Pour un remplacement,
+  un changement de salle ou un « cours maintenu », PRONOTE envoie le cours
+  d'origine marqué annulé **et** le cours qui le remplace. L'enfant a cours :
+  l'intégration émet `lesson_replaced`, avec le cours de remplacement dans
+  les attributs `replacement_*`, et jamais `lesson_canceled`.
 - **Rien n'est rejoué au démarrage.** La première collecte après un redémarrage
   ne produit aucun évènement, sinon chaque redémarrage rejouerait le trimestre.
 - **Huit nouvelles notes font huit évènements**, pas un évènement groupé : une
@@ -1410,11 +1415,11 @@ La liste des appareils proposés **exclut l'appareil du compte** : « un cours a
 ### 9.2 Construire soi-même : les briques disponibles
 
 Si vous préférez écrire votre automatisation, l'éditeur graphique vous propose,
-sur l'appareil d'un enfant, quatorze déclencheurs, dix conditions et deux à
+sur l'appareil d'un enfant, quinze déclencheurs, dix conditions et deux à
 quatre actions — moins sur un appareil EcoleDirecte, où n'est proposé que ce
 que la source peut produire (§ [14.3](#143-les-automatisations-dappareil)).
 
-**Les quatorze déclencheurs** (« Quand… ») :
+**Les quinze déclencheurs** (« Quand… ») :
 
 | Libellé dans l'éditeur | Valeur en YAML |
 | --- | --- |
@@ -1422,6 +1427,7 @@ que la source peut produire (§ [14.3](#143-les-automatisations-dappareil)).
 | Un devoir a été ajouté | `homework_added` |
 | Un cours a été annulé | `lesson_canceled` |
 | Un cours annulé est rétabli | `lesson_restored` |
+| Un cours a été remplacé | `lesson_replaced` |
 | Un cours a été déplacé | `lesson_moved` |
 | Une salle a changé | `room_changed` |
 | Un professeur a changé | `teacher_changed` |

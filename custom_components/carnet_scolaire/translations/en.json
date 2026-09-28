@@ -533,6 +533,7 @@
             "state": {
               "lesson_canceled": "A lesson was cancelled",
               "lesson_restored": "A cancelled lesson is back on",
+              "lesson_replaced": "A lesson was replaced",
               "lesson_moved": "A lesson was moved",
               "room_changed": "A room changed",
               "teacher_changed": "A teacher changed",
@@ -879,6 +880,7 @@
       "homework_added": "Homework was added",
       "lesson_canceled": "A lesson was cancelled",
       "lesson_restored": "A cancelled lesson is back on",
+      "lesson_replaced": "A lesson was replaced",
       "lesson_moved": "A lesson was moved",
       "room_changed": "A room changed",
       "teacher_changed": "A teacher changed",

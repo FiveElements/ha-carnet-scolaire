@@ -1901,6 +1901,11 @@ TRIGGER_TYPES: list[tuple[str, str, str]] = [
         "A cancelled lesson is back on",
         "Un cours annulé est rétabli",
     ),
+    (
+        "lesson_replaced",
+        "A lesson was replaced",
+        "Un cours a été remplacé",
+    ),
     ("lesson_moved", "A lesson was moved", "Un cours a été déplacé"),
     ("room_changed", "A room changed", "Une salle a changé"),
     ("teacher_changed", "A teacher changed", "Un professeur a changé"),
@@ -1966,6 +1971,7 @@ EVENT_TYPES_BY_ENTITY: dict[str, tuple[str, ...]] = {
     "lesson_changed": (
         "lesson_canceled",
         "lesson_restored",
+        "lesson_replaced",
         "lesson_moved",
         "room_changed",
         "teacher_changed",
@@ -2112,6 +2118,7 @@ ENTITY_ICONS: dict[str, dict[str, str | dict[str, Any]]] = {
                     "state": {
                         "lesson_canceled": "mdi:calendar-remove",
                         "lesson_restored": "mdi:calendar-check",
+                        "lesson_replaced": "mdi:swap-horizontal",
                         "lesson_moved": "mdi:calendar-arrow-right",
                         "room_changed": "mdi:door",
                         "teacher_changed": "mdi:human-male-board",
