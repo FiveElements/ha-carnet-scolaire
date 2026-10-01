@@ -91,7 +91,11 @@ def _device_id(hass: HomeAssistant, entry_id: str, identifier: str) -> str:
     registry = dr.async_get(hass)
     device = registry.async_get_device_by_identifier((DOMAIN, identifier), entry_id)
     assert device is not None, f"no device for {identifier}"
-    assert entry_id in device.config_entries
+    # Home Assistant's latest release gives a device one owning entry and
+    # raises on a read of the old `config_entries` set, which the floor still
+    # has. Both are asked for, the new one first.
+    owner = getattr(device, "config_entry_id", None)
+    assert owner == entry_id if owner is not None else entry_id in device.config_entries
     return device.id
 
 
