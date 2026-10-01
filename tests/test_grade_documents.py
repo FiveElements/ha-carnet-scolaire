@@ -144,7 +144,7 @@ def _download(
         period_index=period.index if period_index is None else period_index,  # type: ignore[attr-defined]
         grade_id=grade.id if grade_id is None else grade_id,
         role=role,
-        name="corrige.pdf",
+        name="sujet.pdf" if role is GradeDocumentRole.SUBJECT else "corrige.pdf",
     )
 
 
@@ -255,11 +255,84 @@ def test_a_refused_download_is_an_error_and_not_an_error_page(
     assert refusal.value.status == 403
 
 
-def test_the_two_documents_of_one_grade_have_two_keys() -> None:
-    """A key names a document, so the paper and the answers cannot share one."""
-    assert grade_fingerprint("grade-1", GradeDocumentRole.SUBJECT) != (
-        grade_fingerprint("grade-1", GradeDocumentRole.CORRECTION)
-    )
+def test_a_documents_key_names_the_grade_the_role_and_the_file() -> None:
+    """Paper and answers differ, and so do the answers before and after a fix.
+
+    A grade's document has no identifier of its own and the grade's key
+    ignores its documents, so the file name is what tells a replaced
+    correction from the one it replaced -- and the byte cache is keyed by
+    this fingerprint.
+    """
+    subject = grade_fingerprint("grade-1", GradeDocumentRole.SUBJECT, "sujet.pdf")
+    first = grade_fingerprint("grade-1", GradeDocumentRole.CORRECTION, "corrige.pdf")
+    fixed = grade_fingerprint("grade-1", GradeDocumentRole.CORRECTION, "corrige-v2.pdf")
+
+    assert len({subject, first, fixed}) == 3
+
+
+def test_a_remark_written_after_the_mark_keeps_the_grade(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """The remark is not part of the key: a teacher's comment is not news."""
+    _graded(client)
+    before = _decoded(gateway, client).id
+    _graded(client, remark="Bon travail")
+
+    assert _decoded(gateway, client).id == before
+
+
+def test_replaced_answers_are_not_served_under_the_old_key(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """The relay matches the file this session lists, not just its role.
+
+    A key read before the replacement names ``corrige.pdf``; the new answers
+    are ``corrige-v2.pdf``. Serving the new file under the old key would put
+    it in the cache under a fingerprint that never named it.
+    """
+    _graded(client)
+    grade = _decoded(gateway, client)
+    _graded(client, correction_file="corrige-v2.pdf")
+    period = current_period(gateway, client)
+
+    with pytest.raises(AttachmentUnavailable) as refusal:
+        gateway.grade_document(
+            client,
+            period_index=period.index,  # type: ignore[attr-defined]
+            grade_id=grade.id,
+            role=GradeDocumentRole.CORRECTION,
+            name="corrige.pdf",
+        )
+
+    assert refusal.value.status == 404
+    assert client.communication.session.gets == []
+
+
+def test_a_transport_error_never_carries_the_address(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """``requests`` writes the URL into its message; that must not escape.
+
+    An exception escaping the view is logged with its message, and this
+    message would hold an address that opens the document without
+    credentials. Re-raised bare, as a status.
+    """
+    import requests
+
+    _graded(client)
+
+    def unreachable(url: str) -> None:
+        raise requests.ConnectionError(f"Max retries exceeded with url: {url}")
+
+    client.communication.session.get = unreachable  # type: ignore[method-assign]
+
+    with pytest.raises(AttachmentUnavailable) as refusal:
+        _download(gateway, client)
+
+    assert refusal.value.status == 502
+    assert refusal.value.__cause__ is None
+    assert refusal.value.__suppress_context__
+    assert "FichiersExternes" not in str(refusal.value)
 
 
 # ---------------------------------------------------------------------------
@@ -269,20 +342,53 @@ def test_the_two_documents_of_one_grade_have_two_keys() -> None:
 
 @REQUIRES_HASS
 class TestAGradedTestsDocumentsReachTheCard:
-    """Published as keys, resolved against the marks snapshot, charged honestly."""
+    """Published as keys, resolved against the marks snapshot, charged honestly.
+
+    Each child is served a *different* graded test, so a lookup that ignored
+    the child would be caught: with one shared grade, both children would
+    hold the same key and the cross-child refusal would prove nothing.
+    """
 
     @pytest.fixture(name="parent_client")
     def parent_client_fixture(self) -> FakeClient:
-        """Both children hold one grade with its paper and answers."""
+        """The first child's test has both documents; the second's, other ones."""
         from .fixtures.client import FakeClient
 
         client = FakeClient(children=CHILDREN)
-        _graded(client, remark="Bon travail")
+
+        def per_child(_body: Any) -> dict[str, Any]:
+            if client.selected_child_id == CHILDREN[0][0]:
+                return protocol.marks_response(
+                    grades=[
+                        protocol.grade(
+                            subject_file="sujet.pdf",
+                            correction_file="corrige.pdf",
+                            remark="Bon travail",
+                            in_groups=True,
+                            out_of_20=True,
+                        )
+                    ]
+                )
+            return protocol.marks_response(
+                grades=[
+                    protocol.grade(
+                        identifier="GRADE-2",
+                        comment="Évaluation de grammaire",
+                        subject="Français",
+                        subject_id="SUBJECT-FR",
+                        correction_file="corrige-francais.pdf",
+                    )
+                ]
+            )
+
+        client.responses["DernieresNotes"] = per_child
         return client
 
     @staticmethod
-    def _item(hass: HomeAssistant) -> dict[str, Any]:
-        state = hass.states.get("sensor.enfant_un_grades")
+    def _item(
+        hass: HomeAssistant, entity_id: str = "sensor.enfant_un_grades"
+    ) -> dict[str, Any]:
+        state = hass.states.get(entity_id)
         assert state is not None
         item: dict[str, Any] = state.attributes["items"][0]
         return item
@@ -307,32 +413,77 @@ class TestAGradedTestsDocumentsReachTheCard:
     async def test_every_field_pronote_sends_reaches_the_card(
         self, hass: HomeAssistant, account: PronoteAccount
     ) -> None:
-        """A card should not have to wait for a release to show a field PRONOTE has."""
+        """Read off the attribute with non-default values, so none is hard-coded.
+
+        And no ``subject_id``: on a grade it is the session's ``N`` for the
+        subject, which changes at every login and would rewrite the attribute
+        with nothing new to say.
+        """
         del account
         item = self._item(hass)
 
         assert item["min"] == 4.0
         assert item["max"] == 18.0
         assert item["remark"] == "Bon travail"
-        assert item["subject_id"] == "SUBJECT-MATHS"
-        assert item["subject_in_groups"] is False
+        assert item["subject_in_groups"] is True
+        assert item["is_out_of_20"] is True
         assert item["default_out_of"] == 20.0
-        assert item["is_out_of_20"] is False
+        assert "subject_id" not in item
 
-    async def test_a_published_key_resolves_to_its_document_for_its_child_only(
+    async def test_one_childs_key_names_nothing_for_the_other_child(
         self, hass: HomeAssistant, account: PronoteAccount
     ) -> None:
-        """The marks snapshot is the authority, and the scan holds to one child."""
+        """The scan holds to the child it is given, sibling included."""
         key = self._item(hass)["attachment_refs"][1]["key"]
 
         found = _locate_grade_document(account, key, student_id=CHILDREN[0][0])
 
         assert found is not None
-        student_id, _period_index, _grade_id, document = found
-        assert student_id == CHILDREN[0][0]
-        assert document.role is GradeDocumentRole.CORRECTION
-        assert _locate_grade_document(account, key, student_id="NOT-HERE") is None
-        assert resolve(account, "0" * 16) is None
+        assert found[0] == CHILDREN[0][0]
+        assert found[3].role is GradeDocumentRole.CORRECTION
+        assert _locate_grade_document(account, key, student_id=CHILDREN[1][0]) is None
+        assert resolve(account, key, student_id=CHILDREN[1][0]) is None
+
+    async def test_a_closed_periods_document_is_found_and_read_by_its_position(
+        self, hass: HomeAssistant, account: PronoteAccount
+    ) -> None:
+        """A card shows closed periods too; their documents resolve the same way.
+
+        The closed period is named by its position, the one handle on a period
+        that survives a login, and that is what the relay is handed.
+        """
+        del hass
+        import dataclasses
+        from unittest.mock import patch
+
+        from custom_components.carnet_scolaire.models import HistoryFacts
+
+        current = account.snapshot(Tier.MARKS, CHILDREN[0][0])
+        assert current is not None
+        closed = dataclasses.replace(current.data, period_index=1)
+        history = dataclasses.replace(
+            current,
+            data=HistoryFacts(marks=(closed,), attendance=(), evaluations=()),
+            tier=Tier.HISTORY,
+        )
+        grade = closed.grades[0]
+        document = grade.documents[0]
+        key = grade_fingerprint(grade.id, document.role, document.name)
+        real = account.snapshot
+
+        def only_history(tier: Tier, student_id: str) -> Any:
+            if tier is Tier.HISTORY:
+                return history
+            if tier is Tier.MARKS:
+                return None
+            return real(tier, student_id)
+
+        with patch.object(account, "snapshot", only_history):
+            found = _locate_grade_document(account, key, student_id=CHILDREN[0][0])
+
+        assert found is not None
+        assert found[1] == 1
+        assert found[2] == grade.id
 
     async def test_opening_the_answers_is_charged_two_requests_to_the_limiter(
         self, hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
@@ -353,6 +504,113 @@ class TestAGradedTestsDocumentsReachTheCard:
         assert account.limiter.calls_today - before == 2
         assert parent_client.posted_names.count("DernieresNotes") == reads + 1
         assert len(parent_client.communication.session.gets) == 1
+
+    async def test_a_click_on_the_answers_is_a_gesture(
+        self, hass: HomeAssistant, account: PronoteAccount
+    ) -> None:
+        """Like a homework file: it crosses quiet hours, and nothing more.
+
+        A parent opening the answers at 22:30 is not the automatic collection
+        quiet hours hold back; ``HIGH`` here would refuse them all evening.
+        """
+        from unittest.mock import patch
+
+        from custom_components.carnet_scolaire.const import Priority
+
+        key = self._item(hass)["attachment_refs"][1]["key"]
+        resolved = resolve(account, key, student_id=CHILDREN[0][0])
+        assert resolved is not None
+        assert account.extras is not None
+        seen: list[tuple[str, Priority]] = []
+        original = account.extras.session.run
+
+        async def spy(name: str, priority: Priority, fn: Any, **kwargs: Any) -> Any:
+            seen.append((name, priority))
+            return await original(name, priority, fn, **kwargs)
+
+        with patch.object(account.extras.session, "run", spy):
+            await resolved[1]()
+
+        assert seen == [(str(Tier.MARKS), Priority.GESTURE)]
+
+    async def test_the_view_serves_the_answers_inline_and_once(
+        self, hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
+    ) -> None:
+        """Through the real handler: the name, the bytes, and the cache."""
+        from custom_components.carnet_scolaire.attachment import PronoteAttachmentView
+
+        from .test_attachment import _FakeRequest
+
+        key = self._item(hass)["attachment_refs"][1]["key"]
+        view = PronoteAttachmentView()
+
+        first = await view.get(
+            _FakeRequest(hass),  # type: ignore[arg-type]
+            account.entry.entry_id,
+            key,
+        )
+        second = await view.get(
+            _FakeRequest(hass),  # type: ignore[arg-type]
+            account.entry.entry_id,
+            key,
+        )
+
+        assert first.status == 200
+        assert first.headers["Content-Disposition"] == 'inline; filename="corrige.pdf"'
+        assert second.body == first.body
+        assert len(parent_client.communication.session.gets) == 1
+
+    async def test_a_path_that_is_not_ascii_is_a_404_not_a_traceback(
+        self, hass: HomeAssistant, account: PronoteAccount
+    ) -> None:
+        """``compare_digest`` raises on such a ``str``; the browser sends anything."""
+        from custom_components.carnet_scolaire.attachment import PronoteAttachmentView
+
+        from .test_attachment import _FakeRequest
+
+        response = await PronoteAttachmentView().get(
+            _FakeRequest(hass),  # type: ignore[arg-type]
+            account.entry.entry_id,
+            "é" * 16,
+        )
+
+        assert response.status == 404
+
+    async def test_waiting_is_only_advised_for_a_tier_that_will_collect(
+        self, hass: HomeAssistant, account: PronoteAccount
+    ) -> None:
+        """Marks missing means "wait"; marks switched off means "unknown".
+
+        The card tells the user to wait on `attachment_not_collected`. A tier
+        disabled in the options never collects, so counting it would make that
+        advice permanent and false.
+        """
+        del hass
+        import dataclasses
+        from unittest.mock import PropertyMock, patch
+
+        from custom_components.carnet_scolaire.attachment import pending
+
+        real = account.snapshot
+
+        def no_marks(tier: Tier, student_id: str) -> Any:
+            return None if tier is Tier.MARKS else real(tier, student_id)
+
+        plans = account.scheduler.plans
+        switched_off = {
+            tier: dataclasses.replace(plan, enabled=tier is not Tier.MARKS)
+            for tier, plan in plans.items()
+        }
+
+        with patch.object(account, "snapshot", no_marks):
+            assert pending(account, CHILDREN[0][0]) is True
+            with patch.object(
+                type(account.scheduler),
+                "plans",
+                new_callable=PropertyMock,
+                return_value=switched_off,
+            ):
+                assert pending(account, CHILDREN[0][0]) is False
 
     async def test_a_source_with_no_pronote_session_cannot_download_at_all(
         self, hass: HomeAssistant, account: PronoteAccount

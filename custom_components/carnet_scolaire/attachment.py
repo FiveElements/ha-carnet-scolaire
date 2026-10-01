@@ -82,6 +82,10 @@ if TYPE_CHECKING:
         MarksFacts,
     )
 
+#: The tiers whose snapshots can name a document: homework files, and the
+#: papers and answers of graded tests, current period and closed ones.
+DOCUMENT_TIERS: Final = (Tier.HOMEWORK, Tier.MARKS, Tier.HISTORY)
+
 #: How long a minted address stays usable.
 #:
 #: Five minutes. It used to be twelve hours, and that figure was derived from a
@@ -161,9 +165,16 @@ def fingerprint(homework_id: str, attachment_id: str) -> str:
     return digest.hexdigest()[:_FINGERPRINT_LENGTH]
 
 
-def grade_fingerprint(grade_id: str, role: str) -> str:
-    """Name a graded test's paper or answers: the grade's key and the role."""
-    return fingerprint(grade_id, role)
+def grade_fingerprint(grade_id: str, role: str, name: str) -> str:
+    """Name a graded test's paper or answers: its grade's key, role and file.
+
+    The file name is in it because a grade's document has no identifier of
+    its own, and the grade's key deliberately ignores its documents. Without
+    the name, answers a teacher replaced would keep their key -- and the byte
+    cache, which is keyed by fingerprint and outlives a reload, would go on
+    serving the first file under the second one's name.
+    """
+    return fingerprint(grade_id, f"{role}\x00{name}")
 
 
 def signed_path(hass: HomeAssistant, entry_id: str, print_: str) -> str:
@@ -264,7 +275,7 @@ def _locate(
             for attachment in item.attachments:
                 if attachment.kind is not AttachmentKind.FILE:
                     continue
-                if hmac.compare_digest(fingerprint(item.id, attachment.id), print_):
+                if _same(fingerprint(item.id, attachment.id), print_):
                     return student.id, item.id, attachment
     return None
 
@@ -294,11 +305,38 @@ def _locate_grade_document(
         for marks in periods:
             for grade in marks.grades:
                 for document in grade.documents:
-                    if hmac.compare_digest(
-                        grade_fingerprint(grade.id, document.role), print_
+                    if _same(
+                        grade_fingerprint(grade.id, document.role, document.name),
+                        print_,
                     ):
                         return student.id, marks.period_index, grade.id, document
     return None
+
+
+def _same(fingerprint_: str, print_: str) -> bool:
+    """Compare in constant time, as bytes.
+
+    ``compare_digest`` raises ``TypeError`` on a ``str`` holding anything but
+    ASCII, and the view's path segment is whatever the browser sent -- so a
+    non-ASCII segment would surface as a 500 and a traceback instead of the
+    404 it is.
+    """
+    return hmac.compare_digest(fingerprint_.encode(), print_.encode())
+
+
+def pending(account: PronoteAccount, student_id: str) -> bool:
+    """Whether a tier that can name a document has yet to collect for a child.
+
+    Only scheduled tiers count. A tier switched off in the options never
+    collects, and counting it would turn every unknown key into a "try again
+    in a moment" that is never true.
+    """
+    plans = account.scheduler.plans
+    return any(
+        plan.enabled and not account.has_data(tier, student_id)
+        for tier in DOCUMENT_TIERS
+        if (plan := plans.get(tier)) is not None
+    )
 
 
 def resolve(
@@ -503,7 +541,11 @@ def _ascii(name: str) -> str:
     trusted. The name in the attribute stays the real one -- this is only what
     the browser is told to call the file it saves.
     """
-    cleaned = name.replace('"', "").replace("\\", "")
+    cleaned = "".join(
+        character
+        for character in name
+        if character not in '"\\' and character.isprintable()
+    )
     return cleaned.encode("ascii", "replace").decode("ascii") or "document"
 
 

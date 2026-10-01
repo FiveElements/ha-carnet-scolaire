@@ -38,7 +38,13 @@ from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
-from .attachment import FINGERPRINT_PATTERN, SIGNATURE_LIFETIME, resolve, signed_path
+from .attachment import (
+    FINGERPRINT_PATTERN,
+    SIGNATURE_LIFETIME,
+    pending,
+    resolve,
+    signed_path,
+)
 from .const import (
     AGNOSTIC_SERVICES,
     DOMAIN,
@@ -602,9 +608,9 @@ async def _async_get_attachment_url(call: ServiceCall) -> ServiceResponse:
     Two refusals, and their ``translation_key`` values are a **contract**: a
     card reads them off the error to decide what to tell the user.
 
-    ``attachment_not_collected`` -- the key names nothing yet, and a tier that
-    could name it has no snapshot for this child: the homework, or the marks
-    for a graded test's paper or answers. Typically the first seconds after a
+    ``attachment_not_collected`` -- the key names nothing yet, and a scheduled
+    tier that could name it has no snapshot for this child: the homework, the
+    marks, or the closed periods' marks. Typically the first seconds after a
     restart. Temporary.
 
     ``attachment_unknown`` -- the snapshots exist and the key is not a file in
@@ -614,22 +620,21 @@ async def _async_get_attachment_url(call: ServiceCall) -> ServiceResponse:
     the key exists elsewhere.
 
     Looked up before the snapshots are checked, so a grade's document opens
-    while the homework tier is still collecting, and the other way round. An
-    establishment that publishes no grades never has a marks snapshot, so an
-    unknown key there reads as not collected -- the one case where "temporary"
-    overstates it, and the cheaper error to get wrong.
+    while the homework tier is still collecting, and the other way round. A
+    tier switched off in the options is not waited for. An establishment that
+    publishes no grades never has a marks snapshot, so an unknown key there
+    reads as not collected -- the one case where "temporary" overstates it.
     """
     account, student_id = _resolve_student(call.hass, call)
     _require_service(account, SERVICE_GET_ATTACHMENT_URL)
     key = call.data[ATTR_KEY]
     if resolve(account, key, student_id=student_id) is None:
-        pending = not all(
-            account.has_data(tier, student_id) for tier in (Tier.HOMEWORK, Tier.MARKS)
-        )
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key=(
-                "attachment_not_collected" if pending else "attachment_unknown"
+                "attachment_not_collected"
+                if pending(account, student_id)
+                else "attachment_unknown"
             ),
         )
     expires_at = dt_util.utcnow() + SIGNATURE_LIFETIME

@@ -565,7 +565,7 @@ Un message d'alerte qui traite `unknown` comme une panne reproche à
 l'intégration un choix de l'établissement.
 
 Chaque élément de `items` (pour « Notes ») contient `id`, `subject`,
-`subject_id`, `subject_in_groups`, `value`, `status`, `out_of`,
+`subject_in_groups`, `value`, `status`, `out_of`,
 `default_out_of`, `is_out_of_20`, `coefficient`, `date`, `class_average`,
 `min`, `max`, `comment` (l'intitulé du devoir), `remark` (l'appréciation du
 professeur sur la note), `is_bonus`, `is_optional` et `attachment_refs`.
@@ -2338,7 +2338,7 @@ jour » qui reste vide (§ [10.3](#103-symptôme--cause--remède)).
 | `carnet_scolaire.get_ical_url` | Obtenir l'URL iCal de l'emploi du temps | Oui | Non |
 | `carnet_scolaire.get_identity` | Obtenir l'état civil et les responsables légaux | Oui | Non |
 | `carnet_scolaire.generate_timetable_pdf` | Générer un PDF de l'emploi du temps | Oui | Non |
-| `carnet_scolaire.get_attachment_url` | Obtenir l'adresse d'une pièce jointe de devoir | Oui | Non |
+| `carnet_scolaire.get_attachment_url` | Obtenir l'adresse d'une pièce jointe de devoir, ou du sujet ou du corrigé d'un devoir noté | Oui | Non |
 | `carnet_scolaire.mark_homework_done` | Cocher un devoir | Oui — compte élève, écriture activée | Non |
 | `carnet_scolaire.mark_information_read` | Marquer une actualité comme lue | Oui — écriture activée | Non |
 | `carnet_scolaire.send_message` | Envoyer un message | Oui — écriture activée | Non |

@@ -290,9 +290,12 @@ ouvre encore le document d'un enfant.
 **Exigence.** Le service ne place **aucune requête** vers PRONOTE. Il résout
 `key` contre l'instantané déjà en mémoire et signe avec une clé que Home
 Assistant détient déjà. La requête a lieu à l'ouverture de l'adresse, quand le
-relais va chercher les octets ; ce relais est en `Priority.HIGH`, donc refusé
-entre 22 h et 6 h avec un 503 et un `Retry-After` qui dit quand revenir. Une
-carte qui appelle le service ne déclenche donc toujours aucune collecte.
+relais va chercher les octets ; ce relais est en `Priority.GESTURE`, comme
+tout appel déclenché par une personne : il traverse les heures calmes, et reste
+soumis au plafond journalier, qui le refuse avec un 503 et un `Retry-After` qui
+dit quand revenir. Une carte qui appelle le service ne déclenche donc toujours
+aucune collecte. Tout cela vaut aussi pour le sujet et le corrigé d'un devoir
+noté (§ « Notes »).
 
 **Exigence.** Le service ne résout une clé que pour l'enfant désigné par
 `device_id`. Sur un compte parent une carte détient les clés des deux enfants,
@@ -306,8 +309,8 @@ renommer la ferait retomber, sans bruit, sur un message générique.
 
 | `translation_key` | Ce qu'il signifie | Ce que la carte en dit |
 | --- | --- | --- |
-| `attachment_not_collected` | le palier des devoirs n'a pas encore d'instantané pour cet enfant — typiquement dans les secondes qui suivent un redémarrage | patienter |
-| `attachment_unknown` | l'instantané existe et la clé n'y désigne aucun fichier : le devoir a quitté l'horizon, il a changé, ou la clé appartient à un autre enfant | rafraîchir |
+| `attachment_not_collected` | la clé ne désigne rien, et un palier planifié qui pourrait la désigner — devoirs, notes, périodes closes — n'a pas encore d'instantané pour cet enfant ; typiquement dans les secondes qui suivent un redémarrage | patienter |
+| `attachment_unknown` | les instantanés existent et la clé n'y désigne aucun fichier : le devoir ou la note a quitté l'horizon, a changé, ou la clé appartient à un autre enfant | rafraîchir |
 
 Une clé mal formée — mauvaise longueur, majuscules, chemin — est refusée par le
 schéma avant toute recherche, parce qu'une faute de frappe n'est pas une
@@ -403,7 +406,7 @@ icône, un filtre) doit poser cette association sur une clé, et le nom en est
 une mauvaise : PRONOTE l'écrit en capitales, avec des accents, et un
 établissement peut le renommer en cours d'année.
 
-**`grades[]`** — `id`, `subject`, `subject_id`, `subject_in_groups`,
+**`grades[]`** — `id`, `subject`, `subject_in_groups`,
 **`value`** (et non `grade` — mais la charge de `event.<é>_nouvelle_note` nomme
 cette même valeur `grade` : les deux noms coexistent, `value` dans les
 attributs, `grade` dans l'événement), `status`, `out_of`, `default_out_of`,
@@ -412,7 +415,9 @@ attributs, `grade` dans l'événement), `status`, `out_of`, `default_out_of`,
 `comment` est l'intitulé du devoir, le même pour toute la classe ; `remark` est
 l'appréciation du professeur sur **cette** note (`commentaireSurNote`), nulle
 le plus souvent. `subject_in_groups` dit que la matière est enseignée en
-groupes : `class_average`, `min` et `max` sont alors ceux du groupe.
+groupes (`estServiceGroupe`). Pas de `subject_id` ici : celui que PRONOTE met
+sur une note est le `N` de la séance, qui change à chaque connexion ; une carte
+rapproche une note de sa matière par `subject`.
 `default_out_of` est le barème habituel de la matière et `is_out_of_20` dit
 que PRONOTE ramène la note sur 20 dans la moyenne.
 
@@ -424,7 +429,12 @@ document de devoir noté est toujours un fichier, d'où `kind` toujours `local`,
 et il s'ouvre comme un fichier de devoir : `carnet_scolaire.get_attachment_url`
 signe la `key` au clic, puis le relais relit les notes de la période et
 télécharge le document — deux requêtes, imputées au palier des notes. Aucune
-adresse de PRONOTE n'est publiée. Le sujet et le corrigé n'entrent pas dans la
+adresse de PRONOTE n'est publiée. La `key` dépend aussi du nom du fichier : un
+corrigé remplacé par le professeur reçoit une nouvelle clé, et l'ancienne ne
+désigne plus rien. Deux frères et sœurs qui ont le **même** contrôle — même
+matière, date, barème, coefficient et intitulé — reçoivent la même clé, comme
+pour un devoir identique ; le document servi est alors celui du premier enfant,
+le même sujet en pratique. Le sujet et le corrigé n'entrent pas dans la
 clé de la note : un corrigé déposé une semaine après la note ne la fait pas
 annoncer une seconde fois.
 
@@ -664,7 +674,7 @@ dans aucun état (§8.1 de la spécification).
 | `carnet_scolaire.send_message` | discussion ou destinataires | `Discussion.reply()` / `Client.new_discussion()` | — |
 | `carnet_scolaire.generate_timetable_pdf` | entrée, jour, orientation | rend une URL de PDF | `SupportsResponse.ONLY` |
 | `carnet_scolaire.get_rate_limit_status` | entrée | rend l'état complet du limiteur | `SupportsResponse.ONLY` |
-| `carnet_scolaire.get_attachment_url` | enfant, `key` | rend une adresse signée de cinq minutes vers un fichier de devoir | `SupportsResponse.ONLY` |
+| `carnet_scolaire.get_attachment_url` | enfant, `key` | rend une adresse signée de cinq minutes vers un fichier de devoir, ou le sujet ou le corrigé d'un devoir noté | `SupportsResponse.ONLY` |
 
 **Exigence.** Les services à réponse ne créent aucun état et ne journalisent
 pas leur réponse. `get_ical_url`, `get_identity` et `get_attachment_url`

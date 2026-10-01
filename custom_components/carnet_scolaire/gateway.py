@@ -42,6 +42,7 @@ from zoneinfo import ZoneInfo
 from Crypto.Util import Padding
 from pronotepy import dataClasses
 from pronotepy.exceptions import DataError, ParsingError
+import requests
 
 from . import item_keys
 from .const import (
@@ -286,6 +287,29 @@ def _stamp_homework(items: list[Homework]) -> tuple[Homework, ...]:
 def _lesson_key(lesson: Lesson) -> str:
     """Subject and slot. A cancellation or a room change keeps the key."""
     return item_keys.mint("lesson", lesson.subject, lesson.start, lesson.end)
+
+
+def _download(client: HardenedClient, url: str, name: str) -> tuple[bytes, str | None]:
+    """GET one ``FichiersExternes`` address, and say only *that* it failed.
+
+    Two refusals, and neither may carry the address. A status other than 200
+    is checked here rather than trusted, because ``Attachment.data`` returns
+    the body whatever the status -- an expired session's login page would
+    reach a card as though it were the document. And a transport error is
+    re-raised bare: ``requests`` writes the full URL into its message --
+    ``Max retries exceeded with url: .../FichiersExternes/<hex>/<name>?Session=``
+    -- and an exception escaping the view is logged with that message, which
+    puts an address that opens the document into ``home-assistant.log``.
+    """
+    try:
+        response = client.communication.session.get(url)
+    except requests.RequestException:
+        raise AttachmentUnavailable(name, 502) from None
+    if response.status_code != 200:
+        raise AttachmentUnavailable(name, response.status_code)
+    content: bytes = response.content
+    declared: str | None = response.headers.get("content-type")
+    return content, declared
 
 
 def _external_file_url(
@@ -2160,11 +2184,7 @@ class PronoteGateway:
         attachment = dataClasses.Attachment(
             client, {"L": name, "N": document.ref, "G": _ATTACHMENT_FILE}
         )
-        response = client.communication.session.get(attachment.url)
-        if response.status_code != 200:
-            raise AttachmentUnavailable(name, response.status_code)
-        content: bytes = response.content
-        declared = response.headers.get("content-type")
+        content, declared = _download(client, attachment.url, name)
         return content, declared, 2
 
     def grade_document(
@@ -2199,20 +2219,22 @@ class PronoteGateway:
         grade = next(
             (candidate for candidate in grades if candidate.id == grade_id), None
         )
+        # The role *and* the name, as this session reads them: a teacher who
+        # replaces the answers replaces the file, and the key a card holds
+        # names the file it was shown -- so that key now names nothing, rather
+        # than opening a document the card never listed.
         if (
             grade is None
             or grade.ref is None
-            or not any(document.role is role for document in grade.documents)
+            or GradeDocument(name=name, role=role) not in grade.documents
         ):
             raise AttachmentUnavailable(name, 404)
         genre = next(genre for known, _key, genre in _GRADE_DOCUMENTS if known is role)
-        response = client.communication.session.get(
-            _external_file_url(client, ref=grade.ref, name=name, genre=genre)
+        content, declared = _download(
+            client,
+            _external_file_url(client, ref=grade.ref, name=name, genre=genre),
+            name,
         )
-        if response.status_code != 200:
-            raise AttachmentUnavailable(name, response.status_code)
-        content: bytes = response.content
-        declared = response.headers.get("content-type")
         return content, declared, 2
 
     def timetable_pdf_url(

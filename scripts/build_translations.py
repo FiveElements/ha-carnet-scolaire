@@ -1495,21 +1495,25 @@ EXCEPTIONS: list[tuple[str, str, str]] = [
     ),
     (
         "attachment_not_collected",
-        "Homework has not been collected for this child yet. Try again in a moment.",
         (
-            "Les devoirs de cet enfant n'ont pas encore été collectés. Réessayez "
-            "dans un instant."
+            "This child's homework or grades have not been collected yet. Try "
+            "again in a moment."
+        ),
+        (
+            "Les devoirs ou les notes de cet enfant n'ont pas encore été "
+            "collectés. Réessayez dans un instant."
         ),
     ),
     (
         "attachment_unknown",
         (
-            "No homework file with this key is known for this child. Refresh the "
-            "dashboard: the homework may have changed."
+            "No document with this key is known for this child. Refresh the "
+            "dashboard: the homework or the grade may have changed."
         ),
         (
-            "Aucun fichier de devoir ne correspond à cette clé pour cet enfant. "
-            "Rafraîchissez le tableau de bord : le devoir a peut-être changé."
+            "Aucun document ne correspond à cette clé pour cet enfant. "
+            "Rafraîchissez le tableau de bord : le devoir ou la note a peut-être "
+            "changé."
         ),
     ),
     (

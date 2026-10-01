@@ -768,10 +768,10 @@
       "message": "This account follows several children ({children}). Target the child's device rather than the account."
     },
     "attachment_not_collected": {
-      "message": "Homework has not been collected for this child yet. Try again in a moment."
+      "message": "This child's homework or grades have not been collected yet. Try again in a moment."
     },
     "attachment_unknown": {
-      "message": "No homework file with this key is known for this child. Refresh the dashboard: the homework may have changed."
+      "message": "No document with this key is known for this child. Refresh the dashboard: the homework or the grade may have changed."
     },
     "subject_required": {
       "message": "A subject is required to start a new discussion."

@@ -793,7 +793,6 @@ def _grade_dict(grade: Any) -> dict[str, Any]:
     return {
         "id": grade.id,
         "subject": grade.subject,
-        "subject_id": grade.subject_id,
         "subject_in_groups": grade.subject_in_groups,
         "value": grade.value,
         "status": str(grade.status) if grade.status else None,
@@ -817,7 +816,7 @@ def _grade_dict(grade: Any) -> dict[str, Any]:
             {
                 "name": document.name,
                 "kind": "local",
-                "key": grade_fingerprint(grade.id, document.role),
+                "key": grade_fingerprint(grade.id, document.role, document.name),
                 "role": str(document.role),
             }
             for document in grade.documents
