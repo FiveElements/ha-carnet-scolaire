@@ -1230,7 +1230,11 @@ class TestTheAttachmentAddressIsMintedOnClick:
 
     @pytest.fixture(name="parent_client")
     def parent_client_fixture(self) -> FakeClient:
-        """One file and one link for the first child, one file for the second."""
+        """One file and one link for the first child, one file for the second.
+
+        And a grade whose answers were joined, for the one test that opens a
+        graded test's document.
+        """
         client = FakeClient(children=CHILDREN)
 
         def per_child(_body: Any) -> dict[str, Any]:
@@ -1251,6 +1255,9 @@ class TestTheAttachmentAddressIsMintedOnClick:
             )
 
         client.responses["PageCahierDeTexte"] = per_child
+        client.responses["DernieresNotes"] = protocol.marks_response(
+            grades=[protocol.grade(correction_file="corrige.pdf")]
+        )
         return client
 
     @staticmethod
@@ -1414,12 +1421,37 @@ class TestTheAttachmentAddressIsMintedOnClick:
         key = self._key(hass, "sensor.enfant_un_homework_to_do", "local")
 
         with (
-            patch.object(account, "has_data", return_value=False),
+            patch.object(account, "snapshot", return_value=None),
             pytest.raises(ServiceValidationError) as raised,
         ):
             await self._call(hass, mock_entry, STUDENT_ONE, key)
 
         assert raised.value.translation_key == "attachment_not_collected"
+
+    async def test_a_graded_tests_answers_are_minted_an_address_like_a_file(
+        self,
+        hass: HomeAssistant,
+        mock_entry: MockConfigEntry,
+        account: PronoteAccount,
+        parent_client: FakeClient,
+    ) -> None:
+        """One service for every document, so a card has one way to open one.
+
+        A grade's key resolves against the marks snapshot, and is signed the
+        same way, for the same five minutes, with no request placed.
+        """
+        del account
+        state = hass.states.get("sensor.enfant_un_grades")
+        assert state is not None
+        (ref,) = state.attributes["items"][0]["attachment_refs"]
+        posts = len(parent_client.posted_names)
+
+        response = await self._call(hass, mock_entry, STUDENT_ONE, ref["key"])
+
+        assert response["url"].startswith(
+            f"/api/{DOMAIN}/attachment/{mock_entry.entry_id}/{ref['key']}?authSig="
+        )
+        assert len(parent_client.posted_names) == posts
 
     @pytest.mark.parametrize(
         "key",

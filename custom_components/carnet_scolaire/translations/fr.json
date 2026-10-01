@@ -738,7 +738,7 @@
     },
     "get_attachment_url": {
       "name": "Obtenir l'adresse d'une pièce jointe",
-      "description": "Renvoie dans la réponse une adresse de courte durée qui ouvre un fichier de devoir. Ne coûte aucun appel : le document n'est téléchargé qu'à l'ouverture de l'adresse.",
+      "description": "Renvoie dans la réponse une adresse de courte durée qui ouvre un fichier de devoir, ou le sujet ou le corrigé d'un devoir noté. Ne coûte aucun appel : le document n'est téléchargé qu'à l'ouverture de l'adresse.",
       "fields": {
         "device_id": {
           "name": "Enfant",

@@ -738,7 +738,7 @@
     },
     "get_attachment_url": {
       "name": "Get an attachment's address",
-      "description": "Returns, in the response, a short-lived address that opens one homework file. Costs no request: the document is fetched only when the address is opened.",
+      "description": "Returns, in the response, a short-lived address that opens one homework file, or the paper or answers of a graded test. Costs no request: the document is fetched only when the address is opened.",
       "fields": {
         "device_id": {
           "name": "Child",

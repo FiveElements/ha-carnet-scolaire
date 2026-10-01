@@ -564,9 +564,17 @@ un cas normal, certains établissements ne publient aucune statistique de classe
 Un message d'alerte qui traite `unknown` comme une panne reproche à
 l'intégration un choix de l'établissement.
 
-Chaque élément de `items` (pour « Notes ») contient `id`, `subject`, `value`,
-`status`, `out_of`, `coefficient`, `date`, `class_average`, `min`, `max`,
-`comment`, `is_bonus` et `is_optional`.
+Chaque élément de `items` (pour « Notes ») contient `id`, `subject`,
+`subject_id`, `subject_in_groups`, `value`, `status`, `out_of`,
+`default_out_of`, `is_out_of_20`, `coefficient`, `date`, `class_average`,
+`min`, `max`, `comment` (l'intitulé du devoir), `remark` (l'appréciation du
+professeur sur la note), `is_bonus`, `is_optional` et `attachment_refs`.
+
+**Le sujet et le corrigé d'un devoir noté.** Quand le professeur les a joints,
+`attachment_refs` les liste, chacun avec son `role` : `subject` ou
+`correction`. Ils s'ouvrent exactement comme une pièce jointe de devoir, par
+l'action `carnet_scolaire.get_attachment_url` avec la `key` de l'entrée. La
+plupart des notes n'en ont aucun : une liste vide est normale.
 
 ### 4.4 Les périodes closes
 

@@ -403,11 +403,32 @@ icône, un filtre) doit poser cette association sur une clé, et le nom en est
 une mauvaise : PRONOTE l'écrit en capitales, avec des accents, et un
 établissement peut le renommer en cours d'année.
 
-**`grades[]`** — `id`, `subject`, **`value`** (et non `grade` — mais la charge
-de `event.<é>_nouvelle_note` nomme cette même valeur `grade` : les deux noms
-coexistent, `value` dans les attributs, `grade` dans l'événement), `status`,
-`out_of`, `coefficient`, `date`, `class_average`, `min`, `max`, `comment`,
-`is_bonus`, `is_optional`. `value` et `status` sont **exclusifs** (§4.3) :
+**`grades[]`** — `id`, `subject`, `subject_id`, `subject_in_groups`,
+**`value`** (et non `grade` — mais la charge de `event.<é>_nouvelle_note` nomme
+cette même valeur `grade` : les deux noms coexistent, `value` dans les
+attributs, `grade` dans l'événement), `status`, `out_of`, `default_out_of`,
+`is_out_of_20`, `coefficient`, `date`, `class_average`, `min`, `max`,
+`comment`, `remark`, `is_bonus`, `is_optional`, `attachment_refs[]`.
+`comment` est l'intitulé du devoir, le même pour toute la classe ; `remark` est
+l'appréciation du professeur sur **cette** note (`commentaireSurNote`), nulle
+le plus souvent. `subject_in_groups` dit que la matière est enseignée en
+groupes : `class_average`, `min` et `max` sont alors ceux du groupe.
+`default_out_of` est le barème habituel de la matière et `is_out_of_20` dit
+que PRONOTE ramène la note sur 20 dans la moyenne.
+
+`attachment_refs[]` porte le **sujet** et le **corrigé** que le professeur a
+joints au devoir — au plus un de chaque, et une liste vide est le cas
+ordinaire. Même forme que sur les devoirs, plus le rôle :
+`{"name", "kind": "local", "key", "role": "subject" | "correction"}`. Un
+document de devoir noté est toujours un fichier, d'où `kind` toujours `local`,
+et il s'ouvre comme un fichier de devoir : `carnet_scolaire.get_attachment_url`
+signe la `key` au clic, puis le relais relit les notes de la période et
+télécharge le document — deux requêtes, imputées au palier des notes. Aucune
+adresse de PRONOTE n'est publiée. Le sujet et le corrigé n'entrent pas dans la
+clé de la note : un corrigé déposé une semaine après la note ne la fait pas
+annoncer une seconde fois.
+
+`value` et `status` sont **exclusifs** (§4.3) :
 l'un des deux est nul. C'est ce qui permet à l'état de
 `sensor.<é>_derniere_note` d'être numérique — donc utilisable par un
 `numeric_state` et par un graphe — au lieu d'être tantôt `14.5` tantôt

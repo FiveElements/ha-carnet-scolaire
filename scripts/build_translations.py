@@ -1421,13 +1421,15 @@ SERVICES: list[dict[str, Any]] = [
         "name_fr": "Obtenir l'adresse d'une pièce jointe",
         "description_en": (
             "Returns, in the response, a short-lived address that opens one "
-            "homework file. Costs no request: the document is fetched only "
-            "when the address is opened."
+            "homework file, or the paper or answers of a graded test. Costs "
+            "no request: the document is fetched only when the address is "
+            "opened."
         ),
         "description_fr": (
             "Renvoie dans la réponse une adresse de courte durée qui ouvre un "
-            "fichier de devoir. Ne coûte aucun appel : le document n'est "
-            "téléchargé qu'à l'ouverture de l'adresse."
+            "fichier de devoir, ou le sujet ou le corrigé d'un devoir noté. "
+            "Ne coûte aucun appel : le document n'est téléchargé qu'à "
+            "l'ouverture de l'adresse."
         ),
         "fields": [
             ("device_id", "Child", "Enfant", "", ""),

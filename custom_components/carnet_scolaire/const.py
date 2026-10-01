@@ -427,6 +427,19 @@ class AttachmentKind(StrEnum):
     OPAQUE = "opaque"
 
 
+class GradeDocumentRole(StrEnum):
+    """What a document joined to a graded test *is*: its paper or its answers.
+
+    PRONOTE names the two in separate keys of a ``listeDevoirs`` entry --
+    ``libelleSujet`` and ``libelleCorrige`` -- and serves each under its own
+    file type, so the role is not a label read off the file name: it is which
+    of the two keys carried it, and it decides how the file is fetched.
+    """
+
+    SUBJECT = "subject"
+    CORRECTION = "correction"
+
+
 class GradeStatus(StrEnum):
     """The eight grade sentinels, plus one the protocol has not sent yet.
 

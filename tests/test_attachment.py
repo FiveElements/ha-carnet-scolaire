@@ -895,7 +895,7 @@ class TestHowARefusalIsAnswered:
             )
 
         assert response.status == 404
-        assert "link" in response.text
+        assert "no such document" in response.text
 
 
 class _FakeRequest:
