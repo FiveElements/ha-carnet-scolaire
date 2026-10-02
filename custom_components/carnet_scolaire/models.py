@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from .const import AttachmentKind, GradeStatus, Tier
+from .const import AttachmentKind, GradeDocumentRole, GradeStatus, Tier
 
 # ---------------------------------------------------------------------------
 # Timetable
@@ -229,6 +229,22 @@ class Homework:
 
 
 @dataclass(frozen=True, slots=True)
+class GradeDocument:
+    """The paper or the answers of one graded test, as a teacher joined them.
+
+    Only a name and a role. A grade's document has no identifier of its own:
+    PRONOTE fetches it by the *grade's* ``N`` and a file type that says which
+    of the two it is (`PronoteGateway.grade_document`). That ``N`` is
+    re-encrypted by every login, so nothing here could open the document
+    anyway -- the relay re-reads the grades in its own session first, as it
+    does for homework.
+    """
+
+    name: str
+    role: GradeDocumentRole
+
+
+@dataclass(frozen=True, slots=True)
 class Grade:
     """One grade.
 
@@ -261,6 +277,17 @@ class Grade:
     #: :mod:`.item_keys`). ``None`` for a connector whose identifiers are
     #: already stable.
     ref: str | None = None
+    #: The test's paper and answers, when a teacher joined them -- at most one
+    #: of each, in that order. Not part of the grade's key: answers posted a
+    #: week after the mark are the same grade, not a new one to announce.
+    documents: tuple[GradeDocument, ...] = ()
+    #: The teacher's remark on *this student's* mark (``commentaireSurNote``),
+    #: distinct from ``comment``, which titles the test for the whole class.
+    #: Not part of the key either: it is written after the mark, like the value.
+    remark: str | None = None
+    #: Whether the subject is taught in groups (``estServiceGroupe``), which is
+    #: when ``class_average`` is the group's rather than the class's.
+    subject_in_groups: bool = False
 
     def __post_init__(self) -> None:
         """Enforce the exclusivity the docstring promises.

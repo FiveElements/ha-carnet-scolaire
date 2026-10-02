@@ -10,9 +10,10 @@ reach a state, an attribute, the recorder or a diagnostics download -- the rule
 §8.2 established for the iCal URL. What is published is a signed path to this
 integration's own view, which relays the bytes.
 
-**The cost.** The download is the one fetch in the whole integration that does
-not go through ``ClientBase.post``, so the limiter cannot see it unless the
-caller declares it. A missing declaration would spend budget invisibly, which
+**The cost.** The download is one of the two fetches in the whole integration
+that do not go through ``ClientBase.post`` -- the other is a graded test's
+document, ``tests/test_grade_documents.py`` -- so the limiter cannot see it
+unless the caller declares it. A missing declaration would spend budget invisibly, which
 is the class of defect this project exists to prevent (§11.1).
 """
 
@@ -421,7 +422,7 @@ class TestWhatTheViewWillServe:
     async def test_the_download_is_charged_to_the_limiter(
         self, hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
     ) -> None:
-        """The one fetch that bypasses ``ClientBase.post``.
+        """A fetch that bypasses ``ClientBase.post``.
 
         ``Attachment.data`` goes straight to ``communication.session.get``, so
         nothing in the hardened client counts it. If the caller stopped
@@ -866,7 +867,7 @@ class TestHowARefusalIsAnswered:
         assert response.status == 404
 
     async def test_a_link_is_not_relayed_through_the_school_session(
-        self, hass: HomeAssistant, account: PronoteAccount
+        self, hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
     ) -> None:
         """A link has its own address and the dashboard was given it directly.
 
@@ -895,7 +896,9 @@ class TestHowARefusalIsAnswered:
             )
 
         assert response.status == 404
-        assert "link" in response.text
+        assert "no such document" in response.text
+        # Refused before the wire: the school was never asked for a link.
+        assert parent_client.communication.session.gets == []
 
 
 class _FakeRequest:
@@ -930,6 +933,11 @@ class _FakeRequest:
         pytest.param("Énoncé été.pdf", "?nonc? ?t?.pdf", id="accents-reduced"),
         pytest.param("Éé", "??", id="a-name-that-survives-as-marks"),
         pytest.param('""', "document", id="nothing-left-is-still-a-filename"),
+        pytest.param(
+            "sujet" + chr(13) + chr(10) + "X-Injected: 1.pdf",
+            "sujetX-Injected: 1.pdf",
+            id="no-line-break",
+        ),
     ],
 )
 def test_the_download_filename_is_reduced_to_something_a_header_can_carry(

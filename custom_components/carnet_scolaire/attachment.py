@@ -1,4 +1,9 @@
-"""Serving a homework document without ever publishing PRONOTE's address.
+"""Serving a school document without ever publishing PRONOTE's address.
+
+Two kinds of document go through here: a file joined to a homework entry, and
+the paper or the answers joined to a graded test (`GradeDocument`). Everything
+below is written about the first and holds for the second; where they differ
+-- how one is found in a snapshot, how it is fetched -- the function says so.
 
 A homework attachment comes in two kinds and only one of them has an address
 that means anything outside the session that fetched it (see
@@ -64,10 +69,22 @@ from .gateway import AttachmentUnavailable
 from .ratelimit import TierDeferred
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from homeassistant.core import HomeAssistant
 
     from .account import PronoteAccount
-    from .models import HomeworkAttachment, HomeworkFacts
+    from .models import (
+        GradeDocument,
+        HistoryFacts,
+        HomeworkAttachment,
+        HomeworkFacts,
+        MarksFacts,
+    )
+
+#: The tiers whose snapshots can name a document: homework files, and the
+#: papers and answers of graded tests, current period and closed ones.
+DOCUMENT_TIERS: Final = (Tier.HOMEWORK, Tier.MARKS, Tier.HISTORY)
 
 #: How long a minted address stays usable.
 #:
@@ -140,9 +157,24 @@ def fingerprint(homework_id: str, attachment_id: str) -> str:
     identifiers are unique per account in practice, but the pair is what the
     lookup actually resolves, and a digest that matched two homework entries
     would serve one child's document from the other's row.
+
+    A graded test's document is named by its grade's key and its role
+    (`grade_fingerprint`): it has no identifier of its own.
     """
     digest = hashlib.sha256(f"{homework_id}\x00{attachment_id}".encode())
     return digest.hexdigest()[:_FINGERPRINT_LENGTH]
+
+
+def grade_fingerprint(grade_id: str, role: str, name: str) -> str:
+    """Name a graded test's paper or answers: its grade's key, role and file.
+
+    The file name is in it because a grade's document has no identifier of
+    its own, and the grade's key deliberately ignores its documents. Without
+    the name, answers a teacher replaced would keep their key -- and the byte
+    cache, which is keyed by fingerprint and outlives a reload, would go on
+    serving the first file under the second one's name.
+    """
+    return fingerprint(grade_id, f"{role}\x00{name}")
 
 
 def signed_path(hass: HomeAssistant, entry_id: str, print_: str) -> str:
@@ -243,13 +275,102 @@ def _locate(
             for attachment in item.attachments:
                 if attachment.kind is not AttachmentKind.FILE:
                     continue
-                if hmac.compare_digest(fingerprint(item.id, attachment.id), print_):
+                if _same(fingerprint(item.id, attachment.id), print_):
                     return student.id, item.id, attachment
     return None
 
 
+def _locate_grade_document(
+    account: PronoteAccount, print_: str, *, student_id: str | None = None
+) -> tuple[str, int, str, GradeDocument] | None:
+    """Find the graded-test document one fingerprint names.
+
+    Its child, the period its grade belongs to -- by position, the handle on a
+    period that survives a login -- its grade and itself. Scanned in the
+    current period's marks and in the closed periods', since a card shows
+    both. ``student_id`` scopes the scan exactly as it does in `_locate`.
+    """
+    students = (
+        [student for student in account.students if student.id == student_id]
+        if student_id is not None
+        else account.students
+    )
+    for student in students:
+        periods: list[MarksFacts] = []
+        if (current := account.snapshot(Tier.MARKS, student.id)) is not None:
+            periods.append(current.data)
+        if (closed := account.snapshot(Tier.HISTORY, student.id)) is not None:
+            history: HistoryFacts = closed.data
+            periods.extend(history.marks)
+        for marks in periods:
+            for grade in marks.grades:
+                for document in grade.documents:
+                    if _same(
+                        grade_fingerprint(grade.id, document.role, document.name),
+                        print_,
+                    ):
+                        return student.id, marks.period_index, grade.id, document
+    return None
+
+
+def _same(fingerprint_: str, print_: str) -> bool:
+    """Compare in constant time, as bytes.
+
+    ``compare_digest`` raises ``TypeError`` on a ``str`` holding anything but
+    ASCII, and the view's path segment is whatever the browser sent -- so a
+    non-ASCII segment would surface as a 500 and a traceback instead of the
+    404 it is.
+    """
+    return hmac.compare_digest(fingerprint_.encode(), print_.encode())
+
+
+def pending(account: PronoteAccount, student_id: str) -> bool:
+    """Whether a tier that can name a document has yet to collect for a child.
+
+    Only scheduled tiers count. A tier switched off in the options never
+    collects, and counting it would turn every unknown key into a "try again
+    in a moment" that is never true.
+    """
+    plans = account.scheduler.plans
+    return any(
+        plan.enabled and not account.has_data(tier, student_id)
+        for tier in DOCUMENT_TIERS
+        if (plan := plans.get(tier)) is not None
+    )
+
+
+def resolve(
+    account: PronoteAccount, print_: str, *, student_id: str | None = None
+) -> tuple[str, Callable[[], Awaitable[tuple[bytes, str]]]] | None:
+    """The document one fingerprint names, and how to fetch it -- or ``None``.
+
+    The single answer the view and the service both trust: a name to show and
+    a download that has not run yet. Homework first, then grades; the two
+    fingerprints are digests of different pairs, so one cannot shadow the
+    other.
+    """
+    if (located := _locate(account, print_, student_id=student_id)) is not None:
+        owner, homework_id, attachment = located
+        if attachment.kind is not AttachmentKind.FILE:
+            # `_locate` returns files only, so this is unreachable today -- and
+            # it stays, because it is the relay's own refusal and not a
+            # property of whatever hands it an attachment. A link is a third
+            # party's page; relaying it would fetch an unrelated site with the
+            # school's session and make Home Assistant an open proxy for
+            # anything a teacher pastes.
+            return None
+        return attachment.name, lambda: _fetch(account, attachment, homework_id, owner)
+    found = _locate_grade_document(account, print_, student_id=student_id)
+    if found is not None:
+        owner, period_index, grade_id, document = found
+        return document.name, lambda: _fetch_grade_document(
+            account, document, period_index, grade_id, owner
+        )
+    return None
+
+
 class PronoteAttachmentView(HomeAssistantView):
-    """Relay one homework document.
+    """Relay one homework or graded-test document.
 
     ``requires_auth`` stays at its default -- ``True`` -- and that is what makes
     a plain ``<a href>`` work from a dashboard: a request carrying a valid
@@ -272,26 +393,15 @@ class PronoteAttachmentView(HomeAssistantView):
         if account is None:
             return web.Response(status=404, text="unknown or unloaded account")
 
-        located = _locate(account, print_)
-        if located is None:
+        resolved = resolve(account, print_)
+        if resolved is None:
             return web.Response(status=404, text="no such document on this account")
-        student_id, homework_id, attachment = located
-
-        if attachment.kind is not AttachmentKind.FILE:
-            # `_locate` already returns files only, so this is unreachable
-            # today -- and it stays, because it is the relay's own refusal and
-            # not a property of whatever hands it an attachment. A link is a
-            # third party's page; relaying it would fetch an unrelated site
-            # with the school's session and make Home Assistant an open proxy
-            # for anything a teacher pastes.
-            return web.Response(
-                status=404, text="that attachment is a link, not a file"
-            )
+        name, download = resolved
 
         cache = cache_for(hass, entry_id)
         if (cached := cache.get(print_)) is None:
             try:
-                cached = await _fetch(account, attachment, homework_id, student_id)
+                cached = await download()
             except TierDeferred as deferred:
                 # The limiter said "later", not "never", so 503 with a
                 # `Retry-After` a browser understands -- and with the limiter's
@@ -316,7 +426,7 @@ class PronoteAttachmentView(HomeAssistantView):
                 # `inline` so an exercise sheet opens in the browser's own
                 # viewer rather than landing in the downloads folder, but with
                 # the real filename so saving it keeps a usable name.
-                "Content-Disposition": f'inline; filename="{_ascii(attachment.name)}"',
+                "Content-Disposition": f'inline; filename="{_ascii(name)}"',
                 # The bytes never change for a given fingerprint -- it names a
                 # document, not a position -- and the signature is what bounds
                 # access, so letting the browser keep them saves re-serving the
@@ -374,6 +484,42 @@ async def _fetch(
     return content, _content_type(declared)
 
 
+async def _fetch_grade_document(
+    account: PronoteAccount,
+    document: GradeDocument,
+    period_index: int,
+    grade_id: str,
+    student_id: str,
+) -> tuple[bytes, str]:
+    """Download a graded test's document through the one path to the network.
+
+    Two requests, charged to the marks tier: the grades of its period are read
+    again in this session (see ``PronoteGateway.grade_document``). The same
+    ``GESTURE`` priority as a homework document, for the same reason.
+    """
+    extras = account.extras
+    if extras is None:
+        raise AttachmentUnavailable(document.name, 501)
+
+    def work(client: Any) -> tuple[bytes, str | None, int]:
+        return extras.gateway.grade_document(
+            client,
+            period_index=period_index,
+            grade_id=grade_id,
+            role=document.role,
+            name=document.name,
+        )
+
+    content, declared, _cost = await extras.session.run(
+        str(Tier.MARKS),
+        Priority.GESTURE,
+        work,
+        student_id=student_id,
+        cost=2,
+    )
+    return content, _content_type(declared)
+
+
 def _content_type(declared: str | None) -> str:
     """What the browser is told, which is not always what PRONOTE said."""
     if declared is None:
@@ -395,7 +541,11 @@ def _ascii(name: str) -> str:
     trusted. The name in the attribute stays the real one -- this is only what
     the browser is told to call the file it saves.
     """
-    cleaned = name.replace('"', "").replace("\\", "")
+    cleaned = "".join(
+        character
+        for character in name
+        if character not in '"\\' and character.isprintable()
+    )
     return cleaned.encode("ascii", "replace").decode("ascii") or "document"
 
 

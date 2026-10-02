@@ -32,14 +32,17 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 from html import unescape
+import json
 import logging
 import re
 from typing import TYPE_CHECKING, Any, Final
-from urllib.parse import ParseResult, parse_qs, urlparse
+from urllib.parse import ParseResult, parse_qs, quote, urlparse
 from zoneinfo import ZoneInfo
 
+from Crypto.Util import Padding
 from pronotepy import dataClasses
 from pronotepy.exceptions import DataError, ParsingError
+import requests
 
 from . import item_keys
 from .const import (
@@ -57,6 +60,7 @@ from .const import (
     PRESENCE_KIND_DELAY,
     PRESENCE_KIND_PUNISHMENT,
     AttachmentKind,
+    GradeDocumentRole,
     GradeStatus,
 )
 from .failures import describe_failure
@@ -72,6 +76,7 @@ from .models import (
     EvaluationsFacts,
     GatewayResult,
     Grade,
+    GradeDocument,
     Guardian,
     Homework,
     HomeworkAttachment,
@@ -284,6 +289,52 @@ def _lesson_key(lesson: Lesson) -> str:
     return item_keys.mint("lesson", lesson.subject, lesson.start, lesson.end)
 
 
+def _download(client: HardenedClient, url: str, name: str) -> tuple[bytes, str | None]:
+    """GET one ``FichiersExternes`` address, and say only *that* it failed.
+
+    Two refusals, and neither may carry the address. A status other than 200
+    is checked here rather than trusted, because ``Attachment.data`` returns
+    the body whatever the status -- an expired session's login page would
+    reach a card as though it were the document. And a transport error is
+    re-raised bare: ``requests`` writes the full URL into its message --
+    ``Max retries exceeded with url: .../FichiersExternes/<hex>/<name>?Session=``
+    -- and an exception escaping the view is logged with that message, which
+    puts an address that opens the document into ``home-assistant.log``.
+    """
+    try:
+        response = client.communication.session.get(url)
+    except requests.RequestException:
+        raise AttachmentUnavailable(name, 502) from None
+    if response.status_code != 200:
+        raise AttachmentUnavailable(name, response.status_code)
+    content: bytes = response.content
+    declared: str | None = response.headers.get("content-type")
+    return content, declared
+
+
+def _external_file_url(
+    client: HardenedClient, *, ref: str, name: str, genre: str
+) -> str:
+    """A ``FichiersExternes`` address whose segment also names a file type.
+
+    The construction of ``dataClasses.Attachment.__init__``, line for line,
+    with one key added: upstream encrypts ``{"N", "Actif"}`` and nothing else,
+    which is enough for a homework file and not for a graded test's, where one
+    ``N`` -- the grade's -- names two files and ``G`` says which. The cipher is
+    still upstream's (``communication.encryption``), so only the plaintext and
+    the formatting are repeated here; a pin bump must re-read that constructor.
+    """
+    plaintext = json.dumps({"N": ref, "Actif": True, "G": genre}).replace(" ", "")
+    segment = client.communication.encryption.aes_encrypt(
+        Padding.pad(plaintext.encode(), 16)
+    ).hex()
+    return (
+        f"{client.communication.root_site}/FichiersExternes/{segment}/"
+        + quote(name, safe="~()*!.'")
+        + f"?Session={client.attributes['h']}"
+    )
+
+
 def _grade_key(grade: Grade) -> str:
     """Everything a teacher sets when creating the grade -- not its value.
 
@@ -473,6 +524,16 @@ _PRONOTE_FILE_SEGMENT: Final = "fichiersexternes"
 #: handed to ``pronotepy`` when re-deriving a file's address, and a magic ``1``
 #: there would be unreadable.
 _ATTACHMENT_FILE: Final = 1
+
+#: Where a ``listeDevoirs`` entry names each of its two documents, and the file
+#: type PRONOTE serves it under -- its own client's ``TypeFichierExterneHttpSco``
+#: values, which are strings, not numbers. The type goes in the ``G`` of the
+#: encrypted segment; without it the server does not know which of the grade's
+#: two files the grade's ``N`` names.
+_GRADE_DOCUMENTS: Final = (
+    (GradeDocumentRole.SUBJECT, "libelleSujet", "DevoirSujet"),
+    (GradeDocumentRole.CORRECTION, "libelleCorrige", "DevoirCorrige"),
+)
 
 #: ``E`` on a line of a ``Saisie*`` list: the entity state, ``2`` meaning
 #: "modified" (``1`` created, ``3`` deleted). A line without it is not applied.
@@ -1427,6 +1488,13 @@ class PronoteGateway:
             is_optional=bool(entry.get("estFacultatif", False))
             and not bool(entry.get("estBonus", False)),
             is_out_of_20=bool(entry.get("estRamenerSur20", False)),
+            documents=tuple(
+                GradeDocument(name=str(name), role=role)
+                for role, key, _genre in _GRADE_DOCUMENTS
+                if (name := entry.get(key))
+            ),
+            remark=entry.get("commentaireSurNote") or None,
+            subject_in_groups=bool(_get(entry, "service", "V", "estServiceGroupe")),
         )
 
     def _average(self, entry: dict[str, Any]) -> Average | None:
@@ -2116,11 +2184,57 @@ class PronoteGateway:
         attachment = dataClasses.Attachment(
             client, {"L": name, "N": document.ref, "G": _ATTACHMENT_FILE}
         )
-        response = client.communication.session.get(attachment.url)
-        if response.status_code != 200:
-            raise AttachmentUnavailable(name, response.status_code)
-        content: bytes = response.content
-        declared = response.headers.get("content-type")
+        content, declared = _download(client, attachment.url, name)
+        return content, declared, 2
+
+    def grade_document(
+        self,
+        client: HardenedClient,
+        *,
+        period_index: int,
+        grade_id: str,
+        role: GradeDocumentRole,
+        name: str,
+    ) -> tuple[bytes, str | None, int]:
+        """Download a graded test's paper or answers, under the lock.
+
+        Two requests, for the reason a homework document costs two: the file
+        is fetched by the grade's ``N``, which every login re-encrypts, so the
+        grades of its period are read again in this session first -- one
+        ``DernieresNotes``, without the report card -- and the key looked up
+        in them.
+
+        The address is the one place this module builds what
+        ``dataClasses.Attachment`` would (see :func:`_external_file_url`):
+        upstream's constructor cannot carry the file type, and without it the
+        server cannot tell the paper from the answers.
+        """
+        period = next(
+            (live for live in self._periods(client) if live.index == period_index),
+            None,
+        )
+        if period is None:
+            raise AttachmentUnavailable(name, 404)
+        grades = self.marks(client, period, with_report=False).facts.grades
+        grade = next(
+            (candidate for candidate in grades if candidate.id == grade_id), None
+        )
+        # The role *and* the name, as this session reads them: a teacher who
+        # replaces the answers replaces the file, and the key a card holds
+        # names the file it was shown -- so that key now names nothing, rather
+        # than opening a document the card never listed.
+        if (
+            grade is None
+            or grade.ref is None
+            or GradeDocument(name=name, role=role) not in grade.documents
+        ):
+            raise AttachmentUnavailable(name, 404)
+        genre = next(genre for known, _key, genre in _GRADE_DOCUMENTS if known is role)
+        content, declared = _download(
+            client,
+            _external_file_url(client, ref=grade.ref, name=name, genre=genre),
+            name,
+        )
         return content, declared, 2
 
     def timetable_pdf_url(

@@ -32,7 +32,7 @@ from homeassistant.const import EntityCategory, UnitOfTime
 from homeassistant.core import callback
 
 from .account import PronoteAccount
-from .attachment import fingerprint
+from .attachment import fingerprint, grade_fingerprint
 from .connectors.protocol import Source, has_pronote_extras
 from .const import (
     DEFAULT_HOMEWORK_HORIZON,
@@ -789,21 +789,38 @@ def _latest_grade_attributes(
 
 
 def _grade_dict(grade: Any) -> dict[str, Any]:
-    """One grade, flattened for a card."""
+    """One grade, flattened for a card: everything PRONOTE says about it."""
     return {
         "id": grade.id,
         "subject": grade.subject,
+        "subject_in_groups": grade.subject_in_groups,
         "value": grade.value,
         "status": str(grade.status) if grade.status else None,
         "out_of": grade.out_of,
+        "default_out_of": grade.default_out_of,
+        "is_out_of_20": grade.is_out_of_20,
         "coefficient": grade.coefficient,
         "date": grade.date.isoformat(),
         "class_average": grade.class_average,
         "min": grade.min_value,
         "max": grade.max_value,
         "comment": grade.comment,
+        "remark": grade.remark,
         "is_bonus": grade.is_bonus,
         "is_optional": grade.is_optional,
+        # The test's paper and answers, the shape homework's `attachment_refs`
+        # has: a key the service signs at the click, never an address. A
+        # grade's document is always a file, so `kind` is always `local`;
+        # `role` says which of the two it is.
+        "attachment_refs": [
+            {
+                "name": document.name,
+                "kind": "local",
+                "key": grade_fingerprint(grade.id, document.role, document.name),
+                "role": str(document.role),
+            }
+            for document in grade.documents
+        ],
     }
 
 

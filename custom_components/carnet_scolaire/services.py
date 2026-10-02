@@ -38,7 +38,13 @@ from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
-from .attachment import FINGERPRINT_PATTERN, SIGNATURE_LIFETIME, _locate, signed_path
+from .attachment import (
+    FINGERPRINT_PATTERN,
+    SIGNATURE_LIFETIME,
+    pending,
+    resolve,
+    signed_path,
+)
 from .const import (
     AGNOSTIC_SERVICES,
     DOMAIN,
@@ -602,25 +608,34 @@ async def _async_get_attachment_url(call: ServiceCall) -> ServiceResponse:
     Two refusals, and their ``translation_key`` values are a **contract**: a
     card reads them off the error to decide what to tell the user.
 
-    ``attachment_not_collected`` -- the homework tier has no snapshot for this
-    child yet, typically in the first seconds after a restart. Temporary.
+    ``attachment_not_collected`` -- the key names nothing yet, and a scheduled
+    tier that could name it has no snapshot for this child: the homework, the
+    marks, or the closed periods' marks. Typically the first seconds after a
+    restart. Temporary.
 
-    ``attachment_unknown`` -- the snapshot exists and the key is not a file in
-    it: the homework left the horizon, the entry changed, or the key belongs to
-    *another* child of the same account. The last case is deliberately the same
-    answer as the others, so the error does not confirm to a caller that the
-    key exists elsewhere.
+    ``attachment_unknown`` -- the snapshots exist and the key is not a file in
+    them: the homework left the horizon, the entry changed, or the key belongs
+    to *another* child of the same account. The last case is deliberately the
+    same answer as the others, so the error does not confirm to a caller that
+    the key exists elsewhere.
+
+    Looked up before the snapshots are checked, so a grade's document opens
+    while the homework tier is still collecting, and the other way round. A
+    tier switched off in the options is not waited for. An establishment that
+    publishes no grades never has a marks snapshot, so an unknown key there
+    reads as not collected -- the one case where "temporary" overstates it.
     """
     account, student_id = _resolve_student(call.hass, call)
     _require_service(account, SERVICE_GET_ATTACHMENT_URL)
-    if not account.has_data(Tier.HOMEWORK, student_id):
-        raise ServiceValidationError(
-            translation_domain=DOMAIN, translation_key="attachment_not_collected"
-        )
     key = call.data[ATTR_KEY]
-    if _locate(account, key, student_id=student_id) is None:
+    if resolve(account, key, student_id=student_id) is None:
         raise ServiceValidationError(
-            translation_domain=DOMAIN, translation_key="attachment_unknown"
+            translation_domain=DOMAIN,
+            translation_key=(
+                "attachment_not_collected"
+                if pending(account, student_id)
+                else "attachment_unknown"
+            ),
         )
     expires_at = dt_util.utcnow() + SIGNATURE_LIFETIME
     return {
