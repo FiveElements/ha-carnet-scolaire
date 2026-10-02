@@ -185,6 +185,83 @@ def test_the_paper_is_asked_for_under_its_own_type(
     assert b'"G":"DevoirSujet"' in client.communication.encryption.plaintexts[-1]
 
 
+def _answering(client: FakeClient, *statuses: int) -> None:
+    """Answer the relay's GETs with these statuses, in order, recording each."""
+    from .fixtures.client import FakeResponse
+
+    queue = list(statuses)
+
+    def get(url: str) -> FakeResponse:
+        client.communication.session.gets.append(url)
+        return FakeResponse(status_code=queue.pop(0))
+
+    client.communication.session.get = get  # type: ignore[method-assign]
+
+
+def test_a_paper_refused_under_one_type_is_asked_for_under_the_next(
+    gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The live defect: the paper answered 404 under ``DevoirSujet``.
+
+    The answers of the same tests opened, so the session, the grade's ``N``
+    and the address were right and only the file type was in doubt. The next
+    type is tried, the cost says so, and the fallback is logged -- without the
+    address or the file name -- so the order can be settled from evidence.
+    """
+    _graded(client)
+    _answering(client, 404, 200)
+
+    content, _declared, cost = _download(
+        gateway, client, role=GradeDocumentRole.SUBJECT
+    )
+
+    assert content == b"%PDF-1.4 not a real document"
+    assert cost == 3
+    assert len(client.communication.session.gets) == 2
+    assert b'"G":"EvaluationSujet"' in client.communication.encryption.plaintexts[-1]
+    (record,) = [r for r in caplog.records if "file type" in r.getMessage()]
+    assert "EvaluationSujet" in record.getMessage()
+    assert "sujet.pdf" not in record.getMessage()
+    assert "FichiersExternes" not in record.getMessage()
+
+
+def test_a_paper_refused_under_every_type_is_a_404_and_says_so_once(
+    gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Both types tried, then a refusal -- logged, so the gap is visible."""
+    _graded(client)
+    _answering(client, 404, 404)
+
+    with pytest.raises(AttachmentUnavailable) as refusal:
+        _download(gateway, client, role=GradeDocumentRole.SUBJECT)
+
+    assert refusal.value.status == 404
+    assert len(client.communication.session.gets) == 2
+    assert any("every file type" in r.getMessage() for r in caplog.records)
+
+
+def test_only_a_404_moves_on_to_the_next_type(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """A dead session is not a wrong type: one 403, no second request."""
+    _graded(client)
+    _answering(client, 403, 200)
+
+    with pytest.raises(AttachmentUnavailable) as refusal:
+        _download(gateway, client, role=GradeDocumentRole.SUBJECT)
+
+    assert refusal.value.status == 403
+    assert len(client.communication.session.gets) == 1
+
+
+def test_the_declared_cost_covers_every_type_that_may_be_tried() -> None:
+    """Charged at admission and never refunded, so the worst case is declared."""
+    from custom_components.carnet_scolaire.gateway import grade_document_cost
+
+    assert grade_document_cost(GradeDocumentRole.SUBJECT) == 3
+    assert grade_document_cost(GradeDocumentRole.CORRECTION) == 2
+
+
 def test_a_document_opened_after_a_reconnection_uses_the_new_n(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:

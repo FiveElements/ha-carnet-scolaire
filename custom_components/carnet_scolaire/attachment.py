@@ -65,7 +65,7 @@ from homeassistant.components.http.auth import async_sign_path
 from homeassistant.helpers.http import KEY_HASS
 
 from .const import DOMAIN, AttachmentKind, Priority, Tier
-from .gateway import AttachmentUnavailable
+from .gateway import AttachmentUnavailable, grade_document_cost
 from .ratelimit import TierDeferred
 
 if TYPE_CHECKING:
@@ -493,9 +493,10 @@ async def _fetch_grade_document(
 ) -> tuple[bytes, str]:
     """Download a graded test's document through the one path to the network.
 
-    Two requests, charged to the marks tier: the grades of its period are read
-    again in this session (see ``PronoteGateway.grade_document``). The same
-    ``GESTURE`` priority as a homework document, for the same reason.
+    Charged to the marks tier at the worst case `grade_document_cost`
+    declares: the grades of its period are read again in this session, then
+    each file type is tried in turn (see ``PronoteGateway.grade_document``).
+    The same ``GESTURE`` priority as a homework document, for the same reason.
     """
     extras = account.extras
     if extras is None:
@@ -515,7 +516,7 @@ async def _fetch_grade_document(
         Priority.GESTURE,
         work,
         student_id=student_id,
-        cost=2,
+        cost=grade_document_cost(document.role),
     )
     return content, _content_type(declared)
 
