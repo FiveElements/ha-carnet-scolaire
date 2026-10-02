@@ -428,8 +428,12 @@ ordinaire. Même forme que sur les devoirs, plus le rôle :
 document de devoir noté est toujours un fichier, d'où `kind` toujours `local`,
 et il s'ouvre comme un fichier de devoir : `carnet_scolaire.get_attachment_url`
 signe la `key` au clic, puis le relais relit les notes de la période et
-télécharge le document — deux requêtes, imputées au palier des notes. Aucune
-adresse de PRONOTE n'est publiée. La `key` dépend aussi du nom du fichier : un
+télécharge le document — deux requêtes, imputées au palier des notes, trois au
+plus pour un sujet. Le corrigé s'ouvre sous le type de fichier `DevoirCorrige` ;
+le sujet a été refusé (404) sous `DevoirSujet` sur une instance réelle, alors le
+relais essaie ensuite `EvaluationSujet` et journalise un avertissement — sans
+adresse ni nom de fichier — qui dit lequel l'a servi, ou qu'aucun ne l'a fait.
+Aucune adresse de PRONOTE n'est publiée. La `key` dépend aussi du nom du fichier : un
 corrigé remplacé par le professeur reçoit une nouvelle clé, et l'ancienne ne
 désigne plus rien. Deux frères et sœurs qui ont le **même** contrôle — même
 matière, date, barème, coefficient et intitulé — reçoivent la même clé, comme
