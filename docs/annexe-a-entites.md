@@ -430,13 +430,14 @@ ordinaire. Même forme que sur les devoirs, plus le rôle :
 document de devoir noté est toujours un fichier, d'où `kind` toujours `local`,
 et il s'ouvre comme un fichier de devoir : `carnet_scolaire.get_attachment_url`
 signe la `key` au clic, puis le relais relit les notes de la période et
-télécharge le document — deux requêtes, imputées au palier des notes, trois au
-plus pour un sujet. Chaque document est demandé par **son propre** `N`, celui
-que PRONOTE range dans `elmSujet` et `elmCorrige`, et non par le `N` de la
-note : demandé ainsi, le sujet était refusé (404) sur une instance réelle,
-alors que le client web de PRONOTE chiffre le `N` du document. Si le sujet est
-encore refusé sous `DevoirSujet`, le relais essaie `EvaluationSujet` et
-journalise un avertissement, sans adresse ni nom de fichier.
+télécharge le document — deux requêtes en général, trois au plus, imputées au
+palier des notes et déclarées au pire cas. Chaque document est demandé par
+**son propre** `N`, celui que PRONOTE range dans `elmSujet` et `elmCorrige`,
+sous le type `DevoirSujet` ou `DevoirCorrige` ; s'il est refusé (404), le
+relais le redemande par le `N` de la note et journalise un avertissement, sans
+adresse ni nom de fichier. Le segment chiffré reprend l'ordre des clés du
+client web de PRONOTE — `N`, `G`, `Actif` : avec `Actif` avant `G`, une
+instance réelle servait le corrigé et refusait toujours le sujet.
 Aucune adresse de PRONOTE n'est publiée. La `key` dépend aussi du nom du fichier : un
 corrigé remplacé par le professeur reçoit une nouvelle clé, et l'ancienne ne
 désigne plus rien. Deux frères et sœurs qui ont le **même** contrôle — même

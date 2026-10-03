@@ -319,12 +319,20 @@ def _external_file_url(
 
     The construction of ``dataClasses.Attachment.__init__``, line for line,
     with one key added: upstream encrypts ``{"N", "Actif"}`` and nothing else,
-    which is enough for a homework file and not for a graded test's, where one
-    ``N`` -- the grade's -- names two files and ``G`` says which. The cipher is
-    still upstream's (``communication.encryption``), so only the plaintext and
-    the formatting are repeated here; a pin bump must re-read that constructor.
+    which is enough for a homework file and not for a graded test's, where
+    ``G`` says which of the two files is wanted. The cipher is still
+    upstream's (``communication.encryption``), so only the plaintext and the
+    formatting are repeated here; a pin bump must re-read that constructor.
+
+    The keys go in the web client's order -- ``N``, ``G``, ``Actif`` -- which
+    is what ``ObjetElement.toJSONAll`` writes: ``_toJSON`` puts ``N`` then
+    ``G``, and the remaining own properties, ``Actif`` among them, follow. A
+    live instance served the answers with ``Actif`` before ``G`` but refused
+    the paper under every ``N`` and type tried, while the web client's own
+    links to both opened; their encrypted segments share their first 64 bytes,
+    which with a 45-to-47 character ``N`` ends exactly after ``"G":"Devoir``.
     """
-    plaintext = json.dumps({"N": ref, "Actif": True, "G": genre}).replace(" ", "")
+    plaintext = json.dumps({"N": ref, "G": genre, "Actif": True}).replace(" ", "")
     segment = client.communication.encryption.aes_encrypt(
         Padding.pad(plaintext.encode(), 16)
     ).hex()
@@ -527,26 +535,14 @@ _ATTACHMENT_FILE: Final = 1
 
 #: Where a ``listeDevoirs`` entry describes each of its two documents -- the
 #: element carrying the document's own ``N`` and name, and the older bare file
-#: name -- and the file types PRONOTE may serve it under, in the order they are
-#: tried: its own client's ``TypeFichierExterneHttpSco`` values, strings and
-#: not numbers, which go in the ``G`` of the encrypted segment.
-#:
-#: The answers open under ``DevoirCorrige``. The paper answered 404 under both
-#: types while it was fetched by the *grade's* ``N``; the web client fetches a
-#: document by its own ``N`` (``ObjetElement('', <document N>, <type>)`` in
-#: ``creerUrlBruteLienExterne``), which is what ``elmSujet`` carries. A
-#: fallback that served it, or a refusal under every type, is logged as a
-#: warning by `PronoteGateway.grade_document`.
-_GRADE_DOCUMENTS: Final[
-    tuple[tuple[GradeDocumentRole, str, str, tuple[str, ...]], ...]
-] = (
-    (
-        GradeDocumentRole.SUBJECT,
-        "elmSujet",
-        "libelleSujet",
-        ("DevoirSujet", "EvaluationSujet"),
-    ),
-    (GradeDocumentRole.CORRECTION, "elmCorrige", "libelleCorrige", ("DevoirCorrige",)),
+#: name -- and the file type that goes in the ``G`` of the encrypted segment:
+#: the web client's own ``TypeFichierExterneHttpSco`` value, a string and not
+#: a number. The web client's links to the paper and to the answers of one
+#: test agree on their first 64 plaintext bytes, which reach into the type
+#: name: both start ``Devoir``, so ``EvaluationSujet`` is not the paper's.
+_GRADE_DOCUMENTS: Final[tuple[tuple[GradeDocumentRole, str, str, str], ...]] = (
+    (GradeDocumentRole.SUBJECT, "elmSujet", "libelleSujet", "DevoirSujet"),
+    (GradeDocumentRole.CORRECTION, "elmCorrige", "libelleCorrige", "DevoirCorrige"),
 )
 
 
@@ -571,13 +567,15 @@ def _grade_document(
 def grade_document_cost(role: GradeDocumentRole) -> int:
     """The most requests opening one graded test's document can place.
 
-    One ``DernieresNotes``, then one GET per file type tried. Declared as the
-    worst case because the limiter charges at admission and never refunds: an
-    under-declared fallback would spend budget the limiter never saw.
+    One ``DernieresNotes``, then one GET by the document's own ``N`` and, if
+    that is refused, one by the grade's (`PronoteGateway.grade_document`).
+    Declared as the worst case because the limiter charges at admission and
+    never refunds: an under-declared fallback would spend budget the limiter
+    never saw. The same for both roles today; the role stays in the signature
+    so a document needing more is declared where it is described.
     """
-    return 1 + next(
-        len(genres) for known, _elm, _key, genres in _GRADE_DOCUMENTS if known is role
-    )
+    del role
+    return 3
 
 
 #: ``E`` on a line of a ``Saisie*`` list: the entity state, ``2`` meaning
@@ -2279,13 +2277,12 @@ class PronoteGateway:
     ) -> tuple[bytes, str | None, int]:
         """Download a graded test's paper or answers, under the lock.
 
-        One request more than the file types tried (`grade_document_cost`):
-        the file is fetched by the grade's ``N``, which every login
-        re-encrypts, so the grades of its period are read again in this
-        session first -- one ``DernieresNotes``, without the report card --
-        and the key looked up in them. Then one GET per type until one serves
-        the file; only a 404 moves on to the next type, any other refusal is
-        the answer.
+        At most three requests (`grade_document_cost`): the file is fetched by
+        an ``N`` that every login re-encrypts, so the grades of its period are
+        read again in this session first -- one ``DernieresNotes``, without
+        the report card -- and the key looked up in them. Then one GET by the
+        document's own ``N`` and, only on a 404 and only when it differs, one
+        by the grade's; any other refusal is the answer.
 
         The address is the one place this module builds what
         ``dataClasses.Attachment`` would (see :func:`_external_file_url`):
@@ -2314,14 +2311,23 @@ class PronoteGateway:
             ),
             None,
         )
-        ref = (document.ref or grade.ref) if document and grade else None
-        if not ref:
+        refs = tuple(
+            dict.fromkeys(
+                ref
+                for ref in (
+                    document.ref if document else None,
+                    grade.ref if document and grade else None,
+                )
+                if ref
+            )
+        )
+        if not refs:
             raise AttachmentUnavailable(name, 404)
-        genres = next(
-            genres for known, _elm, _key, genres in _GRADE_DOCUMENTS if known is role
+        genre = next(
+            genre for known, _elm, _key, genre in _GRADE_DOCUMENTS if known is role
         )
         calls = 1
-        for genre in genres:
+        for ref in refs:
             calls += 1
             try:
                 content, declared = _download(
@@ -2333,18 +2339,14 @@ class PronoteGateway:
                 if refusal.status != 404:
                     raise
                 continue
-            if genre != genres[0]:
+            if ref != refs[0]:
                 _LOGGER.warning(
-                    "A graded test's %s was served under the file type %s, not %s",
+                    "A graded test's %s was served by the grade's N, not its own",
                     role,
-                    genre,
-                    genres[0],
                 )
             return content, declared, calls
         _LOGGER.warning(
-            "A graded test's %s was refused under every file type tried (%s)",
-            role,
-            ", ".join(genres),
+            "A graded test's %s was refused by every N tried (%d)", role, len(refs)
         )
         raise AttachmentUnavailable(name, 404)
 
