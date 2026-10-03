@@ -793,6 +793,7 @@ def _grade_dict(grade: Any) -> dict[str, Any]:
     return {
         "id": grade.id,
         "subject": grade.subject,
+        "background_color": grade.background_color,
         "subject_in_groups": grade.subject_in_groups,
         "value": grade.value,
         "status": str(grade.status) if grade.status else None,

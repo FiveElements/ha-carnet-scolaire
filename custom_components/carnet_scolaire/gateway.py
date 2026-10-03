@@ -525,23 +525,47 @@ _PRONOTE_FILE_SEGMENT: Final = "fichiersexternes"
 #: there would be unreadable.
 _ATTACHMENT_FILE: Final = 1
 
-#: Where a ``listeDevoirs`` entry names each of its two documents, and the file
-#: types PRONOTE may serve it under, in the order they are tried -- its own
-#: client's ``TypeFichierExterneHttpSco`` values, which are strings, not
-#: numbers. The type goes in the ``G`` of the encrypted segment; without it the
-#: server does not know which of the grade's two files the grade's ``N`` names.
+#: Where a ``listeDevoirs`` entry describes each of its two documents -- the
+#: element carrying the document's own ``N`` and name, and the older bare file
+#: name -- and the file types PRONOTE may serve it under, in the order they are
+#: tried: its own client's ``TypeFichierExterneHttpSco`` values, strings and
+#: not numbers, which go in the ``G`` of the encrypted segment.
 #:
-#: The answers open under ``DevoirCorrige`` (measured on a live instance, two
-#: tests out of two). The paper did **not** open under ``DevoirSujet`` on the
-#: same tests -- the server answered 404 both times -- so ``EvaluationSujet``,
-#: the enumeration's other paper type, is tried next. A fallback that served
-#: it, or a refusal under every type, is logged as a warning by
-#: `PronoteGateway.grade_document`, so the order can be settled from evidence
-#: and the losing type dropped.
-_GRADE_DOCUMENTS: Final[tuple[tuple[GradeDocumentRole, str, tuple[str, ...]], ...]] = (
-    (GradeDocumentRole.SUBJECT, "libelleSujet", ("DevoirSujet", "EvaluationSujet")),
-    (GradeDocumentRole.CORRECTION, "libelleCorrige", ("DevoirCorrige",)),
+#: The answers open under ``DevoirCorrige``. The paper answered 404 under both
+#: types while it was fetched by the *grade's* ``N``; the web client fetches a
+#: document by its own ``N`` (``ObjetElement('', <document N>, <type>)`` in
+#: ``creerUrlBruteLienExterne``), which is what ``elmSujet`` carries. A
+#: fallback that served it, or a refusal under every type, is logged as a
+#: warning by `PronoteGateway.grade_document`.
+_GRADE_DOCUMENTS: Final[
+    tuple[tuple[GradeDocumentRole, str, str, tuple[str, ...]], ...]
+] = (
+    (
+        GradeDocumentRole.SUBJECT,
+        "elmSujet",
+        "libelleSujet",
+        ("DevoirSujet", "EvaluationSujet"),
+    ),
+    (GradeDocumentRole.CORRECTION, "elmCorrige", "libelleCorrige", ("DevoirCorrige",)),
 )
+
+
+def _grade_document(
+    entry: dict[str, Any], role: GradeDocumentRole, element: str, key: str
+) -> GradeDocument | None:
+    """One of a grade's two documents, from its element or its bare name.
+
+    The element is what PRONOTE fetches the file by -- its own ``N`` -- and it
+    names the file too; the bare name is read when the element is absent, and
+    the relay then falls back to the grade's ``N``. Neither: no document.
+    """
+    described = _get(entry, element, "V")
+    if not isinstance(described, dict):
+        described = {}
+    name = described.get("L") or entry.get(key)
+    if not name:
+        return None
+    return GradeDocument(name=str(name), role=role, ref=str(described.get("N") or ""))
 
 
 def grade_document_cost(role: GradeDocumentRole) -> int:
@@ -552,7 +576,7 @@ def grade_document_cost(role: GradeDocumentRole) -> int:
     under-declared fallback would spend budget the limiter never saw.
     """
     return 1 + next(
-        len(genres) for known, _key, genres in _GRADE_DOCUMENTS if known is role
+        len(genres) for known, _elm, _key, genres in _GRADE_DOCUMENTS if known is role
     )
 
 
@@ -1446,11 +1470,10 @@ class PronoteGateway:
         # collection *succeeded*.
         entries = _required_list(data, "listeDevoirs", what="grades")
         grades = tuple(self._grade(entry) for entry in entries)
-        # A graded test's paper is listed and refused under every file type
-        # tried, while its answers open (measured on a live instance): the
-        # paper is probably fetched by something other than the grade's `N`.
-        # The structure of one such entry -- keys and types, never a value --
-        # says where to look.
+        # The structure of one entry with a paper -- keys and types, never a
+        # value. It is what showed that the paper is fetched by `elmSujet`'s
+        # own `N` and not the grade's, and it is kept for the next field
+        # PRONOTE adds there.
         documented = next(
             (
                 entry
@@ -1542,12 +1565,17 @@ class PronoteGateway:
             and not bool(entry.get("estBonus", False)),
             is_out_of_20=bool(entry.get("estRamenerSur20", False)),
             documents=tuple(
-                GradeDocument(name=str(name), role=role)
-                for role, key, _genres in _GRADE_DOCUMENTS
-                if (name := entry.get(key))
+                document
+                for role, element, key, _genres in _GRADE_DOCUMENTS
+                if (document := _grade_document(entry, role, element, key)) is not None
             ),
             remark=entry.get("commentaireSurNote") or None,
-            subject_in_groups=bool(_get(entry, "service", "V", "estServiceGroupe")),
+            subject_in_groups=bool(
+                entry.get(
+                    "estEnGroupe", _get(entry, "service", "V", "estServiceGroupe")
+                )
+            ),
+            background_color=_get(entry, "service", "V", "couleur") or None,
         )
 
     def _average(self, entry: dict[str, Any]) -> Average | None:
@@ -2278,14 +2306,19 @@ class PronoteGateway:
         # replaces the answers replaces the file, and the key a card holds
         # names the file it was shown -- so that key now names nothing, rather
         # than opening a document the card never listed.
-        if (
-            grade is None
-            or grade.ref is None
-            or GradeDocument(name=name, role=role) not in grade.documents
-        ):
+        document = next(
+            (
+                candidate
+                for candidate in (grade.documents if grade is not None else ())
+                if candidate.role is role and candidate.name == name
+            ),
+            None,
+        )
+        ref = (document.ref or grade.ref) if document and grade else None
+        if not ref:
             raise AttachmentUnavailable(name, 404)
         genres = next(
-            genres for known, _key, genres in _GRADE_DOCUMENTS if known is role
+            genres for known, _elm, _key, genres in _GRADE_DOCUMENTS if known is role
         )
         calls = 1
         for genre in genres:
@@ -2293,7 +2326,7 @@ class PronoteGateway:
             try:
                 content, declared = _download(
                     client,
-                    _external_file_url(client, ref=grade.ref, name=name, genre=genre),
+                    _external_file_url(client, ref=ref, name=name, genre=genre),
                     name,
                 )
             except AttachmentUnavailable as refusal:

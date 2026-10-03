@@ -232,16 +232,21 @@ class Homework:
 class GradeDocument:
     """The paper or the answers of one graded test, as a teacher joined them.
 
-    Only a name and a role. A grade's document has no identifier of its own:
-    PRONOTE fetches it by the *grade's* ``N`` and a file type that says which
-    of the two it is (`PronoteGateway.grade_document`). That ``N`` is
-    re-encrypted by every login, so nothing here could open the document
-    anyway -- the relay re-reads the grades in its own session first, as it
-    does for homework.
+    PRONOTE describes each in its own element of the ``listeDevoirs`` entry --
+    ``elmSujet`` and ``elmCorrige`` -- carrying the document's **own** ``N``,
+    which is what the file is fetched by, together with a file type that says
+    which of the two it is (`PronoteGateway.grade_document`). The grade's
+    ``N`` is not the paper's: fetched by it, the paper answered 404 on a live
+    instance while the answers -- whose ``N`` happened to coincide -- opened.
     """
 
     name: str
     role: GradeDocumentRole
+    #: The document's ``N``, valid **only in the session that read it**, so
+    #: the relay re-reads the grades in its own session before using it, as it
+    #: does for homework. Empty when the entry carried only the file name; the
+    #: grade's ``N`` is then the fallback. Never published.
+    ref: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,9 +290,12 @@ class Grade:
     #: distinct from ``comment``, which titles the test for the whole class.
     #: Not part of the key either: it is written after the mark, like the value.
     remark: str | None = None
-    #: Whether the subject is taught in groups (``estServiceGroupe``), which is
-    #: when ``class_average`` is the group's rather than the class's.
+    #: Whether the test was given to a group rather than the whole class
+    #: (``estEnGroupe``), which is when ``class_average`` is the group's.
     subject_in_groups: bool = False
+    #: The subject's colour as the establishment set it (``service.couleur``),
+    #: the same value the per-subject averages carry.
+    background_color: str | None = None
 
     def __post_init__(self) -> None:
         """Enforce the exclusivity the docstring promises.
