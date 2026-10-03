@@ -24,7 +24,7 @@ gateway, with the establishment's timezone (§4.2).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from .const import AttachmentKind, GradeDocumentRole, GradeStatus, Tier
@@ -247,6 +247,10 @@ class GradeDocument:
     #: does for homework. Empty when the entry carried only the file name; the
     #: grade's ``N`` is then the fallback. Never published.
     ref: str = ""
+    #: The element's own codes -- its ``G`` and ``genreDocument``, small
+    #: integers and nothing else -- for the warning a refused document logs.
+    #: Never published, and left out of equality: diagnostic, not identity.
+    codes: str = field(default="", compare=False)
 
 
 @dataclass(frozen=True, slots=True)

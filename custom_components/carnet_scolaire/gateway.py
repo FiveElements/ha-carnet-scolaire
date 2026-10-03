@@ -240,10 +240,13 @@ class AttachmentUnavailable(Exception):  # noqa: N818 -- surfaced as an HTTP sta
     that asked for it, which is worth saying differently from "no such file".
     """
 
-    def __init__(self, name: str, status: int) -> None:
+    def __init__(self, name: str, status: int, *, detail: str = "") -> None:
         super().__init__(f"PRONOTE answered {status} for the document {name!r}")
         self.name = name
         self.status = status
+        #: What the refusal looked like (`_refusal_detail`), for a warning;
+        #: never the address, the file name or an ``N``.
+        self.detail = detail
 
 
 # ---------------------------------------------------------------------------
@@ -306,10 +309,36 @@ def _download(client: HardenedClient, url: str, name: str) -> tuple[bytes, str |
     except requests.RequestException:
         raise AttachmentUnavailable(name, 502) from None
     if response.status_code != 200:
-        raise AttachmentUnavailable(name, response.status_code)
+        raise AttachmentUnavailable(
+            name, response.status_code, detail=_refusal_detail(response, name)
+        )
     content: bytes = response.content
     declared: str | None = response.headers.get("content-type")
     return content, declared
+
+
+#: Anything in a refusal's text that could open a document or name a child's
+#: file: an address, a session, an ``N`` (``<digits>#<43 characters>``).
+_WITHHELD: Final = re.compile(r"https?:|session|\d{1,3}#[\w-]{20,}", re.IGNORECASE)
+
+
+def _refusal_detail(response: Any, name: str) -> str:
+    """What a refused GET answered, safe for a warning.
+
+    A graded test's paper is refused (404) where the web client's own link to
+    it opens, with an address built the same way as far as can be seen; the
+    body of the refusal is the one piece of evidence left. Its type, its size
+    and its first words as plain text -- unless they hold an address, a
+    session, an ``N`` or the file name, in which case the words are withheld.
+    """
+    content = getattr(response, "content", b"") or b""
+    declared = getattr(response, "headers", {}).get("content-type")
+    text = " ".join(
+        re.sub(r"<[^>]*>", " ", content[:4096].decode("utf-8", "replace")).split()
+    )[:160]
+    if _WITHHELD.search(text) or (name and name.lower() in text.lower()):
+        text = "<withheld>"
+    return f"{declared or 'no type'}, {len(content)} bytes, text {text!r}"
 
 
 def _external_file_url(
@@ -561,7 +590,14 @@ def _grade_document(
     name = described.get("L") or entry.get(key)
     if not name:
         return None
-    return GradeDocument(name=str(name), role=role, ref=str(described.get("N") or ""))
+    codes = ",".join(
+        f"{code}={described[code]}"
+        for code in ("G", "genreDocument")
+        if isinstance(described.get(code), int)
+    )
+    return GradeDocument(
+        name=str(name), role=role, ref=str(described.get("N") or ""), codes=codes
+    )
 
 
 def grade_document_cost(role: GradeDocumentRole) -> int:
@@ -2327,6 +2363,7 @@ class PronoteGateway:
             genre for known, _elm, _key, genre in _GRADE_DOCUMENTS if known is role
         )
         calls = 1
+        detail = ""
         for ref in refs:
             calls += 1
             try:
@@ -2338,6 +2375,7 @@ class PronoteGateway:
             except AttachmentUnavailable as refusal:
                 if refusal.status != 404:
                     raise
+                detail = refusal.detail
                 continue
             if ref != refs[0]:
                 _LOGGER.warning(
@@ -2345,8 +2383,20 @@ class PronoteGateway:
                     role,
                 )
             return content, declared, calls
+        # Everything that can be said about the refusal without a value from
+        # the child's data: the elements' own codes, side by side, and what
+        # the server answered.
         _LOGGER.warning(
-            "A graded test's %s was refused by every N tried (%d)", role, len(refs)
+            "A graded test's %s was refused by every N tried (%d); its own N is "
+            "%s the grade's; element codes: %s; answered: %s",
+            role,
+            len(refs),
+            "not" if len(refs) > 1 else "the same as",
+            "; ".join(
+                f"{other.role} [{other.codes or 'none'}]"
+                for other in (grade.documents if grade is not None else ())
+            ),
+            detail,
         )
         raise AttachmentUnavailable(name, 404)
 
