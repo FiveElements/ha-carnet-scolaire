@@ -710,6 +710,23 @@ def _required_list(source: Any, *path: str, what: str) -> list[Any]:
     return cursor
 
 
+def _structure(value: Any, depth: int = 0) -> Any:
+    """A payload's structure -- its keys and value types -- with no value in it.
+
+    For diagnosing a protocol field this module does not read yet, without
+    putting a single identifier, name or mark into a log: every leaf becomes
+    the name of its type, a list is described by its first element, and the
+    walk stops four levels down.
+    """
+    if depth >= 4:
+        return "..."
+    if isinstance(value, dict):
+        return {key: _structure(item, depth + 1) for key, item in sorted(value.items())}
+    if isinstance(value, list):
+        return [_structure(value[0], depth + 1)] if value else []
+    return type(value).__name__
+
+
 def _color_census(kind: str, colors: Iterable[str | None]) -> str:
     """Count how many entries of a tier carry a subject colour, in THREE buckets.
 
@@ -1427,10 +1444,25 @@ class PronoteGateway:
         # believable lie: every subject average sensor would disappear, "last
         # grade" would go to None, and staleness would never fire because the
         # collection *succeeded*.
-        grades = tuple(
-            self._grade(entry)
-            for entry in _required_list(data, "listeDevoirs", what="grades")
+        entries = _required_list(data, "listeDevoirs", what="grades")
+        grades = tuple(self._grade(entry) for entry in entries)
+        # A graded test's paper is listed and refused under every file type
+        # tried, while its answers open (measured on a live instance): the
+        # paper is probably fetched by something other than the grade's `N`.
+        # The structure of one such entry -- keys and types, never a value --
+        # says where to look.
+        documented = next(
+            (
+                entry
+                for entry in entries
+                if isinstance(entry, dict) and entry.get("libelleSujet")
+            ),
+            None,
         )
+        if documented is not None:
+            _LOGGER.debug(
+                "A graded test with a paper has this shape: %s", _structure(documented)
+            )
         averages = tuple(
             self._average(entry)
             for entry in _required_list(data, "listeServices", what="subject averages")

@@ -262,6 +262,57 @@ def test_the_declared_cost_covers_every_type_that_may_be_tried() -> None:
     assert grade_document_cost(GradeDocumentRole.CORRECTION) == 2
 
 
+def test_a_graded_test_with_a_paper_logs_its_shape_and_no_value(
+    gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The diagnostic for the paper PRONOTE refuses, and what it must not say.
+
+    Keys and type names only: no ``N``, no file name, no mark, no comment --
+    the log is what a parent pastes into an issue.
+    """
+    import logging
+
+    _graded(client)
+    caplog.set_level(logging.DEBUG, logger="custom_components.carnet_scolaire.gateway")
+
+    _decoded(gateway, client)
+
+    (record,) = [r for r in caplog.records if "has this shape" in r.getMessage()]
+    message = record.getMessage()
+    assert "'libelleSujet': 'str'" in message
+    assert "'service': {'V': {" in message
+    for value in ("GRADE-1", "sujet.pdf", "corrige.pdf", "14,5", "fractions"):
+        assert value not in message
+
+
+def test_a_grade_without_a_paper_logs_no_shape(
+    gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Only an entry with a paper is the case being diagnosed."""
+    import logging
+
+    _graded(client, subject_file=None)
+    caplog.set_level(logging.DEBUG, logger="custom_components.carnet_scolaire.gateway")
+
+    _decoded(gateway, client)
+
+    assert not [r for r in caplog.records if "has this shape" in r.getMessage()]
+
+
+def test_a_shape_describes_lists_by_their_first_item_and_stops_deep_down() -> None:
+    """Bounded, so a deep payload cannot turn one log line into a dump."""
+    from custom_components.carnet_scolaire.gateway import _structure
+
+    assert _structure({"b": [{"x": 1}, {"y": 2}], "a": [], "c": True}) == {
+        "a": [],
+        "b": [{"x": "int"}],
+        "c": "bool",
+    }
+    assert _structure({"1": {"2": {"3": {"4": {"5": 0}}}}}) == {
+        "1": {"2": {"3": {"4": "..."}}}
+    }
+
+
 def test_a_document_opened_after_a_reconnection_uses_the_new_n(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:
