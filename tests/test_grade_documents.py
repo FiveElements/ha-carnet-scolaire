@@ -169,7 +169,7 @@ def test_the_address_names_the_grade_and_the_file_type(
     assert declared == "application/pdf"
     plaintext = client.communication.encryption.plaintexts[-1]
     segment = json.loads(plaintext[: plaintext.rindex(b"}") + 1])
-    assert segment == {"N": "DOC-CORRIGE-1", "Actif": True, "G": "DevoirCorrige"}
+    assert segment == {"N": "DOC-CORRIGE-1", "G": "DevoirCorrige", "Actif": True}
     (address,) = client.communication.session.gets
     assert address.startswith("https://demo.example.invalid/pronote/FichiersExternes/")
     assert address.endswith("/corrige.pdf?Session=SESSION-NUMBER")
@@ -189,6 +189,23 @@ def test_the_paper_is_asked_for_under_its_own_type(
     assert b'"G":"DevoirSujet"' in client.communication.encryption.plaintexts[-1]
 
 
+def test_the_segment_keys_follow_the_web_clients_order(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """The live defect: ``Actif`` before ``G`` served the answers, never the paper.
+
+    The web client's ``ObjetElement.toJSONAll`` writes ``N``, then ``G``,
+    then ``Actif``, and its links to both documents opened on the same
+    instance. The plaintext is compared byte for byte, order included.
+    """
+    _graded(client)
+
+    _download(gateway, client, role=GradeDocumentRole.SUBJECT)
+
+    plaintext = client.communication.encryption.plaintexts[-1]
+    assert plaintext.startswith(b'{"N":"DOC-SUJET-1","G":"DevoirSujet","Actif":true}')
+
+
 def _answering(client: FakeClient, *statuses: int) -> None:
     """Answer the relay's GETs with these statuses, in order, recording each."""
     from .fixtures.client import FakeResponse
@@ -202,15 +219,14 @@ def _answering(client: FakeClient, *statuses: int) -> None:
     client.communication.session.get = get  # type: ignore[method-assign]
 
 
-def test_a_paper_refused_under_one_type_is_asked_for_under_the_next(
+def test_a_paper_refused_by_its_own_n_is_asked_for_by_the_grades(
     gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """The live defect: the paper answered 404 under ``DevoirSujet``.
-
-    The answers of the same tests opened, so the session, the grade's ``N``
-    and the address were right and only the file type was in doubt. The next
-    type is tried, the cost says so, and the fallback is logged -- without the
-    address or the file name -- so the order can be settled from evidence.
+    """The web client's links to a test's paper and answers share the ``N``
+    in their segment; the answers open by the grade's. So a paper refused by
+    its own ``N`` is asked for by the grade's, the cost says so, and the
+    fallback is logged -- without the address or the file name -- so which
+    ``N`` is right can be settled from evidence.
     """
     _graded(client)
     _answering(client, 404, 200)
@@ -222,17 +238,19 @@ def test_a_paper_refused_under_one_type_is_asked_for_under_the_next(
     assert content == b"%PDF-1.4 not a real document"
     assert cost == 3
     assert len(client.communication.session.gets) == 2
-    assert b'"G":"EvaluationSujet"' in client.communication.encryption.plaintexts[-1]
-    (record,) = [r for r in caplog.records if "file type" in r.getMessage()]
-    assert "EvaluationSujet" in record.getMessage()
+    plaintexts = client.communication.encryption.plaintexts
+    assert b'"N":"DOC-SUJET-1"' in plaintexts[-2]
+    assert b'"N":"GRADE-1","G":"DevoirSujet"' in plaintexts[-1]
+    (record,) = [r for r in caplog.records if "grade's N" in r.getMessage()]
     assert "sujet.pdf" not in record.getMessage()
     assert "FichiersExternes" not in record.getMessage()
+    assert "GRADE-1" not in record.getMessage()
 
 
-def test_a_paper_refused_under_every_type_is_a_404_and_says_so_once(
+def test_a_paper_refused_by_every_n_is_a_404_and_says_so_once(
     gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Both types tried, then a refusal -- logged, so the gap is visible."""
+    """Both ``N`` tried, then a refusal -- logged, so the gap is visible."""
     _graded(client)
     _answering(client, 404, 404)
 
@@ -241,10 +259,23 @@ def test_a_paper_refused_under_every_type_is_a_404_and_says_so_once(
 
     assert refusal.value.status == 404
     assert len(client.communication.session.gets) == 2
-    assert any("every file type" in r.getMessage() for r in caplog.records)
+    assert any("every N tried" in r.getMessage() for r in caplog.records)
 
 
-def test_only_a_404_moves_on_to_the_next_type(
+def test_a_document_whose_n_is_the_grades_is_asked_for_once(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """The same ``N`` twice is one request, not a retry of a known refusal."""
+    _graded(client, subject_ref="GRADE-1")
+    _answering(client, 404)
+
+    with pytest.raises(AttachmentUnavailable):
+        _download(gateway, client, role=GradeDocumentRole.SUBJECT)
+
+    assert len(client.communication.session.gets) == 1
+
+
+def test_only_a_404_moves_on_to_the_next_n(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:
     """A dead session is not a wrong type: one 403, no second request."""
@@ -258,12 +289,12 @@ def test_only_a_404_moves_on_to_the_next_type(
     assert len(client.communication.session.gets) == 1
 
 
-def test_the_declared_cost_covers_every_type_that_may_be_tried() -> None:
+def test_the_declared_cost_covers_every_n_that_may_be_tried() -> None:
     """Charged at admission and never refunded, so the worst case is declared."""
     from custom_components.carnet_scolaire.gateway import grade_document_cost
 
     assert grade_document_cost(GradeDocumentRole.SUBJECT) == 3
-    assert grade_document_cost(GradeDocumentRole.CORRECTION) == 2
+    assert grade_document_cost(GradeDocumentRole.CORRECTION) == 3
 
 
 def test_a_graded_test_with_a_paper_logs_its_shape_and_no_value(
@@ -667,10 +698,14 @@ class TestAGradedTestsDocumentsReachTheCard:
         assert found[1] == 1
         assert found[2] == grade.id
 
-    async def test_opening_the_answers_is_charged_two_requests_to_the_limiter(
+    async def test_opening_the_answers_is_charged_its_worst_case_to_the_limiter(
         self, hass: HomeAssistant, account: PronoteAccount, parent_client: FakeClient
     ) -> None:
-        """The relay's GET bypasses ``ClientBase.post``; the declaration covers it."""
+        """The relay's GET bypasses ``ClientBase.post``; the declaration covers it.
+
+        Three, not the two placed here: the fallback to the grade's ``N`` is
+        charged at admission whether or not it is needed, never refunded.
+        """
         key = self._item(hass)["attachment_refs"][1]["key"]
         resolved = resolve(account, key, student_id=CHILDREN[0][0])
         assert resolved is not None
@@ -683,7 +718,7 @@ class TestAGradedTestsDocumentsReachTheCard:
         assert name == "corrige.pdf"
         assert content == b"%PDF-1.4 not a real document"
         assert content_type == "application/pdf"
-        assert account.limiter.calls_today - before == 2
+        assert account.limiter.calls_today - before == 3
         assert parent_client.posted_names.count("DernieresNotes") == reads + 1
         assert len(parent_client.communication.session.gets) == 1
 
