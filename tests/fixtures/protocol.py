@@ -292,12 +292,18 @@ def grade(
     correction_file: str | None = None,
     remark: str | None = None,
     in_groups: bool | None = None,
+    subject_ref: str | None = "DOC-SUJET-1",
+    correction_ref: str | None = "DOC-CORRIGE-1",
+    color: str | None = None,
 ) -> dict[str, Any]:
     """One ``listeDevoirs`` entry.
 
     ``subject_file`` and ``correction_file`` are the file names PRONOTE puts in
     ``libelleSujet`` and ``libelleCorrige`` when a teacher joins the test's
-    paper or answers; absent otherwise, as on most grades.
+    paper or answers; absent otherwise, as on most grades. Alongside each, the
+    live shape carries ``elmSujet`` / ``elmCorrige`` with the document's own
+    ``N`` -- ``subject_ref`` and ``correction_ref``; ``None`` leaves the element
+    out, which is the older shape that carried the name alone.
 
     ``value`` may be a sentinel: ``"|1"`` through ``"|8"`` are the documented
     ones, and ``"|9"`` is the future ninth that makes upstream's table raise
@@ -321,14 +327,21 @@ def grade(
         entry["noteMin"] = {"V": "4"}
     if comment is not None:
         entry["commentaire"] = comment
-    if subject_file is not None:
-        entry["libelleSujet"] = subject_file
-    if correction_file is not None:
-        entry["libelleCorrige"] = correction_file
+    for name, ref, label, element in (
+        (subject_file, subject_ref, "libelleSujet", "elmSujet"),
+        (correction_file, correction_ref, "libelleCorrige", "elmCorrige"),
+    ):
+        if name is None:
+            continue
+        entry[label] = name
+        if ref is not None:
+            entry[element] = {"V": {"G": 1, "L": name, "N": ref, "genreDocument": 1}}
     if remark is not None:
         entry["commentaireSurNote"] = remark
     if in_groups is not None:
-        entry["service"]["V"]["estServiceGroupe"] = in_groups
+        entry["estEnGroupe"] = in_groups
+    if color is not None:
+        entry["service"]["V"]["couleur"] = color
     return entry
 
 

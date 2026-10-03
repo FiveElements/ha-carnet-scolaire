@@ -565,7 +565,7 @@ Un message d'alerte qui traite `unknown` comme une panne reproche à
 l'intégration un choix de l'établissement.
 
 Chaque élément de `items` (pour « Notes ») contient `id`, `subject`,
-`subject_in_groups`, `value`, `status`, `out_of`,
+`background_color` (la couleur de la matière), `subject_in_groups`, `value`, `status`, `out_of`,
 `default_out_of`, `is_out_of_20`, `coefficient`, `date`, `class_average`,
 `min`, `max`, `comment` (l'intitulé du devoir), `remark` (l'appréciation du
 professeur sur la note), `is_bonus`, `is_optional` et `attachment_refs`.

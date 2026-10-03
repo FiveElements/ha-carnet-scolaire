@@ -406,7 +406,7 @@ icône, un filtre) doit poser cette association sur une clé, et le nom en est
 une mauvaise : PRONOTE l'écrit en capitales, avec des accents, et un
 établissement peut le renommer en cours d'année.
 
-**`grades[]`** — `id`, `subject`, `subject_in_groups`,
+**`grades[]`** — `id`, `subject`, `background_color`, `subject_in_groups`,
 **`value`** (et non `grade` — mais la charge de `event.<é>_nouvelle_note` nomme
 cette même valeur `grade` : les deux noms coexistent, `value` dans les
 attributs, `grade` dans l'événement), `status`, `out_of`, `default_out_of`,
@@ -414,8 +414,10 @@ attributs, `grade` dans l'événement), `status`, `out_of`, `default_out_of`,
 `comment`, `remark`, `is_bonus`, `is_optional`, `attachment_refs[]`.
 `comment` est l'intitulé du devoir, le même pour toute la classe ; `remark` est
 l'appréciation du professeur sur **cette** note (`commentaireSurNote`), nulle
-le plus souvent. `subject_in_groups` dit que la matière est enseignée en
-groupes (`estServiceGroupe`). Pas de `subject_id` ici : celui que PRONOTE met
+le plus souvent. `subject_in_groups` dit que le devoir a été donné à un groupe
+et non à toute la classe (`estEnGroupe`) : `class_average`, `min` et `max` sont
+alors ceux du groupe. `background_color` est la couleur de la matière
+(`service.couleur`), la même que sur les moyennes. Pas de `subject_id` ici : celui que PRONOTE met
 sur une note est le `N` de la séance, qui change à chaque connexion ; une carte
 rapproche une note de sa matière par `subject`.
 `default_out_of` est le barème habituel de la matière et `is_out_of_20` dit
@@ -429,10 +431,12 @@ document de devoir noté est toujours un fichier, d'où `kind` toujours `local`,
 et il s'ouvre comme un fichier de devoir : `carnet_scolaire.get_attachment_url`
 signe la `key` au clic, puis le relais relit les notes de la période et
 télécharge le document — deux requêtes, imputées au palier des notes, trois au
-plus pour un sujet. Le corrigé s'ouvre sous le type de fichier `DevoirCorrige` ;
-le sujet a été refusé (404) sous `DevoirSujet` sur une instance réelle, alors le
-relais essaie ensuite `EvaluationSujet` et journalise un avertissement — sans
-adresse ni nom de fichier — qui dit lequel l'a servi, ou qu'aucun ne l'a fait.
+plus pour un sujet. Chaque document est demandé par **son propre** `N`, celui
+que PRONOTE range dans `elmSujet` et `elmCorrige`, et non par le `N` de la
+note : demandé ainsi, le sujet était refusé (404) sur une instance réelle,
+alors que le client web de PRONOTE chiffre le `N` du document. Si le sujet est
+encore refusé sous `DevoirSujet`, le relais essaie `EvaluationSujet` et
+journalise un avertissement, sans adresse ni nom de fichier.
 Aucune adresse de PRONOTE n'est publiée. La `key` dépend aussi du nom du fichier : un
 corrigé remplacé par le professeur reçoit une nouvelle clé, et l'ancienne ne
 désigne plus rien. Deux frères et sœurs qui ont le **même** contrôle — même

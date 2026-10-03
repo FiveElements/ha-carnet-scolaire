@@ -68,8 +68,12 @@ def test_a_graded_test_names_its_paper_and_its_answers(
     grade = _decoded(gateway, client)
 
     assert grade.documents == (
-        GradeDocument(name="sujet.pdf", role=GradeDocumentRole.SUBJECT),
-        GradeDocument(name="corrige.pdf", role=GradeDocumentRole.CORRECTION),
+        GradeDocument(
+            name="sujet.pdf", role=GradeDocumentRole.SUBJECT, ref="DOC-SUJET-1"
+        ),
+        GradeDocument(
+            name="corrige.pdf", role=GradeDocumentRole.CORRECTION, ref="DOC-CORRIGE-1"
+        ),
     )
 
 
@@ -165,7 +169,7 @@ def test_the_address_names_the_grade_and_the_file_type(
     assert declared == "application/pdf"
     plaintext = client.communication.encryption.plaintexts[-1]
     segment = json.loads(plaintext[: plaintext.rindex(b"}") + 1])
-    assert segment == {"N": "GRADE-1", "Actif": True, "G": "DevoirCorrige"}
+    assert segment == {"N": "DOC-CORRIGE-1", "Actif": True, "G": "DevoirCorrige"}
     (address,) = client.communication.session.gets
     assert address.startswith("https://demo.example.invalid/pronote/FichiersExternes/")
     assert address.endswith("/corrige.pdf?Session=SESSION-NUMBER")
@@ -281,7 +285,14 @@ def test_a_graded_test_with_a_paper_logs_its_shape_and_no_value(
     message = record.getMessage()
     assert "'libelleSujet': 'str'" in message
     assert "'service': {'V': {" in message
-    for value in ("GRADE-1", "sujet.pdf", "corrige.pdf", "14,5", "fractions"):
+    for value in (
+        "GRADE-1",
+        "DOC-SUJET-1",
+        "sujet.pdf",
+        "corrige.pdf",
+        "14,5",
+        "fractions",
+    ):
         assert value not in message
 
 
@@ -323,7 +334,7 @@ def test_a_document_opened_after_a_reconnection_uses_the_new_n(
     """
     _graded(client)
     grade = _decoded(gateway, client)
-    _graded(client, identifier="GRADE-NEXT")
+    _graded(client, subject_ref="DOC-SUJET-NEXT")
     period = current_period(gateway, client)
 
     gateway.grade_document(
@@ -334,7 +345,50 @@ def test_a_document_opened_after_a_reconnection_uses_the_new_n(
         name="sujet.pdf",
     )
 
-    assert b'"N":"GRADE-NEXT"' in client.communication.encryption.plaintexts[-1]
+    assert b'"N":"DOC-SUJET-NEXT"' in client.communication.encryption.plaintexts[-1]
+
+
+def test_the_paper_is_fetched_by_its_own_n_and_not_the_grades(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """The live defect: fetched by the grade's ``N``, the paper answered 404.
+
+    The answers opened by the grade's ``N`` only because theirs coincided.
+    ``elmSujet`` carries the paper's own ``N``, which is what the web client
+    encrypts.
+    """
+    _graded(client)
+
+    _download(gateway, client, role=GradeDocumentRole.SUBJECT)
+
+    plaintext = client.communication.encryption.plaintexts[-1]
+    assert b'"N":"DOC-SUJET-1"' in plaintext
+    assert b'"N":"GRADE-1"' not in plaintext
+
+
+def test_a_document_named_without_its_element_falls_back_to_the_grades_n(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """The older shape carried the file name alone; the grade's ``N`` is all
+    there is then, and it is what served the answers before the element was
+    read."""
+    _graded(client, correction_ref=None)
+
+    _download(gateway, client)
+
+    assert b'"N":"GRADE-1"' in client.communication.encryption.plaintexts[-1]
+
+
+def test_a_group_test_and_the_subjects_colour_are_read(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """``estEnGroupe`` is where the live payload says it, and the colour too."""
+    _graded(client, in_groups=True, color="#ABCDEF")
+
+    grade = _decoded(gateway, client)
+
+    assert grade.subject_in_groups is True
+    assert grade.background_color == "#ABCDEF"
 
 
 @pytest.mark.parametrize(
