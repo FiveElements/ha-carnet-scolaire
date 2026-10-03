@@ -860,3 +860,66 @@ class TestAGradedTestsDocumentsReachTheCard:
             )
 
         assert raised.value.status == 501
+
+
+def _refusing(client: FakeClient, body: bytes) -> None:
+    """Answer every GET with a 404 carrying this HTML body."""
+    from .fixtures.client import FakeResponse
+
+    def get(url: str) -> FakeResponse:
+        client.communication.session.gets.append(url)
+        return FakeResponse(content=body, status_code=404, content_type="text/html")
+
+    client.communication.session.get = get  # type: ignore[method-assign]
+
+
+def test_a_refused_paper_says_what_the_server_answered_and_nothing_else(
+    gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The paper is refused where the web client's own link opens, with an
+    address built the same way as far as can be seen. The refusal's body and
+    the elements' codes are the evidence left; the warning carries them --
+    and no address, file name or ``N``."""
+    _graded(client, subject_ref="GRADE-1")
+    _refusing(client, b"<html><body><h1>Fichier introuvable</h1></body></html>")
+
+    with pytest.raises(AttachmentUnavailable):
+        _download(gateway, client, role=GradeDocumentRole.SUBJECT)
+
+    (record,) = [r for r in caplog.records if "every N tried" in r.getMessage()]
+    message = record.getMessage()
+    assert "text/html" in message
+    assert "'Fichier introuvable'" in message
+    assert "the same as the grade's" in message
+    assert "subject [G=1,genreDocument=1]" in message
+    assert "correction [G=1,genreDocument=1]" in message
+    for secret in ("GRADE-1", "DOC-", "sujet.pdf", "FichiersExternes", "Session"):
+        assert secret not in message
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"<p>see https://demo.example.invalid/pronote/</p>",
+        b"<p>Session=SESSION-NUMBER expired</p>",
+        b"<p>12#abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG</p>",
+        b"<p>sujet.pdf not found</p>",
+    ],
+)
+def test_a_refusal_whose_text_could_open_or_name_a_document_is_withheld(
+    gateway: PronoteGateway,
+    client: FakeClient,
+    caplog: pytest.LogCaptureFixture,
+    body: bytes,
+) -> None:
+    """An address, a session, an ``N`` or the file name in the refusal's text
+    withholds the text: the warning says how big it was, never what it said."""
+    _graded(client)
+    _refusing(client, body)
+
+    with pytest.raises(AttachmentUnavailable):
+        _download(gateway, client, role=GradeDocumentRole.SUBJECT)
+
+    (record,) = [r for r in caplog.records if "every N tried" in r.getMessage()]
+    assert "'<withheld>'" in record.getMessage()
+    assert "not the grade's" in record.getMessage()
