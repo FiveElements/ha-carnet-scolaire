@@ -881,7 +881,13 @@ def test_a_refused_paper_says_what_the_server_answered_and_nothing_else(
     the elements' codes are the evidence left; the warning carries them --
     and no address, file name or ``N``."""
     _graded(client, subject_ref="GRADE-1")
-    _refusing(client, b"<html><body><h1>Fichier introuvable</h1></body></html>")
+    _refusing(
+        client,
+        b"<html><head><title>COLLEGE DEMO - PRONOTE</title>"
+        b"<style>main { color: red; }</style></head>"
+        b"<body><script>var x = 1;</script>"
+        b"<h1>Fichier introuvable</h1></body></html>",
+    )
 
     with pytest.raises(AttachmentUnavailable):
         _download(gateway, client, role=GradeDocumentRole.SUBJECT)
@@ -893,7 +899,16 @@ def test_a_refused_paper_says_what_the_server_answered_and_nothing_else(
     assert "the same as the grade's" in message
     assert "subject [G=1,genreDocument=1]" in message
     assert "correction [G=1,genreDocument=1]" in message
-    for secret in ("GRADE-1", "DOC-", "sujet.pdf", "FichiersExternes", "Session"):
+    for secret in (
+        "GRADE-1",
+        "DOC-",
+        "sujet.pdf",
+        "FichiersExternes",
+        "Session",
+        "COLLEGE DEMO",
+        "color",
+        "var x",
+    ):
         assert secret not in message
 
 
