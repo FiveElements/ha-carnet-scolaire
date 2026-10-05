@@ -25,8 +25,8 @@ pytest-homeassistant-custom-component==0.13.363
 # `qr_code`. That message is a guess, not a finding, and it cost most of a day:
 # no key derivation can unpad a string that was never ciphertext.
 pronotepy==2.15.7
-ruff==0.16.9
-mypy==2.3.1
+ruff==0.16.10
+mypy==2.4.0
 pytest-cov
 
 # `hardened_client.py` subclasses `requests.Session` to inject the HTTP timeout
