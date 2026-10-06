@@ -173,9 +173,10 @@ def test_the_address_names_the_grade_and_the_file_type(
     (address,) = client.communication.session.gets
     assert address.startswith("https://demo.example.invalid/pronote/FichiersExternes/")
     assert address.endswith("/corrige.pdf?Session=SESSION-NUMBER")
-    # Two: the grades are read again in this session, then the bytes fetched.
-    assert cost == 2
-    assert client.posted_names == ["DernieresNotes"]
+    # Three: a navigation to the grades tab, the grades read again in this
+    # session, then the bytes fetched.
+    assert cost == 3
+    assert client.posted_names == ["Navigation", "DernieresNotes"]
 
 
 def test_the_paper_is_asked_for_under_its_own_type(
@@ -204,6 +205,23 @@ def test_the_segment_keys_follow_the_web_clients_order(
 
     plaintext = client.communication.encryption.plaintexts[-1]
     assert plaintext.startswith(b'{"N":"DOC-SUJET-1","G":"DevoirSujet","Actif":true}')
+
+
+def test_the_relay_navigates_to_the_grades_tab_before_reading_them(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """The live defect: the paper was refused by a request identical, as far
+    as could be seen, to the web client's own link -- and the web client's
+    last two calls before the download were ``Navigation`` to the grades tab
+    and ``DernieresNotes``. The relay had never sent the first."""
+    _graded(client)
+
+    _download(gateway, client, role=GradeDocumentRole.SUBJECT)
+
+    assert client.posted_names == ["Navigation", "DernieresNotes"]
+    name, tab, body = client.posts[0]
+    assert (name, tab) == ("Navigation", 198)
+    assert body == {"onglet": 198, "ongletPrec": 7}
 
 
 def _answering(client: FakeClient, *statuses: int) -> None:
@@ -236,7 +254,7 @@ def test_a_paper_refused_by_its_own_n_is_asked_for_by_the_grades(
     )
 
     assert content == b"%PDF-1.4 not a real document"
-    assert cost == 3
+    assert cost == 4
     assert len(client.communication.session.gets) == 2
     plaintexts = client.communication.encryption.plaintexts
     assert b'"N":"DOC-SUJET-1"' in plaintexts[-2]
@@ -293,8 +311,8 @@ def test_the_declared_cost_covers_every_n_that_may_be_tried() -> None:
     """Charged at admission and never refunded, so the worst case is declared."""
     from custom_components.carnet_scolaire.gateway import grade_document_cost
 
-    assert grade_document_cost(GradeDocumentRole.SUBJECT) == 3
-    assert grade_document_cost(GradeDocumentRole.CORRECTION) == 3
+    assert grade_document_cost(GradeDocumentRole.SUBJECT) == 4
+    assert grade_document_cost(GradeDocumentRole.CORRECTION) == 4
 
 
 def test_a_graded_test_with_a_paper_logs_its_shape_and_no_value(
@@ -703,7 +721,7 @@ class TestAGradedTestsDocumentsReachTheCard:
     ) -> None:
         """The relay's GET bypasses ``ClientBase.post``; the declaration covers it.
 
-        Three, not the two placed here: the fallback to the grade's ``N`` is
+        Four, not the three placed here: the fallback to the grade's ``N`` is
         charged at admission whether or not it is needed, never refunded.
         """
         key = self._item(hass)["attachment_refs"][1]["key"]
@@ -718,7 +736,7 @@ class TestAGradedTestsDocumentsReachTheCard:
         assert name == "corrige.pdf"
         assert content == b"%PDF-1.4 not a real document"
         assert content_type == "application/pdf"
-        assert account.limiter.calls_today - before == 3
+        assert account.limiter.calls_today - before == 4
         assert parent_client.posted_names.count("DernieresNotes") == reads + 1
         assert len(parent_client.communication.session.gets) == 1
 

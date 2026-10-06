@@ -373,6 +373,7 @@ class FakeClient:
             ),
             "SaisieTAFFaitEleve": self._record_homework_ticks,
             "SaisieActualites": {"dataSec": {"data": {}}},
+            "Navigation": {"dataSec": {"data": {}}},
         }
 
         self.threads: list[FakeThread] = []
