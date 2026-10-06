@@ -352,7 +352,8 @@ ce contrôle elle-même : elle ne connaît pas l'hôte du serveur, et elle ne do
 pas le connaître.
 
 **Exigence.** Le type de contenu annoncé au navigateur est une **liste
-blanche** — PDF, images matricielles, texte simple — et tout le reste est servi
+blanche** — PDF, images matricielles, texte simple, audio (MP3, MP4, Ogg) — et
+tout le reste est servi
 en `application/octet-stream`, donc téléchargé plutôt qu'affiché. La réponse
 sort de l'origine de Home Assistant : un document renvoyé en `text/html`
 exécuterait son propre script avec la session du lecteur, et `image/svg+xml`

@@ -58,6 +58,8 @@ from datetime import timedelta
 import hashlib
 import hmac
 from typing import TYPE_CHECKING, Any, Final
+import unicodedata
+from urllib.parse import quote
 
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
@@ -134,7 +136,9 @@ _FALLBACK_CONTENT_TYPE: Final = "application/octet-stream"
 #: origin**: a document echoed back as ``text/html`` would run its own script
 #: with the user's session, which is a stored cross-site scripting route
 #: through a teacher's file upload. PDFs and images are what exercise sheets
-#: actually are, and everything else downloads.
+#: actually are, recordings are what a language teacher joins -- an audio
+#: stream plays in the browser's own player and runs nothing in the origin --
+#: and everything else downloads.
 _SAFE_CONTENT_TYPES: Final = frozenset(
     {
         "application/pdf",
@@ -143,6 +147,9 @@ _SAFE_CONTENT_TYPES: Final = frozenset(
         "image/gif",
         "image/webp",
         "text/plain",
+        "audio/mpeg",
+        "audio/mp4",
+        "audio/ogg",
     }
 )
 
@@ -423,10 +430,7 @@ class PronoteAttachmentView(HomeAssistantView):
             body=content,
             content_type=content_type,
             headers={
-                # `inline` so an exercise sheet opens in the browser's own
-                # viewer rather than landing in the downloads folder, but with
-                # the real filename so saving it keeps a usable name.
-                "Content-Disposition": f'inline; filename="{_ascii(name)}"',
+                "Content-Disposition": _disposition(name),
                 # The bytes never change for a given fingerprint -- it names a
                 # document, not a position -- and the signature is what bounds
                 # access, so letting the browser keep them saves re-serving the
@@ -534,20 +538,51 @@ def _content_type(declared: str | None) -> str:
     return _FALLBACK_CONTENT_TYPE
 
 
-def _ascii(name: str) -> str:
-    """A filename safe to put in a header.
+def _printable(name: str) -> str:
+    """The name without quotes, backslashes or anything unprintable.
 
-    Header values are latin-1 on the wire and a quote would end the parameter
-    early, so an accented or quoted document name is reduced rather than
-    trusted. The name in the attribute stays the real one -- this is only what
-    the browser is told to call the file it saves.
+    A quote would end the header parameter early and a line break would start
+    a new header; neither is ever part of a file's name worth keeping.
     """
-    cleaned = "".join(
+    return "".join(
         character
         for character in name
         if character not in '"\\' and character.isprintable()
     )
-    return cleaned.encode("ascii", "replace").decode("ascii") or "document"
+
+
+def _ascii(name: str) -> str:
+    """The ASCII fallback filename, for a client that ignores ``filename*``.
+
+    Accents are folded (NFKD, then the combining marks dropped) and anything
+    still outside ASCII becomes ``_`` -- never ``?``: Windows forbids ``?`` in
+    a filename, and a browser that meets one discards the proposed name and
+    saves the file under the URL's last segment, a 16-hex key with no
+    extension. Measured on a live instance, on every accented name.
+    """
+    folded = "".join(
+        character
+        for character in unicodedata.normalize("NFKD", _printable(name))
+        if not unicodedata.combining(character)
+    )
+    return (
+        "".join(character if character.isascii() else "_" for character in folded)
+        or "document"
+    )
+
+
+def _disposition(name: str) -> str:
+    """``inline``, with the real name for a browser that reads RFC 6266.
+
+    `inline` so an exercise sheet opens in the browser's own viewer rather
+    than landing in the downloads folder; ``filename*`` (RFC 5987, UTF-8,
+    percent-encoded) carries the name with its accents, and ``filename`` the
+    folded fallback, so the extension survives either way.
+    """
+    real = _printable(name) or "document"
+    return (
+        f"inline; filename=\"{_ascii(name)}\"; filename*=UTF-8''{quote(real, safe='')}"
+    )
 
 
 def _account(hass: HomeAssistant, entry_id: str) -> PronoteAccount | None:
