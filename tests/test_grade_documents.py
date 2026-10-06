@@ -230,7 +230,7 @@ def _answering(client: FakeClient, *statuses: int) -> None:
 
     queue = list(statuses)
 
-    def get(url: str) -> FakeResponse:
+    def get(url: str, headers: dict[str, str] | None = None) -> FakeResponse:
         client.communication.session.gets.append(url)
         return FakeResponse(status_code=queue.pop(0))
 
@@ -552,7 +552,7 @@ def test_a_transport_error_never_carries_the_address(
 
     _graded(client)
 
-    def unreachable(url: str) -> None:
+    def unreachable(url: str, headers: dict[str, str] | None = None) -> None:
         raise requests.ConnectionError(f"Max retries exceeded with url: {url}")
 
     client.communication.session.get = unreachable  # type: ignore[method-assign]
@@ -884,7 +884,7 @@ def _refusing(client: FakeClient, body: bytes) -> None:
     """Answer every GET with a 404 carrying this HTML body."""
     from .fixtures.client import FakeResponse
 
-    def get(url: str) -> FakeResponse:
+    def get(url: str, headers: dict[str, str] | None = None) -> FakeResponse:
         client.communication.session.gets.append(url)
         return FakeResponse(content=body, status_code=404, content_type="text/html")
 
@@ -894,17 +894,15 @@ def _refusing(client: FakeClient, body: bytes) -> None:
 def test_a_refused_paper_says_what_the_server_answered_and_nothing_else(
     gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """The paper is refused where the web client's own link opens, with an
-    address built the same way as far as can be seen. The refusal's body and
-    the elements' codes are the evidence left; the warning carries them --
-    and no address, file name or ``N``."""
+    """The refusal's type and size and the elements' codes, side by side --
+    and never its text: PRONOTE's error page names the establishment in its
+    title and again in its body, and both reached a live log before."""
     _graded(client, subject_ref="GRADE-1")
     _refusing(
         client,
-        b"<html><head><title>COLLEGE DEMO - PRONOTE</title>"
-        b"<style>main { color: red; }</style></head>"
-        b"<body><script>var x = 1;</script>"
-        b"<h1>Fichier introuvable</h1></body></html>",
+        b"<html><head><title>COLLEGE DEMO - PRONOTE</title></head>"
+        b"<body><h1>COLLEGE DEMO</h1><p>La page demandee n'existe pas</p>"
+        b"</body></html>",
     )
 
     with pytest.raises(AttachmentUnavailable):
@@ -913,7 +911,7 @@ def test_a_refused_paper_says_what_the_server_answered_and_nothing_else(
     (record,) = [r for r in caplog.records if "every N tried" in r.getMessage()]
     message = record.getMessage()
     assert "text/html" in message
-    assert "'Fichier introuvable'" in message
+    assert "bytes" in message
     assert "the same as the grade's" in message
     assert "subject [G=1,genreDocument=1]" in message
     assert "correction [G=1,genreDocument=1]" in message
@@ -924,35 +922,37 @@ def test_a_refused_paper_says_what_the_server_answered_and_nothing_else(
         "FichiersExternes",
         "Session",
         "COLLEGE DEMO",
-        "color",
-        "var x",
+        "existe",
     ):
         assert secret not in message
 
 
-@pytest.mark.parametrize(
-    "body",
-    [
-        b"<p>see https://demo.example.invalid/pronote/</p>",
-        b"<p>Session=SESSION-NUMBER expired</p>",
-        b"<p>12#abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG</p>",
-        b"<p>sujet.pdf not found</p>",
-    ],
-)
-def test_a_refusal_whose_text_could_open_or_name_a_document_is_withheld(
-    gateway: PronoteGateway,
-    client: FakeClient,
-    caplog: pytest.LogCaptureFixture,
-    body: bytes,
+def test_a_graded_tests_document_is_asked_for_as_a_browser_opens_it(
+    gateway: PronoteGateway, client: FakeClient
 ) -> None:
-    """An address, a session, an ``N`` or the file name in the refusal's text
-    withholds the text: the warning says how big it was, never what it said."""
+    """The web client's link to the paper is a top-level navigation from the
+    session's page; the relay's GET carried none of a navigation's headers,
+    and the paper -- not the answers -- was refused."""
     _graded(client)
-    _refusing(client, body)
 
-    with pytest.raises(AttachmentUnavailable):
-        _download(gateway, client, role=GradeDocumentRole.SUBJECT)
+    _download(gateway, client, role=GradeDocumentRole.SUBJECT)
 
-    (record,) = [r for r in caplog.records if "every N tried" in r.getMessage()]
-    assert "'<withheld>'" in record.getMessage()
-    assert "not the grade's" in record.getMessage()
+    (headers,) = client.communication.session.headers
+    assert headers == {
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Referer": "https://demo.example.invalid/pronote/parent.html",
+    }
+
+
+def test_a_homework_file_is_still_fetched_without_headers(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """The navigation headers are the graded documents' experiment only; the
+    homework relay, which works, is left exactly as it was."""
+    from custom_components.carnet_scolaire.gateway import _download as get
+
+    get(client, "https://demo.example.invalid/pronote/FichiersExternes/x/y", "y")  # type: ignore[arg-type]
+
+    assert client.communication.session.headers == [None]

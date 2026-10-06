@@ -292,7 +292,13 @@ def _lesson_key(lesson: Lesson) -> str:
     return item_keys.mint("lesson", lesson.subject, lesson.start, lesson.end)
 
 
-def _download(client: HardenedClient, url: str, name: str) -> tuple[bytes, str | None]:
+def _download(
+    client: HardenedClient,
+    url: str,
+    name: str,
+    *,
+    headers: dict[str, str] | None = None,
+) -> tuple[bytes, str | None]:
     """GET one ``FichiersExternes`` address, and say only *that* it failed.
 
     Two refusals, and neither may carry the address. A status other than 200
@@ -305,7 +311,11 @@ def _download(client: HardenedClient, url: str, name: str) -> tuple[bytes, str |
     puts an address that opens the document into ``home-assistant.log``.
     """
     try:
-        response = client.communication.session.get(url)
+        response = (
+            client.communication.session.get(url, headers=headers)
+            if headers
+            else client.communication.session.get(url)
+        )
     except requests.RequestException:
         raise AttachmentUnavailable(name, 502) from None
     if response.status_code != 200:
@@ -317,35 +327,19 @@ def _download(client: HardenedClient, url: str, name: str) -> tuple[bytes, str |
     return content, declared
 
 
-#: Anything in a refusal's text that could open a document or name a child's
-#: file: an address, a session, an ``N`` (``<digits>#<43 characters>``).
-_WITHHELD: Final = re.compile(r"https?:|session|\d{1,3}#[\w-]{20,}", re.IGNORECASE)
-
-
-#: The parts of an error page that are not its message: the ``<head>`` holds
-#: the establishment's name in its title, and styles and scripts are code.
-#: Measured: without this, a 404's first words were that name and CSS.
-_UNREAD: Final = re.compile(
-    r"<(head|style|script)\b.*?</\1\s*>", re.IGNORECASE | re.DOTALL
-)
-
-
 def _refusal_detail(response: Any, name: str) -> str:
-    """What a refused GET answered, safe for a warning.
+    """What a refused GET answered, safe for a warning: its type and size.
 
-    A graded test's paper is refused (404) where the web client's own link to
-    it opens, with an address built the same way as far as can be seen; the
-    body of the refusal is the one piece of evidence left. Its type, its size
-    and its first words as plain text -- unless they hold an address, a
-    session, an ``N`` or the file name, in which case the words are withheld.
+    Never its text. PRONOTE's error page carries the establishment's name in
+    its title *and* its body, so no stripping of the page keeps the name out
+    of a log -- measured on a live instance, twice. Its message, once read,
+    was the generic "page does not exist" of every 404, which says nothing
+    the status does not.
     """
+    del name
     content = getattr(response, "content", b"") or b""
     declared = getattr(response, "headers", {}).get("content-type")
-    page = _UNREAD.sub(" ", content[:16384].decode("utf-8", "replace"))
-    text = " ".join(re.sub(r"<[^>]*>", " ", page).split())[:160]
-    if _WITHHELD.search(text) or (name and name.lower() in text.lower()):
-        text = "<withheld>"
-    return f"{declared or 'no type'}, {len(content)} bytes, text {text!r}"
+    return f"{declared or 'no type'}, {len(content)} bytes"
 
 
 def _external_file_url(
@@ -568,6 +562,16 @@ _PRONOTE_FILE_SEGMENT: Final = "fichiersexternes"
 #: handed to ``pronotepy`` when re-deriving a file's address, and a magic ``1``
 #: there would be unreadable.
 _ATTACHMENT_FILE: Final = 1
+
+#: How a browser asks for a document it opens in a tab: the web client's link
+#: to a graded test's paper is followed as a top-level navigation, from the
+#: page the session was opened on. The relay's GET otherwise carries none of
+#: these, and the paper -- not the answers -- was refused without them.
+_NAVIGATION_HEADERS: Final = {
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "same-origin",
+}
 
 #: The tab a session lands on, and the one upstream's keep-alive names
 #: (``ClientBase.session_check`` and ``pronoteAPI._KeepAlive`` post
@@ -2391,6 +2395,12 @@ class PronoteGateway:
         )
         calls = 2
         detail = ""
+        communication = client.communication
+        headers = {
+            **_NAVIGATION_HEADERS,
+            "Referer": f"{communication.root_site}/"
+            f"{getattr(communication, 'html_page', 'parent.html')}",
+        }
         for ref in refs:
             calls += 1
             try:
@@ -2398,6 +2408,7 @@ class PronoteGateway:
                     client,
                     _external_file_url(client, ref=ref, name=name, genre=genre),
                     name,
+                    headers=headers,
                 )
             except AttachmentUnavailable as refusal:
                 if refusal.status != 404:
