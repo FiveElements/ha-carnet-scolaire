@@ -173,10 +173,9 @@ def test_the_address_names_the_grade_and_the_file_type(
     (address,) = client.communication.session.gets
     assert address.startswith("https://demo.example.invalid/pronote/FichiersExternes/")
     assert address.endswith("/corrige.pdf?Session=SESSION-NUMBER")
-    # Three: a navigation to the grades tab, the grades read again in this
-    # session, then the bytes fetched.
-    assert cost == 3
-    assert client.posted_names == ["Navigation", "DernieresNotes"]
+    # Two: the grades are read again in this session, then the bytes fetched.
+    assert cost == 2
+    assert client.posted_names == ["DernieresNotes"]
 
 
 def test_the_paper_is_asked_for_under_its_own_type(
@@ -207,30 +206,13 @@ def test_the_segment_keys_follow_the_web_clients_order(
     assert plaintext.startswith(b'{"N":"DOC-SUJET-1","G":"DevoirSujet","Actif":true}')
 
 
-def test_the_relay_navigates_to_the_grades_tab_before_reading_them(
-    gateway: PronoteGateway, client: FakeClient
-) -> None:
-    """The live defect: the paper was refused by a request identical, as far
-    as could be seen, to the web client's own link -- and the web client's
-    last two calls before the download were ``Navigation`` to the grades tab
-    and ``DernieresNotes``. The relay had never sent the first."""
-    _graded(client)
-
-    _download(gateway, client, role=GradeDocumentRole.SUBJECT)
-
-    assert client.posted_names == ["Navigation", "DernieresNotes"]
-    name, tab, body = client.posts[0]
-    assert (name, tab) == ("Navigation", 198)
-    assert body == {"onglet": 198, "ongletPrec": 7}
-
-
 def _answering(client: FakeClient, *statuses: int) -> None:
     """Answer the relay's GETs with these statuses, in order, recording each."""
     from .fixtures.client import FakeResponse
 
     queue = list(statuses)
 
-    def get(url: str, headers: dict[str, str] | None = None) -> FakeResponse:
+    def get(url: str) -> FakeResponse:
         client.communication.session.gets.append(url)
         return FakeResponse(status_code=queue.pop(0))
 
@@ -254,7 +236,7 @@ def test_a_paper_refused_by_its_own_n_is_asked_for_by_the_grades(
     )
 
     assert content == b"%PDF-1.4 not a real document"
-    assert cost == 4
+    assert cost == 3
     assert len(client.communication.session.gets) == 2
     plaintexts = client.communication.encryption.plaintexts
     assert b'"N":"DOC-SUJET-1"' in plaintexts[-2]
@@ -311,8 +293,8 @@ def test_the_declared_cost_covers_every_n_that_may_be_tried() -> None:
     """Charged at admission and never refunded, so the worst case is declared."""
     from custom_components.carnet_scolaire.gateway import grade_document_cost
 
-    assert grade_document_cost(GradeDocumentRole.SUBJECT) == 4
-    assert grade_document_cost(GradeDocumentRole.CORRECTION) == 4
+    assert grade_document_cost(GradeDocumentRole.SUBJECT) == 3
+    assert grade_document_cost(GradeDocumentRole.CORRECTION) == 3
 
 
 def test_a_graded_test_with_a_paper_logs_its_shape_and_no_value(
@@ -552,7 +534,7 @@ def test_a_transport_error_never_carries_the_address(
 
     _graded(client)
 
-    def unreachable(url: str, headers: dict[str, str] | None = None) -> None:
+    def unreachable(url: str) -> None:
         raise requests.ConnectionError(f"Max retries exceeded with url: {url}")
 
     client.communication.session.get = unreachable  # type: ignore[method-assign]
@@ -721,7 +703,7 @@ class TestAGradedTestsDocumentsReachTheCard:
     ) -> None:
         """The relay's GET bypasses ``ClientBase.post``; the declaration covers it.
 
-        Four, not the three placed here: the fallback to the grade's ``N`` is
+        Three, not the two placed here: the fallback to the grade's ``N`` is
         charged at admission whether or not it is needed, never refunded.
         """
         key = self._item(hass)["attachment_refs"][1]["key"]
@@ -736,7 +718,7 @@ class TestAGradedTestsDocumentsReachTheCard:
         assert name == "corrige.pdf"
         assert content == b"%PDF-1.4 not a real document"
         assert content_type == "application/pdf"
-        assert account.limiter.calls_today - before == 4
+        assert account.limiter.calls_today - before == 3
         assert parent_client.posted_names.count("DernieresNotes") == reads + 1
         assert len(parent_client.communication.session.gets) == 1
 
@@ -880,81 +862,3 @@ class TestAGradedTestsDocumentsReachTheCard:
             )
 
         assert raised.value.status == 501
-
-
-def _refusing(client: FakeClient, body: bytes) -> None:
-    """Answer every GET with a 404 carrying this HTML body."""
-    from .fixtures.client import FakeResponse
-
-    def get(url: str, headers: dict[str, str] | None = None) -> FakeResponse:
-        client.communication.session.gets.append(url)
-        return FakeResponse(content=body, status_code=404, content_type="text/html")
-
-    client.communication.session.get = get  # type: ignore[method-assign]
-
-
-def test_a_refused_paper_says_what_the_server_answered_and_nothing_else(
-    gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
-) -> None:
-    """The refusal's type and size and the elements' codes, side by side --
-    and never its text: PRONOTE's error page names the establishment in its
-    title and again in its body, and both reached a live log before."""
-    _graded(client, subject_ref="GRADE-1")
-    _refusing(
-        client,
-        b"<html><head><title>COLLEGE DEMO - PRONOTE</title></head>"
-        b"<body><h1>COLLEGE DEMO</h1><p>La page demandee n'existe pas</p>"
-        b"</body></html>",
-    )
-
-    with pytest.raises(AttachmentUnavailable):
-        _download(gateway, client, role=GradeDocumentRole.SUBJECT)
-
-    (record,) = [r for r in caplog.records if "every N tried" in r.getMessage()]
-    message = record.getMessage()
-    assert "text/html" in message
-    assert "bytes" in message
-    assert "the same as the grade's" in message
-    assert "subject [G=1,genreDocument=1]" in message
-    assert "correction [G=1,genreDocument=1]" in message
-    for secret in (
-        "GRADE-1",
-        "DOC-",
-        "sujet.pdf",
-        "FichiersExternes",
-        "Session",
-        "COLLEGE DEMO",
-        "existe",
-    ):
-        assert secret not in message
-
-
-def test_a_graded_tests_document_is_asked_for_as_a_browser_opens_it(
-    gateway: PronoteGateway, client: FakeClient
-) -> None:
-    """The web client's link to the paper is a top-level navigation from the
-    session's page; the relay's GET carried none of a navigation's headers,
-    and the paper -- not the answers -- was refused."""
-    _graded(client)
-
-    _download(gateway, client, role=GradeDocumentRole.SUBJECT)
-
-    (headers,) = client.communication.session.headers
-    assert headers == {
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "same-origin",
-        "Referer": "https://demo.example.invalid/pronote/parent.html",
-    }
-
-
-def test_a_homework_file_is_still_fetched_without_headers(
-    gateway: PronoteGateway, client: FakeClient
-) -> None:
-    """The navigation headers are the graded documents' experiment only; the
-    homework relay, which works, is left exactly as it was."""
-    from custom_components.carnet_scolaire.gateway import _download as get
-
-    get(client, "https://demo.example.invalid/pronote/FichiersExternes/x/y", "y")  # type: ignore[arg-type]
-
-    assert client.communication.session.headers == [None]

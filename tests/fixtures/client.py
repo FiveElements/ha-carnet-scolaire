@@ -147,12 +147,9 @@ class FakeHttpSession:
     def __init__(self) -> None:
         self.gets: list[str] = []
         self.response = FakeResponse()
-        #: The headers each GET was sent with, ``None`` for none.
-        self.headers: list[dict[str, str] | None] = []
 
-    def get(self, url: str, headers: dict[str, str] | None = None) -> FakeResponse:
+    def get(self, url: str) -> FakeResponse:
         self.gets.append(url)
-        self.headers.append(headers)
         return self.response
 
 
@@ -166,7 +163,6 @@ class FakeCommunication:
         #: rather than a re-implementation of it.
         self.encryption = FakeEncryption()
         self.root_site = "https://demo.example.invalid/pronote"
-        self.html_page = "parent.html"
         self.session = FakeHttpSession()
 
     def post(self, name: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -377,7 +373,6 @@ class FakeClient:
             ),
             "SaisieTAFFaitEleve": self._record_homework_ticks,
             "SaisieActualites": {"dataSec": {"data": {}}},
-            "Navigation": {"dataSec": {"data": {}}},
         }
 
         self.threads: list[FakeThread] = []

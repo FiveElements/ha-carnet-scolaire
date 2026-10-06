@@ -240,13 +240,10 @@ class AttachmentUnavailable(Exception):  # noqa: N818 -- surfaced as an HTTP sta
     that asked for it, which is worth saying differently from "no such file".
     """
 
-    def __init__(self, name: str, status: int, *, detail: str = "") -> None:
+    def __init__(self, name: str, status: int) -> None:
         super().__init__(f"PRONOTE answered {status} for the document {name!r}")
         self.name = name
         self.status = status
-        #: What the refusal looked like (`_refusal_detail`), for a warning;
-        #: never the address, the file name or an ``N``.
-        self.detail = detail
 
 
 # ---------------------------------------------------------------------------
@@ -292,13 +289,7 @@ def _lesson_key(lesson: Lesson) -> str:
     return item_keys.mint("lesson", lesson.subject, lesson.start, lesson.end)
 
 
-def _download(
-    client: HardenedClient,
-    url: str,
-    name: str,
-    *,
-    headers: dict[str, str] | None = None,
-) -> tuple[bytes, str | None]:
+def _download(client: HardenedClient, url: str, name: str) -> tuple[bytes, str | None]:
     """GET one ``FichiersExternes`` address, and say only *that* it failed.
 
     Two refusals, and neither may carry the address. A status other than 200
@@ -311,35 +302,14 @@ def _download(
     puts an address that opens the document into ``home-assistant.log``.
     """
     try:
-        response = (
-            client.communication.session.get(url, headers=headers)
-            if headers
-            else client.communication.session.get(url)
-        )
+        response = client.communication.session.get(url)
     except requests.RequestException:
         raise AttachmentUnavailable(name, 502) from None
     if response.status_code != 200:
-        raise AttachmentUnavailable(
-            name, response.status_code, detail=_refusal_detail(response, name)
-        )
+        raise AttachmentUnavailable(name, response.status_code)
     content: bytes = response.content
     declared: str | None = response.headers.get("content-type")
     return content, declared
-
-
-def _refusal_detail(response: Any, name: str) -> str:
-    """What a refused GET answered, safe for a warning: its type and size.
-
-    Never its text. PRONOTE's error page carries the establishment's name in
-    its title *and* its body, so no stripping of the page keeps the name out
-    of a log -- measured on a live instance, twice. Its message, once read,
-    was the generic "page does not exist" of every 404, which says nothing
-    the status does not.
-    """
-    del name
-    content = getattr(response, "content", b"") or b""
-    declared = getattr(response, "headers", {}).get("content-type")
-    return f"{declared or 'no type'}, {len(content)} bytes"
 
 
 def _external_file_url(
@@ -563,22 +533,6 @@ _PRONOTE_FILE_SEGMENT: Final = "fichiersexternes"
 #: there would be unreadable.
 _ATTACHMENT_FILE: Final = 1
 
-#: How a browser asks for a document it opens in a tab: the web client's link
-#: to a graded test's paper is followed as a top-level navigation, from the
-#: page the session was opened on. The relay's GET otherwise carries none of
-#: these, and the paper -- not the answers -- was refused without them.
-_NAVIGATION_HEADERS: Final = {
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "same-origin",
-}
-
-#: The tab a session lands on, and the one upstream's keep-alive names
-#: (``ClientBase.session_check`` and ``pronoteAPI._KeepAlive`` post
-#: ``Navigation`` with ``onglet`` and ``ongletPrec`` both 7): the previous tab
-#: a navigation to the grades declares.
-_HOME_TAB: Final = 7
-
 #: Where a ``listeDevoirs`` entry describes each of its two documents -- the
 #: element carrying the document's own ``N`` and name, and the older bare file
 #: name -- and the file type that goes in the ``G`` of the encrypted segment:
@@ -607,29 +561,21 @@ def _grade_document(
     name = described.get("L") or entry.get(key)
     if not name:
         return None
-    codes = ",".join(
-        f"{code}={described[code]}"
-        for code in ("G", "genreDocument")
-        if isinstance(described.get(code), int)
-    )
-    return GradeDocument(
-        name=str(name), role=role, ref=str(described.get("N") or ""), codes=codes
-    )
+    return GradeDocument(name=str(name), role=role, ref=str(described.get("N") or ""))
 
 
 def grade_document_cost(role: GradeDocumentRole) -> int:
     """The most requests opening one graded test's document can place.
 
-    One ``Navigation`` to the grades tab and one ``DernieresNotes``, then one
-    GET by the document's own ``N`` and, if that is refused, one by the
-    grade's (`PronoteGateway.grade_document`).
+    One ``DernieresNotes``, then one GET by the document's own ``N`` and, if
+    that is refused, one by the grade's (`PronoteGateway.grade_document`).
     Declared as the worst case because the limiter charges at admission and
     never refunds: an under-declared fallback would spend budget the limiter
     never saw. The same for both roles today; the role stays in the signature
     so a document needing more is declared where it is described.
     """
     del role
-    return 4
+    return 3
 
 
 #: ``E`` on a line of a ``Saisie*`` list: the entity state, ``2`` meaning
@@ -2331,20 +2277,19 @@ class PronoteGateway:
     ) -> tuple[bytes, str | None, int]:
         """Download a graded test's paper or answers, under the lock.
 
-        At most four requests (`grade_document_cost`): the file is fetched by
+        At most three requests (`grade_document_cost`): the file is fetched by
         an ``N`` that every login re-encrypts, so the grades of its period are
         read again in this session first -- one ``DernieresNotes``, without
         the report card -- and the key looked up in them. Then one GET by the
         document's own ``N`` and, only on a 404 and only when it differs, one
         by the grade's; any other refusal is the answer.
 
-        Before the read, one ``Navigation`` to the grades tab, as the web
-        client sends when a parent opens that tab. Measured on a live
-        instance: the paper of a graded test was refused (404) by a request
-        identical, as far as could be seen, to the web client's own link,
-        while the answers opened; the web client's last two calls before the
-        download were ``Navigation`` and ``DernieresNotes``, and the relay had
-        never sent the first.
+        One live instance refuses the paper (404) while the answers open, for
+        a request identical in every visible respect to the web client's own
+        link: same ``N``, same ``G``, same key order, same name. Tried there
+        and dropped for want of effect: a ``Navigation`` to the grades tab
+        first, and a browser navigation's ``Referer`` and ``Sec-Fetch``
+        headers. The refusal reaches the card as a 502, as any other does.
 
         The address is the one place this module builds what
         ``dataClasses.Attachment`` would (see :func:`_external_file_url`):
@@ -2357,11 +2302,6 @@ class PronoteGateway:
         )
         if period is None:
             raise AttachmentUnavailable(name, 404)
-        client.post(
-            "Navigation",
-            FUNC_MARKS[1],
-            {"onglet": FUNC_MARKS[1], "ongletPrec": _HOME_TAB},
-        )
         grades = self.marks(client, period, with_report=False).facts.grades
         grade = next(
             (candidate for candidate in grades if candidate.id == grade_id), None
@@ -2393,14 +2333,7 @@ class PronoteGateway:
         genre = next(
             genre for known, _elm, _key, genre in _GRADE_DOCUMENTS if known is role
         )
-        calls = 2
-        detail = ""
-        communication = client.communication
-        headers = {
-            **_NAVIGATION_HEADERS,
-            "Referer": f"{communication.root_site}/"
-            f"{getattr(communication, 'html_page', 'parent.html')}",
-        }
+        calls = 1
         for ref in refs:
             calls += 1
             try:
@@ -2408,12 +2341,10 @@ class PronoteGateway:
                     client,
                     _external_file_url(client, ref=ref, name=name, genre=genre),
                     name,
-                    headers=headers,
                 )
             except AttachmentUnavailable as refusal:
                 if refusal.status != 404:
                     raise
-                detail = refusal.detail
                 continue
             if ref != refs[0]:
                 _LOGGER.warning(
@@ -2421,20 +2352,8 @@ class PronoteGateway:
                     role,
                 )
             return content, declared, calls
-        # Everything that can be said about the refusal without a value from
-        # the child's data: the elements' own codes, side by side, and what
-        # the server answered.
         _LOGGER.warning(
-            "A graded test's %s was refused by every N tried (%d); its own N is "
-            "%s the grade's; element codes: %s; answered: %s",
-            role,
-            len(refs),
-            "not" if len(refs) > 1 else "the same as",
-            "; ".join(
-                f"{other.role} [{other.codes or 'none'}]"
-                for other in (grade.documents if grade is not None else ())
-            ),
-            detail,
+            "A graded test's %s was refused by every N tried (%d)", role, len(refs)
         )
         raise AttachmentUnavailable(name, 404)
 
