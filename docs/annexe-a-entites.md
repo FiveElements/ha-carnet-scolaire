@@ -429,9 +429,10 @@ ordinaire. Même forme que sur les devoirs, plus le rôle :
 `{"name", "kind": "local", "key", "role": "subject" | "correction"}`. Un
 document de devoir noté est toujours un fichier, d'où `kind` toujours `local`,
 et il s'ouvre comme un fichier de devoir : `carnet_scolaire.get_attachment_url`
-signe la `key` au clic, puis le relais relit les notes de la période et
-télécharge le document — deux requêtes en général, trois au plus, imputées au
-palier des notes et déclarées au pire cas. Chaque document est demandé par
+signe la `key` au clic, puis le relais navigue vers l'onglet des notes
+(`Navigation`, comme le client web juste avant un téléchargement), relit les
+notes de la période et télécharge le document — trois requêtes en général,
+quatre au plus, imputées au palier des notes et déclarées au pire cas. Chaque document est demandé par
 **son propre** `N`, celui que PRONOTE range dans `elmSujet` et `elmCorrige`,
 sous le type `DevoirSujet` ou `DevoirCorrige` ; s'il est refusé (404), le
 relais le redemande par le `N` de la note et journalise un avertissement, sans

@@ -569,6 +569,12 @@ _PRONOTE_FILE_SEGMENT: Final = "fichiersexternes"
 #: there would be unreadable.
 _ATTACHMENT_FILE: Final = 1
 
+#: The tab a session lands on, and the one upstream's keep-alive names
+#: (``ClientBase.session_check`` and ``pronoteAPI._KeepAlive`` post
+#: ``Navigation`` with ``onglet`` and ``ongletPrec`` both 7): the previous tab
+#: a navigation to the grades declares.
+_HOME_TAB: Final = 7
+
 #: Where a ``listeDevoirs`` entry describes each of its two documents -- the
 #: element carrying the document's own ``N`` and name, and the older bare file
 #: name -- and the file type that goes in the ``G`` of the encrypted segment:
@@ -610,15 +616,16 @@ def _grade_document(
 def grade_document_cost(role: GradeDocumentRole) -> int:
     """The most requests opening one graded test's document can place.
 
-    One ``DernieresNotes``, then one GET by the document's own ``N`` and, if
-    that is refused, one by the grade's (`PronoteGateway.grade_document`).
+    One ``Navigation`` to the grades tab and one ``DernieresNotes``, then one
+    GET by the document's own ``N`` and, if that is refused, one by the
+    grade's (`PronoteGateway.grade_document`).
     Declared as the worst case because the limiter charges at admission and
     never refunds: an under-declared fallback would spend budget the limiter
     never saw. The same for both roles today; the role stays in the signature
     so a document needing more is declared where it is described.
     """
     del role
-    return 3
+    return 4
 
 
 #: ``E`` on a line of a ``Saisie*`` list: the entity state, ``2`` meaning
@@ -2320,12 +2327,20 @@ class PronoteGateway:
     ) -> tuple[bytes, str | None, int]:
         """Download a graded test's paper or answers, under the lock.
 
-        At most three requests (`grade_document_cost`): the file is fetched by
+        At most four requests (`grade_document_cost`): the file is fetched by
         an ``N`` that every login re-encrypts, so the grades of its period are
         read again in this session first -- one ``DernieresNotes``, without
         the report card -- and the key looked up in them. Then one GET by the
         document's own ``N`` and, only on a 404 and only when it differs, one
         by the grade's; any other refusal is the answer.
+
+        Before the read, one ``Navigation`` to the grades tab, as the web
+        client sends when a parent opens that tab. Measured on a live
+        instance: the paper of a graded test was refused (404) by a request
+        identical, as far as could be seen, to the web client's own link,
+        while the answers opened; the web client's last two calls before the
+        download were ``Navigation`` and ``DernieresNotes``, and the relay had
+        never sent the first.
 
         The address is the one place this module builds what
         ``dataClasses.Attachment`` would (see :func:`_external_file_url`):
@@ -2338,6 +2353,11 @@ class PronoteGateway:
         )
         if period is None:
             raise AttachmentUnavailable(name, 404)
+        client.post(
+            "Navigation",
+            FUNC_MARKS[1],
+            {"onglet": FUNC_MARKS[1], "ongletPrec": _HOME_TAB},
+        )
         grades = self.marks(client, period, with_report=False).facts.grades
         grade = next(
             (candidate for candidate in grades if candidate.id == grade_id), None
@@ -2369,7 +2389,7 @@ class PronoteGateway:
         genre = next(
             genre for known, _elm, _key, genre in _GRADE_DOCUMENTS if known is role
         )
-        calls = 1
+        calls = 2
         detail = ""
         for ref in refs:
             calls += 1
