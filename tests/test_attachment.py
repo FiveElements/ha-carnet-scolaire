@@ -930,8 +930,10 @@ class _FakeRequest:
             "Exercices4.pdf",
             id="backslash-removed",
         ),
-        pytest.param("Énoncé été.pdf", "?nonc? ?t?.pdf", id="accents-reduced"),
-        pytest.param("Éé", "??", id="a-name-that-survives-as-marks"),
+        pytest.param("Énoncé été.pdf", "Enonce ete.pdf", id="accents-folded"),
+        pytest.param("Leçon à écouter.mp3", "Lecon a ecouter.mp3", id="cedilla"),
+        pytest.param("Œuvre.pdf", "_uvre.pdf", id="no-fold-becomes-underscore"),
+        pytest.param("Éé", "Ee", id="a-name-made-of-accents"),
         pytest.param('""', "document", id="nothing-left-is-still-a-filename"),
         pytest.param(
             "sujet" + chr(13) + chr(10) + "X-Injected: 1.pdf",
@@ -945,6 +947,10 @@ def test_the_download_filename_is_reduced_to_something_a_header_can_carry(
 ) -> None:
     """A ``Content-Disposition`` header is ASCII, and a quote closes it early.
 
+    Never a ``?`` for an accent: Windows forbids it in a filename, and a
+    browser that meets one saved the file under the URL's 16-hex key with no
+    extension -- every accented name, on a live instance.
+
     The name in the attribute stays the real one -- this is only what the
     browser is told to call the file it saves. The empty case is the one worth
     pinning: a name made entirely of characters that drop out would otherwise
@@ -954,6 +960,37 @@ def test_the_download_filename_is_reduced_to_something_a_header_can_carry(
     from custom_components.carnet_scolaire.attachment import _ascii
 
     assert _ascii(name) == expected
+
+
+def test_the_real_name_travels_in_filename_star() -> None:
+    """RFC 6266: ``filename*`` carries the name with its accents, UTF-8 and
+    percent-encoded; ``filename`` the folded fallback beside it."""
+    from custom_components.carnet_scolaire.attachment import _disposition
+
+    assert _disposition("Leçon à écouter.mp3") == (
+        'inline; filename="Lecon a ecouter.mp3"; '
+        "filename*=UTF-8''Le%C3%A7on%20%C3%A0%20%C3%A9couter.mp3"
+    )
+
+
+def test_a_line_break_cannot_reach_either_filename() -> None:
+    """Both parameters come from the same printable name, so neither can
+    start a header of its own."""
+    from custom_components.carnet_scolaire.attachment import _disposition
+
+    value = _disposition("a" + chr(13) + chr(10) + "X-Injected: 1")
+    assert chr(10) not in value
+    assert chr(13) not in value
+    assert "%0D" not in value
+
+
+@pytest.mark.parametrize("declared", ["audio/mpeg", "audio/mp4", "audio/ogg"])
+def test_a_recording_plays_in_the_browser(declared: str) -> None:
+    """A language teacher's recording is declared as what it is: an audio
+    stream runs nothing in the origin, and octet-stream sent it to downloads."""
+    from custom_components.carnet_scolaire.attachment import _content_type
+
+    assert _content_type(declared) == declared
 
 
 def test_a_document_that_belongs_to_no_homework_is_not_located(
@@ -1066,7 +1103,9 @@ class TestWhatTheBrowserGetsBack:
         assert first.status == 200
         assert first.body == b"%PDF-1.4 not a real document"
         assert first.content_type == "application/pdf"
-        assert first.headers["Content-Disposition"] == 'inline; filename="enonce.pdf"'
+        assert first.headers["Content-Disposition"] == (
+            "inline; filename=\"enonce.pdf\"; filename*=UTF-8''enonce.pdf"
+        )
         assert "private" in first.headers["Cache-Control"]
         fetched = len(parent_client.communication.session.gets)
         assert fetched == 1
