@@ -322,6 +322,14 @@ def _download(client: HardenedClient, url: str, name: str) -> tuple[bytes, str |
 _WITHHELD: Final = re.compile(r"https?:|session|\d{1,3}#[\w-]{20,}", re.IGNORECASE)
 
 
+#: The parts of an error page that are not its message: the ``<head>`` holds
+#: the establishment's name in its title, and styles and scripts are code.
+#: Measured: without this, a 404's first words were that name and CSS.
+_UNREAD: Final = re.compile(
+    r"<(head|style|script)\b.*?</\1\s*>", re.IGNORECASE | re.DOTALL
+)
+
+
 def _refusal_detail(response: Any, name: str) -> str:
     """What a refused GET answered, safe for a warning.
 
@@ -333,9 +341,8 @@ def _refusal_detail(response: Any, name: str) -> str:
     """
     content = getattr(response, "content", b"") or b""
     declared = getattr(response, "headers", {}).get("content-type")
-    text = " ".join(
-        re.sub(r"<[^>]*>", " ", content[:4096].decode("utf-8", "replace")).split()
-    )[:160]
+    page = _UNREAD.sub(" ", content[:16384].decode("utf-8", "replace"))
+    text = " ".join(re.sub(r"<[^>]*>", " ", page).split())[:160]
     if _WITHHELD.search(text) or (name and name.lower() in text.lower()):
         text = "<withheld>"
     return f"{declared or 'no type'}, {len(content)} bytes, text {text!r}"
