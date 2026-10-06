@@ -791,7 +791,9 @@ class TestAGradedTestsDocumentsReachTheCard:
         )
 
         assert first.status == 200
-        assert first.headers["Content-Disposition"] == 'inline; filename="corrige.pdf"'
+        assert first.headers["Content-Disposition"] == (
+            "inline; filename=\"corrige.pdf\"; filename*=UTF-8''corrige.pdf"
+        )
         assert second.body == first.body
         assert len(parent_client.communication.session.gets) == 1
 
