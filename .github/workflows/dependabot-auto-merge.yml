@@ -1,0 +1,43 @@
+name: Dependabot auto-merge
+
+# Why this workflow exists.
+#
+# Dependabot's pull requests only ever touch the test and docs tooling
+# (`requirements_test.txt`, `requirements_docs.txt`) and the actions pinned in
+# `.github/workflows/` -- `pronotepy` and the Home Assistant floor are excluded
+# in `dependabot.yml`, for reasons written there. Reviewing a ruff or mkdocs
+# bump by hand adds nothing the gates do not already check, so these pull
+# requests merge themselves once CI is green.
+#
+# This job does NOT merge. It turns on GitHub's auto-merge, and the merge then
+# waits for the status checks the `Protect main` ruleset requires. That ruleset
+# is the gate: without required checks, auto-merge would merge at once, red or
+# not. A Dependabot pull request that fails stays open for a human, like any
+# other.
+#
+# One consequence of merging with `GITHUB_TOKEN`: GitHub does not start
+# workflows for the resulting push to `main`, so `Docs` does not redeploy the
+# site after a merged bump. The next ordinary merge publishes it.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    name: Enable auto-merge
+    runs-on: ubuntu-latest
+    # The author, not the actor: a human pushing onto a Dependabot branch makes
+    # the pull request no longer Dependabot's alone, and the check below stops
+    # that from merging unreviewed.
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
+    steps:
+      - name: Squash-merge once the required checks pass
+        run: gh pr merge --auto --squash --delete-branch "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

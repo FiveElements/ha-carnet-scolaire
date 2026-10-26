@@ -347,8 +347,9 @@ request le dit, avec les seules informations de PyPI ; si PyPI est
 inaccessible, le job le note et sort au vert. Un portail hebdomadaire qui
 rougit parce qu'un tiers a hoqueté est un portail qu'on apprend à ignorer.
 
-**Rien de tout cela ne se fusionne tout seul**, et aucune fusion automatique
-n'est activée. La règle ci-dessus s'applique sans exception : relever l'épingle
+**Rien de tout cela ne se fusionne tout seul**. La fusion automatique ne vaut
+que pour les pull requests de Dependabot (voir la section 8), qui ne touchent
+jamais `pronotepy`. La règle ci-dessus s'applique sans exception : relever l'épingle
 oblige à relire **chaque** divergence documentée dans `hardened_client.py`,
 parce qu'un correctif amont peut en avoir rendu une inutile, ou fausse. La CI
 voit qu'un contournement ne casse rien, pas qu'il est devenu superflu — c'est la
@@ -433,7 +434,16 @@ pas un raccourci.
    qui permet à quelqu'un de juger si votre correction est la bonne.
 4. Pousser **la branche**, ouvrir la PR.
 5. Les quatre workflows (`Validate`, `Hassfest`, `HACS`, `Docs`) au vert sur la
-   PR.
+   PR. Ce n'est plus seulement une consigne : la règle `Protect main` les exige
+   avant toute fusion — sauf la ligne `Tests (HA latest)`, tolérée exprès.
+
+Les pull requests de **Dependabot** se fusionnent seules une fois ces
+vérifications vertes (`.github/workflows/dependabot-auto-merge.yml`). Elles ne
+touchent que l'outillage de test et de documentation et les actions épinglées ;
+`pronotepy` et le socle Home Assistant en sont exclus dans `dependabot.yml`.
+Une PR Dependabot rouge reste ouverte et attend quelqu'un. Une fusion faite par
+`GITHUB_TOKEN` ne déclenche aucun workflow sur `main`, donc le site de
+documentation n'est republié qu'à la fusion ordinaire suivante.
 
 N'incrémentez **pas** la version dans `manifest.json` : c'est fait au moment de
 la publication, et `release.yml` refuse un tag dont le manifeste diverge.
