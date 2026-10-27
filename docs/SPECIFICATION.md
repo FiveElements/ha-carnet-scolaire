@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | **Domaine** | `pronote` |
-| **Cible** | Home Assistant 2026.9 ou supérieur |
+| **Cible** | Home Assistant 2026.10 ou supérieur |
 | **Dépendance** | `pronotepy == 2.15.7` (épinglée) |
 | **Distribution** | HACS, dépôt personnalisé |
 | **Statut** | Spécification — version 2, 8 septembre 2026 |

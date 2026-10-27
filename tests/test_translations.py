@@ -27,8 +27,8 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.helpers import entity_registry as er
+import probatio
 import pytest
-import voluptuous as vol
 import yaml
 
 from custom_components.carnet_scolaire import const
@@ -328,7 +328,7 @@ def test_services_yaml_passes_home_assistants_own_schema() -> None:
     """The check whose absence let eighteen null selectors through.
 
     ``helpers/service.py`` applies this schema in ``_load_services_file``; on
-    ``vol.Invalid`` it logs one line and returns an empty mapping, so every
+    ``probatio.Invalid`` it logs one line and returns an empty mapping, so every
     service loses its fields and the automation editor offers a form with
     nothing in it. Importing the private schema is deliberate: it is the exact
     thing that runs at load time, and a re-implementation here would only prove
@@ -362,7 +362,7 @@ def test_every_selector_is_actually_a_selector() -> None:
             assert selector, f"{service}.{field} has an empty selector"
 
 
-def test_the_services_yaml_fields_match_the_voluptuous_schemas() -> None:
+def test_the_services_yaml_fields_match_the_probatio_schemas() -> None:
     """The form and the validator have to describe the same service.
 
     A field in the schema and not in the YAML cannot be filled in from the UI;
@@ -373,15 +373,15 @@ def test_the_services_yaml_fields_match_the_voluptuous_schemas() -> None:
 
     for key, _handler, schema, _response in _SERVICES:
         documented = set(payload[key].get("fields") or {})
-        declared = {str(marker.schema) for marker in _voluptuous_keys(schema)}
+        declared = {str(marker.schema) for marker in _schema_keys(schema)}
         assert documented == declared, f"{key}: {documented ^ declared}"
 
 
-def _voluptuous_keys(schema: Any) -> list[Any]:
-    """The top-level markers of a schema, through ``vol.All`` wrappers."""
-    if isinstance(schema, vol.All):
+def _schema_keys(schema: Any) -> list[Any]:
+    """The top-level markers of a schema, through ``probatio.All`` wrappers."""
+    if isinstance(schema, probatio.All):
         for candidate in schema.validators:
-            keys = _voluptuous_keys(candidate)
+            keys = _schema_keys(candidate)
             if keys:
                 return keys
         return []
@@ -405,7 +405,7 @@ def test_every_service_is_named_and_described(language: str) -> None:
         assert entry is not None, f"{key} is not in {language}"
         assert entry["name"], f"{key} has no name in {language}"
         assert entry["description"], f"{key} has no description in {language}"
-        for marker in _voluptuous_keys(schema):
+        for marker in _schema_keys(schema):
             field = str(marker.schema)
             assert field in entry["fields"], f"{key}.{field} is not in {language}"
 
