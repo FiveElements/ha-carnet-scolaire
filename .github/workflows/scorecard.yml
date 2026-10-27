@@ -1,0 +1,38 @@
+name: OpenSSF Scorecard
+
+# Supply-chain checks from the Open Source Security Foundation: branch
+# protection, pinned actions, token permissions, dependency updates, and so on.
+# `publish_results` sends the score to api.scorecard.dev, which serves the
+# README badge; findings also land in the Security tab as SARIF.
+#
+# scorecard-action refuses to publish from a workflow whose job runs anything
+# but approved actions, and from one granting write permissions at the top
+# level: keep this file to those three steps.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif

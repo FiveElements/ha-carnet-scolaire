@@ -1,0 +1,40 @@
+name: CVE audit
+
+# Known vulnerabilities in what the integration actually installs: the
+# `requirements` of manifest.json and everything they pull in, checked by
+# pip-audit against the PyPI / OSV advisory databases.
+#
+# What the README badge says: it tracks this workflow's status, and unlike the
+# CodeQL one this job FAILS on a finding, so green means "no known CVE in the
+# installed dependencies at the last run". Dependabot alerts cover the same
+# ground in the Security tab, but only maintainers can read them; this is the
+# public view.
+#
+# The daily schedule matters more than the push trigger: an advisory is usually
+# published against a pin that has not changed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Install pip-audit
+        run: python -m pip install --upgrade pip-audit
+      - name: Audit the manifest requirements
+        run: |
+          python -c "import json; print('\n'.join(json.load(open('custom_components/carnet_scolaire/manifest.json'))['requirements']))" > manifest-requirements.txt
+          pip-audit --requirement manifest-requirements.txt --strict --progress-spinner off

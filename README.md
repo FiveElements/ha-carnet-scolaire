@@ -5,11 +5,15 @@
 ![Home Assistant 2026.9.0 minimum](https://img.shields.io/badge/Home%20Assistant-2026.9.0%2B-41BDF5?style=flat-square&logo=homeassistant&logoColor=white)
 [![validate](https://img.shields.io/github/actions/workflow/status/FiveElements/ha-carnet-scolaire/validate.yml?branch=main&style=flat-square&label=validate)](https://github.com/FiveElements/ha-carnet-scolaire/actions/workflows/validate.yml)
 [![CodeQL](https://img.shields.io/github/actions/workflow/status/FiveElements/ha-carnet-scolaire/codeql.yml?branch=main&style=flat-square&label=CodeQL)](https://github.com/FiveElements/ha-carnet-scolaire/actions/workflows/codeql.yml)
-[![MIT License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Licence](https://img.shields.io/github/license/FiveElements/ha-carnet-scolaire?style=flat-square&label=licence)](LICENSE)
+[![Alertes CVE](https://img.shields.io/github/actions/workflow/status/FiveElements/ha-carnet-scolaire/cve.yml?branch=main&style=flat-square&label=alertes%20CVE)](https://github.com/FiveElements/ha-carnet-scolaire/actions/workflows/cve.yml)
+[![Couverture des tests](https://img.shields.io/badge/couverture-%E2%89%A595%20%25%20par%20module-brightgreen?style=flat-square)](scripts/check_coverage.py)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/FiveElements/ha-carnet-scolaire/badge)](https://scorecard.dev/viewer/?uri=github.com/FiveElements/ha-carnet-scolaire)
 [![HACS](https://img.shields.io/github/actions/workflow/status/FiveElements/ha-carnet-scolaire/hacs.yml?branch=main&style=flat-square&label=HACS)](https://github.com/FiveElements/ha-carnet-scolaire/actions/workflows/hacs.yml)
 [![hassfest](https://img.shields.io/github/actions/workflow/status/FiveElements/ha-carnet-scolaire/hassfest.yml?branch=main&style=flat-square&label=hassfest)](https://github.com/FiveElements/ha-carnet-scolaire/actions/workflows/hassfest.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5?style=flat-square)](https://hacs.xyz/docs/faq/custom_repositories/)
 [![Téléchargements](https://img.shields.io/github/downloads/FiveElements/ha-carnet-scolaire/total?style=flat-square&label=t%C3%A9l%C3%A9chargements)](https://github.com/FiveElements/ha-carnet-scolaire/releases)
+[![Téléchargements de la dernière version](https://img.shields.io/github/downloads/FiveElements/ha-carnet-scolaire/latest/total?style=flat-square&label=derni%C3%A8re%20version)](https://github.com/FiveElements/ha-carnet-scolaire/releases/latest)
 [![Dependabot](https://img.shields.io/badge/Dependabot-activ%C3%A9-025E8C?style=flat-square&logo=dependabot&logoColor=white)](.github/dependabot.yml)
 
  **Carnet scolaire** est une intégration [Home Assistant](<https://www.home-assistant.io/>) permettant d'intégrer **PRONOTE** et **EcoleDirecte** directement dans votre installation domotique.
