@@ -24,9 +24,9 @@ jobs:
     name: Lint and types
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           # 3.14, not a preference: `pytest-homeassistant-custom-component`
           # requires >= 3.14 from 0.13.317 on, and the pin in
@@ -72,9 +72,9 @@ jobs:
             tolerate-failure: true
     continue-on-error: ${{ matrix.tolerate-failure || false }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           # 3.14, not a preference: `pytest-homeassistant-custom-component`
           # requires >= 3.14 from 0.13.317 on, and the pin in
@@ -147,7 +147,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-${{ matrix.ha-version }}
           path: coverage.xml
@@ -157,9 +157,9 @@ jobs:
     name: Manifest sanity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           # Kept in step with the other jobs of this workflow, though this one
           # installs nothing: `check_manifest.py` is standard library only.
@@ -175,7 +175,7 @@ jobs:
     name: Documentation citations
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The drift check asks git when the cited file last moved relative
           # to when the document was last read. On the default shallow clone
@@ -184,7 +184,7 @@ jobs:
           # refuses a shallow clone outright rather than reporting success.
           fetch-depth: 0
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           # Standard library only, like the manifest job; pinned to match.
           python-version: "3.14"

@@ -98,7 +98,7 @@ def _pypi(version: str, released: str = "2026-09-03T00:32:14.054846Z") -> Any:
     """A fetcher standing in for ``https://pypi.org/pypi/pronotepy/json``."""
 
     def fetch(url: str) -> Any:
-        assert "pypi.org" in url, url
+        assert url == "https://pypi.org/pypi/pronotepy/json", url
         return {
             "info": {"version": version},
             "urls": [
