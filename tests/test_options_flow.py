@@ -14,7 +14,7 @@ code.
 **A default outside its own field's range.** Every number field is built from
 `const.OPTION_RANGES`, and every field also carries the documented default as
 its `default=`. Nothing checks that the second is inside the first. The forms
-are therefore submitted back *as displayed*: voluptuous validates the defaults
+are therefore submitted back *as displayed*: probatio validates the defaults
 against the selectors that produced them, so a default that drifted out of
 range fails here rather than on a user's screen.
 
@@ -30,8 +30,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.data_entry_flow import FlowResultType
+import probatio
 import pytest
-import voluptuous as vol
 
 from custom_components.carnet_scolaire.config_flow import (
     PronoteOptionsFlow,
@@ -79,7 +79,7 @@ SECTIONS = ("general", "tiers", "rate_limit")
 _MAY_OPEN_EMPTY: frozenset[str] = frozenset({OPT_ESTABLISHMENT_TIMEZONE})
 
 
-def _form_defaults(schema: vol.Schema) -> dict[str, Any]:
+def _form_defaults(schema: probatio.Schema) -> dict[str, Any]:
     """The form exactly as it is displayed, ready to be submitted back.
 
     Submitting the displayed values is what makes these tests check the
@@ -96,7 +96,7 @@ def _form_defaults(schema: vol.Schema) -> dict[str, Any]:
     filled: dict[str, Any] = {}
     for key in schema.schema:
         default = getattr(key, "default", None)
-        if default is not None and default is not vol.UNDEFINED:
+        if default is not None and default is not probatio.UNDEFINED:
             filled[str(key)] = default()
             continue
         suggested = (getattr(key, "description", None) or {}).get("suggested_value")
@@ -111,8 +111,8 @@ def _form_defaults(schema: vol.Schema) -> dict[str, Any]:
     return filled
 
 
-def _marker(schema: vol.Schema) -> Any:
-    """The timezone field's voluptuous marker, which carries its prefill.
+def _marker(schema: probatio.Schema) -> Any:
+    """The timezone field's probatio marker, which carries its prefill.
 
     Read off the schema because the two ways a field can be prefilled --
     `default` and `description["suggested_value"]` -- are not
@@ -196,7 +196,7 @@ async def test_a_tier_interval_is_bounded_away_from_zero(
     schema = form["data_schema"]
     key = OPT_TIER_INTERVAL.format(tier=Tier.TIMETABLE.value)
 
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         schema({**_form_defaults(schema), key: 0})
 
 
@@ -372,7 +372,7 @@ async def test_the_box_opens_empty_when_the_timezone_is_not_pinned(
 
     marker = _marker(form["data_schema"])
 
-    assert marker.default is vol.UNDEFINED
+    assert marker.default is probatio.UNDEFINED
     assert not (marker.description or {}).get("suggested_value")
 
 

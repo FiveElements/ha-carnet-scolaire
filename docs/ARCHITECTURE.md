@@ -2127,8 +2127,8 @@ divergence documentée dans `hardened_client.py`, et c'est le travail que la
 proposition demande.
 
 La matrice de test comporte deux lignes : la référence épinglée
-(`pytest-homeassistant-custom-component==0.13.363`, qui porte Home Assistant
-**2026.9.0**) qui **porte le portail de couverture**, et une ligne flottante
+(`pytest-homeassistant-custom-component==0.13.371`, qui porte Home Assistant
+**2026.10.0**) qui **porte le portail de couverture**, et une ligne flottante
 `latest` qui attrape une rupture amont tôt **sans bloquer** dessus.
 
 Le choix de l'épingle n'est pas « une version récente » mais **exactement le
@@ -2563,14 +2563,14 @@ ne touche le réseau, ce que le dépôt respecte.
 Cette divergence est **résolue**, et la façon dont elle l'a été vaut d'être
 notée : c'est un cas où l'écart documentaire cachait deux vrais défauts.
 
-`SPECIFICATION.md` déclare en en-tête viser **Home Assistant 2026.9 ou
-supérieur**. Le dépôt déclare maintenant le même plancher — **2026.9.0** dans
+`SPECIFICATION.md` déclare en en-tête viser **Home Assistant 2026.10 ou
+supérieur**. Le dépôt déclare maintenant le même plancher — **2026.10.0** dans
 `hacs.json` — et `requirements_test.txt` l'épingle exactement :
-`pytest-homeassistant-custom-component==0.13.363` embarque Home Assistant
-2026.9.0. Les trois chiffres sont le même, la matrice exécute celui-là, et la
+`pytest-homeassistant-custom-component==0.13.371` embarque Home Assistant
+2026.10.0. Les trois chiffres sont le même, la matrice exécute celui-là, et la
 ligne flottante `latest` couvre l'autre bout de l'intervalle.
 
-Le plancher était auparavant à 2026.2, puis à 2026.8. Chaque montée a été faite
+Le plancher était auparavant à 2026.2, puis à 2026.8, puis à 2026.9. Chaque montée a été faite
 en **exécutant** le socle visé, pas en modifiant le chiffre — et les deux fois
 la seule exécution a trouvé un défaut produit qu'aucun portail ne voyait :
 `DeviceInfo.via_device` (le tuple, retiré au profit de `via_device_id`), qui

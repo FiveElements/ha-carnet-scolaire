@@ -11,7 +11,7 @@ version: 2
 #   move only the first, and the tests would run against a version the
 #   integration does not install.
 # - `pytest-homeassistant-custom-component` is pinned to the declared floor:
-#   the release carrying Home Assistant 2026.9.0, hacs.json's minimum. Raising
+#   the release carrying Home Assistant 2026.10.0, hacs.json's minimum. Raising
 #   it would silently stop testing that floor -- see requirements_test.txt.
 #
 # Ignoring them here only stops version-update pull requests: a security
