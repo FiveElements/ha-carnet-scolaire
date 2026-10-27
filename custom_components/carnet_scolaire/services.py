@@ -36,7 +36,7 @@ from homeassistant.core import (
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.util import dt as dt_util
-import voluptuous as vol
+import probatio
 
 from .attachment import (
     FINGERPRINT_PATTERN,
@@ -129,7 +129,7 @@ def _one_device(value: Any) -> str:
             f"expected exactly one device, got {len(values)}; each carnet_scolaire "
             "service acts on one account"
         )
-        raise vol.Invalid(message)
+        raise probatio.Invalid(message)
     return cv.string(values[0])
 
 
@@ -137,62 +137,68 @@ def _one_device(value: Any) -> str:
 _DEVICE_ID: Final = _one_device
 
 
-_DEVICE_SCHEMA: Final = vol.Schema({vol.Required(ATTR_DEVICE_ID): _DEVICE_ID})
+_DEVICE_SCHEMA: Final = probatio.Schema({probatio.Required(ATTR_DEVICE_ID): _DEVICE_ID})
 
 #: A malformed key is refused before any lookup, so a typo reads as "invalid
 #: input" rather than as "document unknown" -- two different things to tell a
 #: user, and the second is what the card shows for a rotated homework.
-_ATTACHMENT_URL_SCHEMA: Final = vol.Schema(
+_ATTACHMENT_URL_SCHEMA: Final = probatio.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _DEVICE_ID,
-        vol.Required(ATTR_KEY): vol.All(str, vol.Match(FINGERPRINT_PATTERN)),
+        probatio.Required(ATTR_DEVICE_ID): _DEVICE_ID,
+        probatio.Required(ATTR_KEY): probatio.All(
+            str, probatio.Match(FINGERPRINT_PATTERN)
+        ),
     }
 )
 
-_REFRESH_SCHEMA: Final = vol.Schema(
+_REFRESH_SCHEMA: Final = probatio.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _DEVICE_ID,
-        vol.Optional(ATTR_TIERS): vol.All(cv.ensure_list, [vol.In(REFRESHABLE_TIERS)]),
+        probatio.Required(ATTR_DEVICE_ID): _DEVICE_ID,
+        probatio.Optional(ATTR_TIERS): probatio.All(
+            cv.ensure_list, [probatio.In(REFRESHABLE_TIERS)]
+        ),
     }
 )
 
-_MARK_HOMEWORK_SCHEMA: Final = vol.Schema(
+_MARK_HOMEWORK_SCHEMA: Final = probatio.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _DEVICE_ID,
-        vol.Required(ATTR_HOMEWORK_ID): cv.string,
-        vol.Optional(ATTR_DONE, default=True): cv.boolean,
+        probatio.Required(ATTR_DEVICE_ID): _DEVICE_ID,
+        probatio.Required(ATTR_HOMEWORK_ID): cv.string,
+        probatio.Optional(ATTR_DONE, default=True): cv.boolean,
     }
 )
 
-_MARK_INFORMATION_SCHEMA: Final = vol.Schema(
+_MARK_INFORMATION_SCHEMA: Final = probatio.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _DEVICE_ID,
-        vol.Required(ATTR_INFORMATION_ID): cv.string,
+        probatio.Required(ATTR_DEVICE_ID): _DEVICE_ID,
+        probatio.Required(ATTR_INFORMATION_ID): cv.string,
     }
 )
 
 #: Either a reply to an existing thread, or a new one with named recipients --
 #: never both, and never neither. Enforced in the schema rather than in the
 #: handler so a malformed script fails before it spends a request.
-_SEND_MESSAGE_SCHEMA: Final = vol.All(
-    vol.Schema(
+_SEND_MESSAGE_SCHEMA: Final = probatio.All(
+    probatio.Schema(
         {
-            vol.Required(ATTR_DEVICE_ID): _DEVICE_ID,
-            vol.Required(ATTR_MESSAGE): cv.string,
-            vol.Optional(ATTR_DISCUSSION_ID): cv.string,
-            vol.Optional(ATTR_SUBJECT): cv.string,
-            vol.Optional(ATTR_RECIPIENTS): vol.All(cv.ensure_list, [cv.string]),
+            probatio.Required(ATTR_DEVICE_ID): _DEVICE_ID,
+            probatio.Required(ATTR_MESSAGE): cv.string,
+            probatio.Optional(ATTR_DISCUSSION_ID): cv.string,
+            probatio.Optional(ATTR_SUBJECT): cv.string,
+            probatio.Optional(ATTR_RECIPIENTS): probatio.All(
+                cv.ensure_list, [cv.string]
+            ),
         }
     ),
     cv.has_at_least_one_key(ATTR_DISCUSSION_ID, ATTR_RECIPIENTS),
     cv.has_at_most_one_key(ATTR_DISCUSSION_ID, ATTR_RECIPIENTS),
 )
 
-_TIMETABLE_PDF_SCHEMA: Final = vol.Schema(
+_TIMETABLE_PDF_SCHEMA: Final = probatio.Schema(
     {
-        vol.Required(ATTR_DEVICE_ID): _DEVICE_ID,
-        vol.Optional(ATTR_DAY): cv.date,
-        vol.Optional(ATTR_ORIENTATION, default=ORIENTATION_PORTRAIT): vol.In(
+        probatio.Required(ATTR_DEVICE_ID): _DEVICE_ID,
+        probatio.Optional(ATTR_DAY): cv.date,
+        probatio.Optional(ATTR_ORIENTATION, default=ORIENTATION_PORTRAIT): probatio.In(
             (ORIENTATION_PORTRAIT, ORIENTATION_LANDSCAPE)
         ),
     }

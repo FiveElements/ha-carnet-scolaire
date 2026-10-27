@@ -21,7 +21,7 @@ from homeassistant.const import (
 )
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.service import async_call_from_config
-import voluptuous as vol
+import probatio
 
 from .const import (
     DOMAIN,
@@ -60,10 +60,10 @@ ACTION_TYPES: Final = (
 
 ACTION_SCHEMA: Final = cv.DEVICE_ACTION_BASE_SCHEMA.extend(
     {
-        vol.Required(CONF_TYPE): vol.In(ACTION_TYPES),
-        vol.Optional("homework_id"): cv.string,
-        vol.Optional("done", default=True): cv.boolean,
-        vol.Optional("information_id"): cv.string,
+        probatio.Required(CONF_TYPE): probatio.In(ACTION_TYPES),
+        probatio.Optional("homework_id"): cv.string,
+        probatio.Optional("done", default=True): cv.boolean,
+        probatio.Optional("information_id"): cv.string,
     }
 )
 
@@ -104,21 +104,25 @@ async def async_get_actions(
 async def async_get_action_capabilities(
     hass: HomeAssistant,  # noqa: ARG001 -- required by the contract
     config: ConfigType,
-) -> dict[str, vol.Schema]:
+) -> dict[str, probatio.Schema]:
     """Ask for the identifier the write actions need, and nothing otherwise."""
     action_type = config[CONF_TYPE]
     if action_type == ACTION_MARK_HOMEWORK_DONE:
         return {
-            "extra_fields": vol.Schema(
+            "extra_fields": probatio.Schema(
                 {
-                    vol.Required("homework_id"): cv.string,
-                    vol.Optional("done", default=True): cv.boolean,
+                    probatio.Required("homework_id"): cv.string,
+                    probatio.Optional("done", default=True): cv.boolean,
                 }
             )
         }
     if action_type == ACTION_MARK_INFORMATION_READ:
-        return {"extra_fields": vol.Schema({vol.Required("information_id"): cv.string})}
-    return {"extra_fields": vol.Schema({})}
+        return {
+            "extra_fields": probatio.Schema(
+                {probatio.Required("information_id"): cv.string}
+            )
+        }
+    return {"extra_fields": probatio.Schema({})}
 
 
 async def async_call_action_from_config(

@@ -28,7 +28,7 @@ from homeassistant.helpers import (
     config_validation as cv,
     entity_registry as er,
 )
-import voluptuous as vol
+import probatio
 
 from .const import DOMAIN
 
@@ -56,8 +56,8 @@ CONDITION_MAP: Final[dict[str, tuple[str, str]]] = {
 
 CONDITION_SCHEMA: Final = cv.DEVICE_CONDITION_BASE_SCHEMA.extend(
     {
-        vol.Required(CONF_TYPE): vol.In(CONDITION_MAP),
-        vol.Optional(CONF_ENTITY_ID): vol.Any(str, None),
+        probatio.Required(CONF_TYPE): probatio.In(CONDITION_MAP),
+        probatio.Optional(CONF_ENTITY_ID): probatio.Any(str, None),
     }
 )
 
