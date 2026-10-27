@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ha-carnet-scolaire"
-version = "0.1.0"
+# The release tag is the version: `release.yml` stamps it into the zip it
+# publishes. This stays at 0.0.0 on purpose and is never bumped.
+version = "0.0.0"
 description = "Home Assistant integration for PRONOTE, designed for automations"
 readme = "README.md"
 requires-python = ">=3.14"

@@ -445,8 +445,9 @@ Une PR Dependabot rouge reste ouverte et attend quelqu'un. Une fusion faite par
 `GITHUB_TOKEN` ne déclenche aucun workflow sur `main`, donc le site de
 documentation n'est republié qu'à la fusion ordinaire suivante.
 
-N'incrémentez **pas** la version dans `manifest.json` : c'est fait au moment de
-la publication, et `release.yml` refuse un tag dont le manifeste diverge.
+Ne touchez **pas** à la version dans `manifest.json` ni dans `pyproject.toml` :
+elles restent à `0.0.0` exprès. Le tag est la version, et `release.yml` l'écrit
+dans le zip qu'il publie.
 
 ---
 
@@ -454,13 +455,18 @@ la publication, et `release.yml` refuse un tag dont le manifeste diverge.
 
 Réservé aux mainteneurs.
 
-1. Porter `manifest.json` à la version voulue, sans le `v`.
-2. Fusionner la *pull request* sur `main`, workflows au vert.
-3. `git tag -a vX.Y.Z && git push origin vX.Y.Z`.
+1. Fusionner la *pull request* sur `main`, workflows au vert.
+2. `git tag -a vX.Y.Z && git push origin vX.Y.Z`.
 
-`release.yml` vérifie que le manifeste et le tag concordent — une intégration
-HACS dont le manifeste diverge du tag s'installe une fois et ne se met plus
-jamais à jour — puis construit `carnet_scolaire.zip` et publie la *release*.
+Aucune *pull request* de version : le tag est la **seule** source de version.
+`release.yml` refuse un tag qui n'a pas la forme `vX.Y.Z`, écrit la version
+dans le `manifest.json` du zip, le revérifie, puis construit
+`carnet_scolaire.zip` et publie la *release*. HACS installe ce zip
+(`zip_release`), si bien que la version vue par les utilisateurs est
+exactement le tag — une intégration HACS dont le manifeste diverge du tag
+s'installe une fois et ne se met plus jamais à jour. Les fichiers du dépôt
+restent à `0.0.0` exprès : ne les incrémentez pas, et rien n'est jamais poussé
+sur `main` par la publication.
 
 ---
 

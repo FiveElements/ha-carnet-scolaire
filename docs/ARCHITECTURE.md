@@ -2109,9 +2109,10 @@ Deux portails supplémentaires vivent hors de `validate.yml` :
 `.github/workflows/hassfest.yml` (validation officielle Home Assistant),
 `.github/workflows/hacs.yml` (validation HACS, y compris une exécution
 hebdomadaire pour qu'un changement de règle amont apparaisse sans push), et
-`.github/workflows/release.yml`, qui vérifie que `manifest.json` déclare
-exactement la version du tag — une intégration HACS dont le manifest diverge du
-tag s'installe une fois et ne se met plus jamais à jour.
+`.github/workflows/release.yml`, qui écrit la version du tag dans le
+`manifest.json` du zip publié puis la revérifie — le tag est la seule source de
+version, le dépôt reste à `0.0.0`, et une intégration HACS dont le manifest
+diverge du tag s'installe une fois et ne se met plus jamais à jour.
 
 Un dernier, qui ne garde rien mais surveille :
 `.github/workflows/pronotepy-watch.yml` compare une fois par semaine l'épingle
