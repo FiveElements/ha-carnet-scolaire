@@ -422,7 +422,11 @@ class PronoteAttachmentView(HomeAssistantView):
                     text=f"deferred by the rate limiter: {deferred.reason}",
                 )
             except AttachmentUnavailable as error:
-                return web.Response(status=502, text=str(error))
+                # Only the status reaches the browser, never the exception's
+                # text: an HTTP body is not where a Python message belongs.
+                return web.Response(
+                    status=502, text=f"PRONOTE answered {int(error.status)}"
+                )
             cache.put(print_, cached)
 
         content, content_type = cached

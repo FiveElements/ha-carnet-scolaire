@@ -1151,6 +1151,7 @@ class TestWhatTheBrowserGetsBack:
             )
 
         assert response.status == 502
+        assert response.text == "PRONOTE answered 403"
         assert cache_for(hass, account.entry.entry_id).get(print_) is None
 
     async def test_a_source_with_no_pronote_session_cannot_download_at_all(

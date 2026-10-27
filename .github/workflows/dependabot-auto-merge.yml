@@ -24,13 +24,15 @@ on:
     types: [opened, reopened, synchronize]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   enable-auto-merge:
     name: Enable auto-merge
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     # The author, not the actor: a human pushing onto a Dependabot branch makes
     # the pull request no longer Dependabot's alone, and the check below stops
     # that from merging unreviewed.
