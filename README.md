@@ -2,7 +2,7 @@
 
 # Carnet scolaire — PRONOTE et EcoleDirecte pour Home Assistant
 [![Version](https://img.shields.io/github/v/release/FiveElements/ha-carnet-scolaire?style=flat-square&label=version)](https://github.com/FiveElements/ha-carnet-scolaire/releases)
-![Home Assistant 2026.9.0 minimum](https://img.shields.io/badge/Home%20Assistant-2026.9.0%2B-41BDF5?style=flat-square&logo=homeassistant&logoColor=white)
+![Home Assistant 2026.10.0 minimum](https://img.shields.io/badge/Home%20Assistant-2026.10.0%2B-41BDF5?style=flat-square&logo=homeassistant&logoColor=white)
 [![validate](https://img.shields.io/github/actions/workflow/status/FiveElements/ha-carnet-scolaire/validate.yml?branch=main&style=flat-square&label=validate)](https://github.com/FiveElements/ha-carnet-scolaire/actions/workflows/validate.yml)
 [![CodeQL](https://img.shields.io/github/actions/workflow/status/FiveElements/ha-carnet-scolaire/codeql.yml?branch=main&style=flat-square&label=CodeQL)](https://github.com/FiveElements/ha-carnet-scolaire/actions/workflows/codeql.yml)
 [![Licence](https://img.shields.io/github/license/FiveElements/ha-carnet-scolaire?style=flat-square&label=licence)](LICENSE)
@@ -153,7 +153,7 @@ custom_components/carnet_scolaire/
  Carnet scolaire nécessite actuellement :
 
 ```
-Home Assistant 2026.9.0 ou supérieur
+Home Assistant 2026.10.0 ou supérieur
 ```
 
 ---

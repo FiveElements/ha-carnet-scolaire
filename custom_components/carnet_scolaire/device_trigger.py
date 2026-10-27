@@ -35,7 +35,7 @@ from homeassistant.const import (
     CONF_TYPE,
 )
 from homeassistant.helpers import device_registry as dr
-import voluptuous as vol
+import probatio
 
 from .account import SIGNAL_DELTA
 from .connectors.factory import capabilities_for_source, source_from_entry_data
@@ -91,7 +91,7 @@ TRIGGER_TYPES: Final = (
 )
 
 TRIGGER_SCHEMA: Final = DEVICE_TRIGGER_BASE_SCHEMA.extend(
-    {vol.Required(CONF_TYPE): vol.In(TRIGGER_TYPES)}
+    {probatio.Required(CONF_TYPE): probatio.In(TRIGGER_TYPES)}
 )
 
 #: The tier whose collection produces each change, read off the ``event``
@@ -206,14 +206,14 @@ async def async_attach_trigger(
 async def async_get_trigger_capabilities(
     hass: HomeAssistant,  # noqa: ARG001 -- required by the device-automation contract
     config: ConfigType,  # noqa: ARG001 -- every trigger here takes no extra field
-) -> dict[str, vol.Schema]:
+) -> dict[str, probatio.Schema]:
     """No extra fields.
 
     A threshold on a grade or a subject filter belongs in the automation's
     condition, not here: baking it into the trigger would make the trigger
     fire-or-not invisible in a trace.
     """
-    return {"extra_fields": vol.Schema({})}
+    return {"extra_fields": probatio.Schema({})}
 
 
 def _capabilities(hass: HomeAssistant, device_id: str) -> ConnectorCapabilities | None:

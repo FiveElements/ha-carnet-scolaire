@@ -1,13 +1,13 @@
 # pytest-homeassistant-custom-component pins the whole Home Assistant test
 # stack -- freezegun included -- so nothing here may pin those transitively.
 #
-# This pin is the declared floor, not merely a recent version: 0.13.363 is the
-# release that carries Home Assistant 2026.9.0, which is exactly what
+# This pin is the declared floor, not merely a recent version: 0.13.371 is the
+# release that carries Home Assistant 2026.10.0, which is exactly what
 # hacs.json declares as the minimum. Testing against anything newer would
 # leave the floor itself unexercised, and the claim in hacs.json unbacked --
 # which is the only failure mode a version floor has. The matrix in
 # validate.yml tests the floating latest alongside it, tolerating its failure.
-pytest-homeassistant-custom-component==0.13.363
+pytest-homeassistant-custom-component==0.13.371
 
 # 2.15.7, and the two-week gap before this bump is the whole argument for
 # watching this pin.

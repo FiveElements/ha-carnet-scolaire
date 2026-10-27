@@ -47,7 +47,7 @@ section de ce guide, lisez celle-là.
 
 | À préparer | Pourquoi |
 | --- | --- |
-| Home Assistant **2026.9.0** ou plus récent | L'intégration utilise des mécanismes qui n'existent pas avant cette version. |
+| Home Assistant **2026.10.0** ou plus récent | L'intégration utilise des mécanismes qui n'existent pas avant cette version. |
 | L'adresse de l'espace PRONOTE de l'établissement | Une adresse terminée par `eleve.html` ou `parent.html`. Nécessaire pour les modes « identifiants » et « ENT ». |
 | L'application mobile PRONOTE, installée et connectée | Nécessaire pour le mode QR code, qui est le mode recommandé. |
 | Le code PIN à deux facteurs du compte, s'il en a un | Il est demandé au moment de la connexion et **n'est jamais conservé**. Gardez-le accessible : il sera redemandé si PRONOTE l'exige de nouveau. |
@@ -2275,7 +2275,7 @@ le QR code ne dépend d'aucun portail.
   compte EcoleDirecte. Chacun a son propre budget de requêtes.
 - **Un même compte ne s'ajoute qu'une fois** : un second ajout est refusé avec
   « Ce compte est déjà configuré ».
-- **Home Assistant 2026.9.0 au minimum.**
+- **Home Assistant 2026.10.0 au minimum.**
 
 ### 13.4 Ce qui n'est pas pris en charge
 

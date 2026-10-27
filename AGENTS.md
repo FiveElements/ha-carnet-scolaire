@@ -175,13 +175,12 @@ Use a prebuilt Docker image (build once — the HA test stack is large):
 
 ```bash
 MSYS_NO_PATHCONV=1 docker run --rm -v "C:/project/ai-project/carnet-scolaire/ha-carnet-scolaire:/work" -w /work \
-  ha-pronote-test-2026.9.0 python -m pytest tests -q --no-header --show-capture=no
+  ha-pronote-test-2026.10.0 python -m pytest tests -q --no-header --show-capture=no
 ```
 
-`ha-pronote-test-2026.9.0` is the **floor** image (HA 2026.9.0 via
-`pytest-homeassistant-custom-component==0.13.363`, plus `mypy` and `ruff`);
-`ha-pronote-test-2026.9` carries the newer HA 2026.9.1. Both are `python:3.14`
-plus `requirements_test.txt`. `MSYS_NO_PATHCONV=1` and the absolute path are
+`ha-pronote-test-2026.10.0` is the **floor** image (HA 2026.10.0 via
+`pytest-homeassistant-custom-component==0.13.371`, plus `mypy` and `ruff`):
+`python:3.14` plus `requirements_test.txt`. `MSYS_NO_PATHCONV=1` and the absolute path are
 required under Git Bash, or MSYS rewrites `/work`.
 
 Never add `-p no:logging` — it removes the plugin that provides `caplog`, and
@@ -208,10 +207,11 @@ Two hassfest traps: a translation string may not contain a URL (use
 
 `hacs.json` `homeassistant` ⇄ the `requirements_test.txt` pin ⇄ the gated matrix
 row in `validate.yml` ⇄ 18 blueprint `min_version` values. Currently
-**2026.9.0** / `0.13.363`. `tests/test_version_floor.py` holds all 21, and a CI
+**2026.10.0** / `0.13.371`. `tests/test_version_floor.py` holds all 21, and a CI
 step compares `homeassistant.const.__version__` to `hacs.json` so the declared
 number is the one actually exercised. PyPI mapping observed so far:
-`0.13.354`→2026.8.0, `0.13.363`→2026.9.0, `0.13.364`→2026.9.1. Raise the floor
+`0.13.354`→2026.8.0, `0.13.363`→2026.9.0, `0.13.364`→2026.9.1,
+`0.13.371`→2026.10.0, `0.13.375`→2026.10.4. Raise the floor
 by *running* the new socle green first, then moving the declaration.
 
 ## Architecture

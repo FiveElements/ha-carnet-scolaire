@@ -59,8 +59,8 @@ jobs:
         include:
           # The pinned baseline carries the coverage gate; the floating row
           # catches upstream breakage early without blocking on it.
-          - ha-version: "2026.9"
-            pytest-hacc: "0.13.363"
+          - ha-version: "2026.10"
+            pytest-hacc: "0.13.371"
             gate: true
           - ha-version: "latest"
             pytest-hacc: ""

@@ -54,7 +54,7 @@ from homeassistant.helpers.selector import (
     TimeSelector,
 )
 from homeassistant.util import dt as dt_util
-import voluptuous as vol
+import probatio
 
 from .child_keys import pair
 from .connectors.ecoledirecte.connector import EcoledirecteConnector
@@ -176,42 +176,42 @@ _URL_SELECTOR: Final = TextSelector(TextSelectorConfig(type=TextSelectorType.URL
 _TEXT: Final = TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT))
 _PASSWORD: Final = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
-QR_SCHEMA: Final = vol.Schema(
+QR_SCHEMA: Final = probatio.Schema(
     {
         # The raw JSON from the app's QR code. Pasted rather than scanned
         # because Home Assistant has no camera in a config flow, and it is
         # single-use: PRONOTE invalidates it once enrolled.
-        vol.Required(CONF_QR_PAYLOAD): TextSelector(
+        probatio.Required(CONF_QR_PAYLOAD): TextSelector(
             TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
         ),
-        vol.Required(CONF_QR_PIN): _PASSWORD,
-        vol.Optional(CONF_DEVICE_NAME, default="Home Assistant"): _TEXT,
-        vol.Optional(CONF_ACCOUNT_PIN): _PASSWORD,
+        probatio.Required(CONF_QR_PIN): _PASSWORD,
+        probatio.Optional(CONF_DEVICE_NAME, default="Home Assistant"): _TEXT,
+        probatio.Optional(CONF_ACCOUNT_PIN): _PASSWORD,
     }
 )
 
-CREDENTIALS_SCHEMA: Final = vol.Schema(
+CREDENTIALS_SCHEMA: Final = probatio.Schema(
     {
-        vol.Required(CONF_PRONOTE_URL): _URL_SELECTOR,
-        vol.Required("username"): _TEXT,
-        vol.Required("password"): _PASSWORD,
-        vol.Optional(CONF_ACCOUNT_PIN): _PASSWORD,
+        probatio.Required(CONF_PRONOTE_URL): _URL_SELECTOR,
+        probatio.Required("username"): _TEXT,
+        probatio.Required("password"): _PASSWORD,
+        probatio.Optional(CONF_ACCOUNT_PIN): _PASSWORD,
     }
 )
 
-ECOLEDIRECTE_SCHEMA: Final = vol.Schema(
+ECOLEDIRECTE_SCHEMA: Final = probatio.Schema(
     {
-        vol.Required("username"): _TEXT,
-        vol.Required("password"): _PASSWORD,
+        probatio.Required("username"): _TEXT,
+        probatio.Required("password"): _PASSWORD,
     }
 )
 
 
-def _ecoledirecte_qcm_schema(propositions: tuple[str, ...]) -> vol.Schema:
+def _ecoledirecte_qcm_schema(propositions: tuple[str, ...]) -> probatio.Schema:
     """One choice among the decoded propositions, not a JSON object to type."""
-    return vol.Schema(
+    return probatio.Schema(
         {
-            vol.Required("choice"): SelectSelector(
+            probatio.Required("choice"): SelectSelector(
                 SelectSelectorConfig(
                     options=list(propositions),
                     mode=SelectSelectorMode.LIST,
@@ -221,14 +221,14 @@ def _ecoledirecte_qcm_schema(propositions: tuple[str, ...]) -> vol.Schema:
     )
 
 
-def _ent_schema() -> vol.Schema:
+def _ent_schema() -> probatio.Schema:
     """The ENT form, built at call time so the provider list is current."""
-    return vol.Schema(
+    return probatio.Schema(
         {
-            vol.Required(CONF_PRONOTE_URL): _URL_SELECTOR,
-            vol.Required("username"): _TEXT,
-            vol.Required("password"): _PASSWORD,
-            vol.Required(CONF_ENT): SelectSelector(
+            probatio.Required(CONF_PRONOTE_URL): _URL_SELECTOR,
+            probatio.Required("username"): _TEXT,
+            probatio.Required("password"): _PASSWORD,
+            probatio.Required(CONF_ENT): SelectSelector(
                 SelectSelectorConfig(
                     options=_ent_options(),
                     mode=SelectSelectorMode.DROPDOWN,
@@ -240,13 +240,13 @@ def _ent_schema() -> vol.Schema:
     )
 
 
-REAUTH_SCHEMA: Final = vol.Schema(
+REAUTH_SCHEMA: Final = probatio.Schema(
     {
-        vol.Optional("password"): _PASSWORD,
+        probatio.Optional("password"): _PASSWORD,
         # The reason this flow exists. §8.1 refuses to store the PIN, so it has
         # to be askable again -- otherwise "we do not keep your PIN" would mean
         # "the integration breaks the first time PRONOTE asks for it".
-        vol.Optional(CONF_ACCOUNT_PIN): _PASSWORD,
+        probatio.Optional(CONF_ACCOUNT_PIN): _PASSWORD,
     }
 )
 
@@ -875,9 +875,9 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id=STEP_CHILDREN,
-            data_schema=vol.Schema(
+            data_schema=probatio.Schema(
                 {
-                    vol.Required(
+                    probatio.Required(
                         CONF_CHILDREN,
                         default=[child_id for child_id, _ in self._children],
                     ): SelectSelector(
@@ -1142,7 +1142,7 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         value = self._get_reconfigure_entry().data.get(CONF_UUID)
         return str(value) if value else None
 
-    def _suggest(self, schema: vol.Schema) -> vol.Schema:
+    def _suggest(self, schema: probatio.Schema) -> probatio.Schema:
         """Pre-fill a reused add-flow form with what the entry already holds.
 
         Only while reconfiguring, and only the address, the username and the
@@ -1514,21 +1514,21 @@ class PronoteOptionsFlow(OptionsFlowWithReload):
                     clearable=(OPT_ESTABLISHMENT_TIMEZONE,),
                 )
 
-        schema = vol.Schema(
+        schema = probatio.Schema(
             {
-                vol.Required(
+                probatio.Required(
                     OPT_MASTER_TICK,
                     default=options.get(OPT_MASTER_TICK, DEFAULT_MASTER_TICK),
                 ): _number(OPT_MASTER_TICK, "min"),
-                vol.Required(
+                probatio.Required(
                     OPT_HOMEWORK_HORIZON,
                     default=options.get(OPT_HOMEWORK_HORIZON, DEFAULT_HOMEWORK_HORIZON),
                 ): _number(OPT_HOMEWORK_HORIZON, "d"),
-                vol.Required(
+                probatio.Required(
                     OPT_WAKE_MARGIN,
                     default=options.get(OPT_WAKE_MARGIN, DEFAULT_WAKE_MARGIN),
                 ): _number(OPT_WAKE_MARGIN, "min"),
-                vol.Required(
+                probatio.Required(
                     OPT_STALE_AFTER,
                     default=options.get(OPT_STALE_AFTER, DEFAULT_STALE_AFTER),
                 ): _number(OPT_STALE_AFTER, "x"),
@@ -1554,7 +1554,7 @@ class PronoteOptionsFlow(OptionsFlowWithReload):
             # so the default is never worse than the alternative (§6.5).
             schema = schema.extend(
                 {
-                    vol.Required(
+                    probatio.Required(
                         OPT_SESSION_STRATEGY,
                         default=options.get(
                             OPT_SESSION_STRATEGY, DEFAULT_SESSION_STRATEGY.value
@@ -1571,7 +1571,7 @@ class PronoteOptionsFlow(OptionsFlowWithReload):
                             translation_key="session_strategy",
                         )
                     ),
-                    vol.Required(
+                    probatio.Required(
                         OPT_WRITE_OPERATIONS_ENABLED,
                         # The legacy default, like `write_enabled`: the form is
                         # submitted as displayed, so prefilling an old entry
@@ -1608,7 +1608,7 @@ class PronoteOptionsFlow(OptionsFlowWithReload):
             if tier not in capable:
                 continue
             fields[
-                vol.Required(
+                probatio.Required(
                     OPT_TIER_INTERVAL.format(tier=tier.value),
                     default=intervals.get(tier, default),
                 )
@@ -1624,7 +1624,7 @@ class PronoteOptionsFlow(OptionsFlowWithReload):
                 )
             )
             fields[
-                vol.Required(
+                probatio.Required(
                     OPT_TIER_ENABLED.format(tier=tier.value),
                     default=enabled.get(tier, True),
                 )
@@ -1632,7 +1632,7 @@ class PronoteOptionsFlow(OptionsFlowWithReload):
 
         return self.async_show_form(
             step_id="tiers",
-            data_schema=vol.Schema(fields),
+            data_schema=probatio.Schema(fields),
             description_placeholders=self._estimate_placeholders(options),
         )
 
@@ -1644,27 +1644,27 @@ class PronoteOptionsFlow(OptionsFlowWithReload):
             return self._save(user_input)
 
         options = self.config_entry.options
-        schema = vol.Schema(
+        schema = probatio.Schema(
             {
-                vol.Required(
+                probatio.Required(
                     OPT_MIN_REQUEST_INTERVAL,
                     default=_default(options, OPT_MIN_REQUEST_INTERVAL),
                 ): _number(OPT_MIN_REQUEST_INTERVAL, "s", step=0.1),
-                vol.Required(
+                probatio.Required(
                     OPT_MAX_REQUESTS_PER_HOUR,
                     default=_default(options, OPT_MAX_REQUESTS_PER_HOUR),
                 ): _number(OPT_MAX_REQUESTS_PER_HOUR, "req/h"),
-                vol.Required(
+                probatio.Required(
                     OPT_BURST_SIZE, default=_default(options, OPT_BURST_SIZE)
                 ): _number(OPT_BURST_SIZE, "req"),
-                vol.Required(
+                probatio.Required(
                     OPT_MAX_REQUESTS_PER_DAY,
                     default=_default(options, OPT_MAX_REQUESTS_PER_DAY),
                 ): _number(OPT_MAX_REQUESTS_PER_DAY, "req/d"),
-                vol.Required(
+                probatio.Required(
                     OPT_MAX_WAIT, default=_default(options, OPT_MAX_WAIT)
                 ): _number(OPT_MAX_WAIT, "s"),
-                vol.Required(
+                probatio.Required(
                     OPT_MAX_LOGINS_PER_DAY,
                     default=_default(options, OPT_MAX_LOGINS_PER_DAY),
                 ): _number(OPT_MAX_LOGINS_PER_DAY, "login/d"),
@@ -1672,40 +1672,40 @@ class PronoteOptionsFlow(OptionsFlowWithReload):
                 # range starts at 1 and stops at 10 on purpose: annexe B §3.1
                 # is clear that the sanction targets failed logins, and a large
                 # value here is the mistake that costs an account.
-                vol.Required(
+                probatio.Required(
                     OPT_MAX_FAILED_LOGINS_PER_HOUR,
                     default=_default(options, OPT_MAX_FAILED_LOGINS_PER_HOUR),
                 ): _number(OPT_MAX_FAILED_LOGINS_PER_HOUR, "attempt/h"),
-                vol.Required(
+                probatio.Required(
                     OPT_CREDENTIALS_HOLD,
                     default=_default(options, OPT_CREDENTIALS_HOLD),
                 ): _number(OPT_CREDENTIALS_HOLD, "s"),
-                vol.Required(
+                probatio.Required(
                     OPT_BOOTSTRAP_HOLD,
                     default=_default(options, OPT_BOOTSTRAP_HOLD),
                 ): _number(OPT_BOOTSTRAP_HOLD, "s"),
-                vol.Required(
+                probatio.Required(
                     OPT_BACKOFF_BASE, default=_default(options, OPT_BACKOFF_BASE)
                 ): _number(OPT_BACKOFF_BASE, "s"),
-                vol.Required(
+                probatio.Required(
                     OPT_BACKOFF_MAX, default=_default(options, OPT_BACKOFF_MAX)
                 ): _number(OPT_BACKOFF_MAX, "s"),
-                vol.Required(
+                probatio.Required(
                     OPT_CONNECT_TIMEOUT,
                     default=_default(options, OPT_CONNECT_TIMEOUT),
                 ): _number(OPT_CONNECT_TIMEOUT, "s"),
-                vol.Required(
+                probatio.Required(
                     OPT_READ_TIMEOUT, default=_default(options, OPT_READ_TIMEOUT)
                 ): _number(OPT_READ_TIMEOUT, "s"),
-                vol.Required(
+                probatio.Required(
                     OPT_QUIET_HOURS_ENABLED,
                     default=options.get(OPT_QUIET_HOURS_ENABLED, True),
                 ): BooleanSelector(),
-                vol.Required(
+                probatio.Required(
                     OPT_QUIET_START,
                     default=options.get(OPT_QUIET_START, "22:00:00"),
                 ): TimeSelector(),
-                vol.Required(
+                probatio.Required(
                     OPT_QUIET_END,
                     default=options.get(OPT_QUIET_END, "06:00:00"),
                 ): TimeSelector(),
@@ -1815,10 +1815,10 @@ def _default(options: Mapping[str, Any], key: str) -> Any:
     return options.get(key, getattr(const, f"DEFAULT_{key.upper()}"))
 
 
-def _optional_text(key: str, current: str | None) -> vol.Optional:
+def _optional_text(key: str, current: str | None) -> probatio.Optional:
     """A text field that may be left empty, prefilled only if something is set.
 
-    `vol.Optional` with neither a `default` nor a `suggested_value` is what
+    `probatio.Optional` with neither a `default` nor a `suggested_value` is what
     puts an empty box on screen, and emptiness has to be reachable for a field
     whose absence is a value. The distinction is not cosmetic: Home Assistant
     sends a form back as displayed, so anything prefilled here -- default or
@@ -1830,13 +1830,13 @@ def _optional_text(key: str, current: str | None) -> vol.Optional:
     the contract of `FlowHandler.add_suggested_values_to_schema`, which core
     options flows use precisely to open a form on its current values and save
     them unchanged -- so a deliberate pin survives a visit. The difference from
-    `default` is what happens when the box is emptied: voluptuous re-applies a
+    `default` is what happens when the box is emptied: probatio re-applies a
     `default` to a field the frontend then omits, which would make the pin
     impossible to remove.
     """
     if not current:
-        return vol.Optional(key)
-    return vol.Optional(key, description={"suggested_value": current})
+        return probatio.Optional(key)
+    return probatio.Optional(key, description={"suggested_value": current})
 
 
 def _number(key: str, unit: str, *, step: float = 1) -> NumberSelector:
