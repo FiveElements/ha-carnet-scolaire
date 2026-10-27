@@ -494,9 +494,14 @@ tests now fails CI rather than diluting an average.
 
 ## Releasing
 
-Do **not** bump `manifest.json` in an ordinary PR — the version moves at
-publication time and `release.yml` refuses a tag whose manifest diverges (a HACS
-integration whose manifest disagrees with its tag installs once and never
-updates again). Then: merge to `main` with the four workflows green (`Validate`,
-`Hassfest`, `HACS`, `Docs`), and `git tag -a vX.Y.Z && git push origin vX.Y.Z`.
-`release.yml` builds `carnet_scolaire.zip` and publishes the release.
+The tag is the **only** source of version. `manifest.json` and
+`pyproject.toml` stay at `0.0.0` on purpose — never bump them, and there is no
+`chore(release)` PR any more. Merge to `main` with the four workflows green
+(`Validate`, `Hassfest`, `HACS`, `Docs`), then
+`git tag -a vX.Y.Z && git push origin vX.Y.Z`. `release.yml` rejects a tag that
+is not `vX.Y.Z`, stamps the version into the manifest it zips, re-checks it
+with `check_manifest.py --expect-version`, builds `carnet_scolaire.zip` and
+publishes the release. HACS installs that zip (`zip_release` in `hacs.json`),
+so users see exactly the tag — a HACS integration whose manifest disagrees with
+its tag installs once and never updates again. The job commits nothing back,
+which is what keeps it compatible with the `main` ruleset.

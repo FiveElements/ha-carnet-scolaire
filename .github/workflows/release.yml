@@ -25,9 +25,34 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: manifest version must equal the tag
-        # A HACS integration whose manifest diverges from the tag installs and
-        # then never updates again (SPECIFICATION.md §11.1).
+      - name: Stamp the tag's version into the manifest
+        # The tag is the only source of the version (SPECIFICATION.md §11.1).
+        # The repository's manifest stays at 0.0.0 on purpose; HACS installs
+        # the zip (`zip_release` in hacs.json), so the manifest that matters is
+        # the one written here. Nothing is committed back: `main` moves only
+        # through pull requests, and this job never pushes.
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME is not vX.Y.Z"
+            exit 1
+          fi
+          python - "$version" <<'PY'
+          import json, sys
+          from pathlib import Path
+
+          path = Path("custom_components/carnet_scolaire/manifest.json")
+          manifest = json.loads(path.read_text(encoding="utf-8"))
+          manifest["version"] = sys.argv[1]
+          path.write_text(
+              json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n"
+          )
+          PY
+          grep '"version"' custom_components/carnet_scolaire/manifest.json
+
+      - name: Manifest sanity, version included
+        # Re-reads what was just stamped: the archive below must carry exactly
+        # the tag, and still no `loggers` key.
         run: python scripts/check_manifest.py --expect-version "${GITHUB_REF_NAME#v}"
 
       - name: Build the integration archive

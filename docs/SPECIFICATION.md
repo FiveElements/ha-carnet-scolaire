@@ -1549,9 +1549,10 @@ descend sous 100 %. Un seuil qui n'échoue pas n'est pas un seuil, et une
 moyenne globale seule n'en est pas un : elle absorbe la chute d'un petit module
 derrière la masse des gros.
 
-**Exigence.** La version dans `manifest.json` est vérifiée en CI comme égale à
-l'étiquette de publication. Une intégration HACS dont le manifeste diverge de
-l'étiquette s'installe et ne se met plus à jour.
+**Exigence.** L'étiquette de publication est la seule source de version : la
+CI de publication l'écrit dans le `manifest.json` du zip publié et l'y
+revérifie, le dépôt restant à `0.0.0`. Une intégration HACS dont le manifeste
+diverge de l'étiquette s'installe et ne se met plus à jour.
 
 **Exigence.** Le fichier `LICENSE` (MIT) existe et est fusionné sur la branche
 par défaut **avant** la première publication : GitHub ne détecte une licence que

@@ -37,8 +37,8 @@ bonne, et pas seulement si elle fait passer les tests. -->
       `translations/*.json` et `services.yaml` ne s'éditent pas à la main.
 - [ ] Si vous avez ajouté un appel réseau : il passe par le limiteur et déclare
       son coût réel en requêtes.
-- [ ] La version de `manifest.json` est **inchangée** — elle est portée au
-      moment de la publication.
+- [ ] La version de `manifest.json` est **inchangée** (`0.0.0`) — le tag est
+      la version, la publication l'écrit dans le zip.
 
 ## Impact sur le budget de requêtes
 
