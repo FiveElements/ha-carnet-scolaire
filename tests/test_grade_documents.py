@@ -804,7 +804,7 @@ class TestAGradedTestsDocumentsReachTheCard:
         assert name == "corrige.pdf"
         assert content == b"%PDF-1.4 not a real document"
         assert content_type == "application/pdf"
-        assert account.limiter.calls_today - before == 3
+        assert account.limiter.calls_today - before == 8
         assert parent_client.posted_names.count("DernieresNotes") == reads + 1
         assert len(parent_client.communication.session.gets) == 1
 
