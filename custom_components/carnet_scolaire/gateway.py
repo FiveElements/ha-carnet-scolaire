@@ -573,9 +573,17 @@ def grade_document_cost(role: GradeDocumentRole) -> int:
     never refunds: an under-declared fallback would spend budget the limiter
     never saw. The same for both roles today; the role stays in the signature
     so a document needing more is declared where it is described.
+
+    Five more while the diagnostic after a refusal stands: ``PageAccueil``
+    and a GET, then ``Navigation``, ``DernieresNotes`` and a GET.
     """
     del role
-    return 3
+    return 8
+
+
+#: The home tab, which a navigation to the grades declares as the previous
+#: one and ``PageAccueil`` is posted from. Diagnostic only.
+_HOME_TAB: Final = 7
 
 
 #: ``E`` on a line of a ``Saisie*`` list: the entity state, ``2`` meaning
@@ -2289,7 +2297,10 @@ class PronoteGateway:
         link: same ``N``, same ``G``, same key order, same name. Tried there
         and dropped for want of effect: a ``Navigation`` to the grades tab
         first, and a browser navigation's ``Referer`` and ``Sec-Fetch``
-        headers. The refusal reaches the card as a 502, as any other does.
+        headers. The official app opens that paper under the same kind of
+        session, so a temporary diagnostic replays its start-up steps after a
+        refusal (`_replay_client_step`), five requests more at most. A paper
+        still refused reaches the card as a 502, as any other refusal does.
 
         The address is the one place this module builds what
         ``dataClasses.Attachment`` would (see :func:`_external_file_url`):
@@ -2355,7 +2366,89 @@ class PronoteGateway:
         _LOGGER.warning(
             "A graded test's %s was refused by every N tried (%d)", role, len(refs)
         )
+        # Diagnostic, to be removed with what it finds. The official app opens
+        # this paper under the same kind of session, so the server must hold
+        # some state its start-up installs and this session never did; replay
+        # its steps one at a time, asking again after each.
+        url = _external_file_url(client, ref=refs[0], name=name, genre=genre)
+        for step in ("PageAccueil", "Navigation"):
+            try:
+                calls += self._replay_client_step(client, step, period)
+            except Exception as failure:  # noqa: BLE001 -- a diagnostic reports, never fails
+                calls += 1
+                _LOGGER.warning(
+                    "Diagnostic: step %s failed (%s)", step, type(failure).__name__
+                )
+                continue
+            calls += 1
+            try:
+                content, declared = _download(client, url, name)
+            except AttachmentUnavailable as refusal:
+                _LOGGER.warning(
+                    "Diagnostic: %s still refused after step %s (%d)",
+                    role,
+                    step,
+                    refusal.status,
+                )
+                continue
+            _LOGGER.warning("Diagnostic: %s served after step %s", role, step)
+            return content, declared, calls
         raise AttachmentUnavailable(name, 404)
+
+    def _replay_client_step(
+        self, client: HardenedClient, step: str, period: Period
+    ) -> int:
+        """Post what the app posts at start-up; the requests placed.
+
+        ``PageAccueil`` with the mobile home page's own body, its answer's
+        right-to-disconnect block described by key and type only; then the
+        grades tab's ``Navigation`` and a fresh ``DernieresNotes``.
+        """
+        if step == "PageAccueil":
+            today = self.today()
+            day = {"_T": 7, "V": today.strftime("%d/%m/%Y 0:0:0")}
+            week = int(client.get_week(today))
+            raw = client.post(
+                "PageAccueil",
+                _HOME_TAB,
+                {
+                    "avecConseilDeClasse": True,
+                    "dateGrille": day,
+                    "EDT": {"date": None},
+                    "incidents": {"numeroSemaine": week},
+                    "exclusions": {"numeroSemaine": week},
+                    "donneesVS": {"date": day},
+                    "registreAppel": {"date": day, "dj": 0},
+                    "previsionnelAbsServiceAnnexe": {"date": day},
+                    "donneesProfs": {"date": day},
+                    "personnelsAbsents": {"numeroSemaine": week},
+                    "coursNonAssures": {"numeroSemaine": week},
+                    "menuDeLaCantine": {"date": day},
+                    "TAFARendre": {"date": day},
+                    "partenaireCDI": {"CDI": {}},
+                    "tableauDeBord": {"date": day},
+                    "TAFEtActivites": {"date": day},
+                    "modificationsEDT": {"date": day},
+                },
+            )
+            block = _get(raw, "dataSec", "data", "infosDroitDeconnexion")
+            _LOGGER.warning(
+                "Diagnostic: PageAccueil infosDroitDeconnexion %s",
+                {
+                    key: value if isinstance(value, bool) else type(value).__name__
+                    for key, value in block.items()
+                }
+                if isinstance(block, dict)
+                else type(block).__name__,
+            )
+            return 1
+        client.post(
+            "Navigation",
+            FUNC_MARKS[1],
+            {"onglet": FUNC_MARKS[1], "ongletPrec": _HOME_TAB},
+        )
+        self.marks(client, period, with_report=False)
+        return 2
 
     def timetable_pdf_url(
         self,
