@@ -252,13 +252,14 @@ def test_a_paper_refused_by_every_n_is_a_404_and_says_so_once(
 ) -> None:
     """Both ``N`` tried, then a refusal -- logged, so the gap is visible."""
     _graded(client)
-    _answering(client, 404, 404)
+    _replayable(client)
+    _answering(client, 404, 404, 404, 404)
 
     with pytest.raises(AttachmentUnavailable) as refusal:
         _download(gateway, client, role=GradeDocumentRole.SUBJECT)
 
     assert refusal.value.status == 404
-    assert len(client.communication.session.gets) == 2
+    assert len(client.communication.session.gets) == 4
     assert any("every N tried" in r.getMessage() for r in caplog.records)
 
 
@@ -267,12 +268,14 @@ def test_a_document_whose_n_is_the_grades_is_asked_for_once(
 ) -> None:
     """The same ``N`` twice is one request, not a retry of a known refusal."""
     _graded(client, subject_ref="GRADE-1")
-    _answering(client, 404)
+    _replayable(client)
+    _answering(client, 404, 404, 404)
 
     with pytest.raises(AttachmentUnavailable):
         _download(gateway, client, role=GradeDocumentRole.SUBJECT)
 
-    assert len(client.communication.session.gets) == 1
+    # One by the shared N, then one after each replayed step.
+    assert len(client.communication.session.gets) == 3
 
 
 def test_only_a_404_moves_on_to_the_next_n(
@@ -293,8 +296,91 @@ def test_the_declared_cost_covers_every_n_that_may_be_tried() -> None:
     """Charged at admission and never refunded, so the worst case is declared."""
     from custom_components.carnet_scolaire.gateway import grade_document_cost
 
-    assert grade_document_cost(GradeDocumentRole.SUBJECT) == 3
-    assert grade_document_cost(GradeDocumentRole.CORRECTION) == 3
+    assert grade_document_cost(GradeDocumentRole.SUBJECT) == 8
+    assert grade_document_cost(GradeDocumentRole.CORRECTION) == 8
+
+
+def _replayable(client: FakeClient, infos: Any = None) -> None:
+    """Answer the two start-up steps the diagnostic replays."""
+    client.responses["PageAccueil"] = {
+        "dataSec": {"data": {} if infos is None else {"infosDroitDeconnexion": infos}}
+    }
+    client.responses["Navigation"] = {"dataSec": {"data": {}}}
+
+
+def test_a_refused_paper_is_asked_for_again_after_the_home_page(
+    gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The official app opens a paper this session is refused, so the app's
+    start-up is replayed step by step and the step that unblocks it logged.
+    The disconnection block is described by key and type, never by value.
+    """
+    _graded(client)
+    _replayable(client, infos={"actif": True, "debut": "18h00"})
+    _answering(client, 404, 404, 200)
+
+    content, _declared, cost = _download(
+        gateway, client, role=GradeDocumentRole.SUBJECT
+    )
+
+    assert content == b"%PDF-1.4 not a real document"
+    assert cost == 5
+    assert client.posted_names == ["DernieresNotes", "PageAccueil"]
+    assert "registreAppel" in client.body_for("PageAccueil")
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("served after step PageAccueil" in m for m in messages)
+    (infos,) = [m for m in messages if "infosDroitDeconnexion" in m]
+    assert "'actif': True" in infos
+    assert "18h00" not in infos
+    assert "'debut': 'str'" in infos
+
+
+def test_a_paper_still_refused_after_the_home_page_follows_the_grades_tab(
+    gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Second step: the grades tab and its ``DernieresNotes``, then once more."""
+    _graded(client)
+    _replayable(client, infos=["not", "a", "dict"])
+    _answering(client, 404, 404, 404, 200)
+
+    _content, _declared, cost = _download(
+        gateway, client, role=GradeDocumentRole.SUBJECT
+    )
+
+    assert cost == 8
+    assert client.posted_names == [
+        "DernieresNotes",
+        "PageAccueil",
+        "Navigation",
+        "DernieresNotes",
+    ]
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("still refused after step PageAccueil (404)" in m for m in messages)
+    assert any("served after step Navigation" in m for m in messages)
+    assert any("infosDroitDeconnexion list" in m for m in messages)
+
+
+def test_a_step_the_server_rejects_is_reported_and_skipped(
+    gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A diagnostic reports a failed step by its class, and goes on."""
+    _graded(client)
+    _replayable(client)
+
+    def rejected(_body: Any) -> dict[str, Any]:
+        raise ValueError("server said no")
+
+    client.responses["PageAccueil"] = rejected
+    _answering(client, 404, 404, 200)
+
+    _content, _declared, cost = _download(
+        gateway, client, role=GradeDocumentRole.SUBJECT
+    )
+
+    assert cost == 7
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("step PageAccueil failed (ValueError)" in m for m in messages)
+    assert not any("server said no" in m for m in messages)
 
 
 def test_a_graded_test_with_a_paper_logs_its_shape_and_no_value(
