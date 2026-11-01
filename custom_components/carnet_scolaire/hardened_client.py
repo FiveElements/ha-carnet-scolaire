@@ -150,20 +150,6 @@ class _TimeoutSession(requests.Session):
         return super().request(method, url, *args, **kwargs)
 
 
-#: What the official PRONOTE app announces: an Android WebView's User-Agent,
-#: to which its Cordova shell appends ``PRONOTE Mobile APP Version/<n>``
-#: (``AppendUserAgent`` in the app's ``config.xml``). Upstream's mobile mode
-#: sends the bare word ``iPhone``. A session opened that way is refused a
-#: graded test's paper the app's own session is served, so a token session
-#: introduces itself as the app does. The device part is Chrome's reduced
-#: form (``Android 10; K``), which names no real handset.
-_APP_USER_AGENT: Final = (
-    "Mozilla/5.0 (Linux; Android 10; K; wv) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Version/4.0 Chrome/130.0.0.0 Mobile Safari/537.36 "
-    "PRONOTE Mobile APP Version/2.0.17"
-)
-
-
 class _HardenedCommunication(pronoteAPI._Communication):
     """Bootstrap transport with timeouts and honest failure classification.
 
@@ -189,8 +175,6 @@ class _HardenedCommunication(pronoteAPI._Communication):
         super().__init__(site, cookies, mobile)
         connect, read = _current_timeouts()
         headers = dict(self.session.headers)
-        if mobile:
-            headers["User-Agent"] = _APP_USER_AGENT
         self.session.close()
         self.session = _TimeoutSession(connect, read)
         self.session.headers.update(headers)

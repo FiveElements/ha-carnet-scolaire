@@ -360,7 +360,7 @@ def test_a_caller_who_names_a_timeout_keeps_it(explicit: Any) -> None:
 
 @pytest.mark.parametrize(
     ("mobile", "user_agent"),
-    [(False, "Mozilla/5.0 (X11"), (True, "Mozilla/5.0 (Linux; Android")],
+    [(False, "Mozilla/5.0"), (True, "iPhone")],
 )
 def test_the_bootstrap_transport_swaps_the_session_and_keeps_the_headers(
     mobile: bool,
@@ -369,8 +369,7 @@ def test_the_bootstrap_transport_swaps_the_session_and_keeps_the_headers(
     """Substituting the session must not lose what upstream put on it.
 
     ``_Communication.__init__`` sets the User-Agent, and token mode depends on
-    it: PRONOTE serves the mobile protocol to a mobile User-Agent -- here the
-    official app's own, ``PRONOTE Mobile APP`` included -- and the browser
+    it: PRONOTE serves the mobile protocol to ``iPhone`` and the browser
     protocol to everything else. Replacing the session object without copying
     the headers across would turn every QR-code account into a login failure
     with nothing in the log to explain it.
@@ -382,12 +381,6 @@ def test_the_bootstrap_transport_swaps_the_session_and_keeps_the_headers(
         assert isinstance(communication.session, _TimeoutSession)
         assert communication.session._default_timeout == (2.0, 5.0)
         assert communication.session.headers["User-Agent"].startswith(user_agent)
-        assert (
-            communication.session.headers["User-Agent"].endswith(
-                "PRONOTE Mobile APP Version/2.0.17"
-            )
-            is mobile
-        )
 
 
 def test_the_transport_falls_back_to_its_class_defaults_outside_a_login() -> None:
