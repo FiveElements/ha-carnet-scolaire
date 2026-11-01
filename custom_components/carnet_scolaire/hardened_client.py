@@ -451,6 +451,12 @@ class HardenedClient(pronotepy.Client):
             if self._selected_child is not None:
                 signature["membre"] = {"N": self._selected_child.id, "G": 4}
             post_data["Signature"] = signature
+        if function_name == "Identification" and data:
+            # The official app's body ends with this key, null outside an
+            # enrolment; upstream omits it. A session opened without it is
+            # refused a graded test's paper the app is served -- this is the
+            # last difference the two logins showed.
+            data = {**data, "informationsAppareil": None}
         if data:
             post_data["data"] = data
 
