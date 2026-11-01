@@ -1142,6 +1142,25 @@ def test_a_call_that_names_no_tab_carries_no_signature_at_all() -> None:
     ]
 
 
+def test_identification_ends_with_the_apps_null_device_information() -> None:
+    """The official app's ``Identification`` ends with ``informationsAppareil``,
+    null outside an enrolment, and upstream's omits it. Sent like the app, so
+    a login differs from the app's by nothing a client can see.
+    """
+    client = _client(children=CHILDREN)
+
+    client.post("Identification", data={"identifiant": "demo", "loginTokenSAV": ""})
+
+    ((name, body),) = client.communication.posts[-1:]
+    assert name == "Identification"
+    assert list(body["data"]) == [
+        "identifiant",
+        "loginTokenSAV",
+        "informationsAppareil",
+    ]
+    assert body["data"]["informationsAppareil"] is None
+
+
 def test_setting_a_child_mutates_the_slot_the_tab_calls_read() -> None:
     """``set_child`` is a mutation, which is why the unit of work is a pair.
 
