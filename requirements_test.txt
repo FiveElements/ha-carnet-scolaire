@@ -1,13 +1,25 @@
-# pytest-homeassistant-custom-component pins the whole Home Assistant test
-# stack -- freezegun included -- so nothing here may pin those transitively.
+# pytest-homeassistant pins the whole Home Assistant test stack -- freezegun
+# included -- so nothing here may pin those transitively. It is the official
+# harness, published from home-assistant/core with Home Assistant's own version
+# number. Its predecessor, pytest-homeassistant-custom-component, stopped at
+# 2026.10 and cannot start 2026.11 (which aliases `httpx` to `httpx2` at import
+# and refuses to run once `httpx` is loaded). Never install both: their
+# fixtures overlap.
 #
-# This pin is the declared floor, not merely a recent version: 0.13.371 is the
-# release that carries Home Assistant 2026.10.0, which is exactly what
-# hacs.json declares as the minimum. Testing against anything newer would
-# leave the floor itself unexercised, and the claim in hacs.json unbacked --
-# which is the only failure mode a version floor has. The matrix in
-# validate.yml tests the floating latest alongside it, tolerating its failure.
-pytest-homeassistant-custom-component==0.13.371
+# This pin is the declared floor, not merely a recent version: it carries
+# Home Assistant 2026.11, which is what hacs.json declares as the minimum.
+# Testing against anything newer would leave the floor itself unexercised, and
+# the claim in hacs.json unbacked -- which is the only failure mode a version
+# floor has. The matrix in validate.yml tests the floating latest alongside it,
+# tolerating its failure.
+#
+# BETA: 2026.11.0b6 is the newest harness on PyPI; 2026.11.0 itself is not
+# published yet. validate.yml installs `homeassistant==2026.11.0` over it, so
+# the floor tested is the real release. Move this to 2026.11.0 when it exists.
+pytest-homeassistant==2026.11.0b6
+
+# The new harness no longer brings pytest-cov, which the coverage gate needs.
+pytest-cov
 
 # 2.15.7, and the two-week gap before this bump is the whole argument for
 # watching this pin.
@@ -27,7 +39,6 @@ pytest-homeassistant-custom-component==0.13.371
 pronotepy==2.15.7
 ruff==0.17.4
 mypy==2.4.1
-pytest-cov
 
 # `hardened_client.py` subclasses `requests.Session` to inject the HTTP timeout
 # pronotepy never sets. Without the stubs, `mypy --strict` reports the base

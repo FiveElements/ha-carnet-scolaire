@@ -59,7 +59,7 @@ donc **après** le conteneur, jamais avant.
 ### 1.2 Dans le conteneur, et nulle part ailleurs
 
 `mypy` et `pytest` ne tournent pas nativement sous Windows :
-`pytest-homeassistant-custom-component` s'enregistre comme *entry point* pytest
+`pytest-homeassistant` s'enregistre comme *entry point* pytest
 et importe `fcntl`, chargé avant toute lecture de `conftest.py`. Et un `.venv`
 local en 3.13 installe une pile Home Assistant *antérieure* au plancher
 déclaré, où `mypy --strict` a déjà laissé passer une API supprimée. La forme,
@@ -68,7 +68,7 @@ verbatim :
 ```bash
 MSYS_NO_PATHCONV=1 docker run --rm --name <nom-unique> \
   -v "C:/project/ai-project/carnet-scolaire/ha-carnet-scolaire:/work" -w /work \
-  ha-pronote-test-2026.9.0 <commande>
+  ha-pronote-test-2026.11.0 <commande>
 ```
 
 Les deux commandes :
@@ -79,14 +79,12 @@ python -m pytest tests --cov=custom_components/carnet_scolaire --cov-branch --co
 ```
 
 `MSYS_NO_PATHCONV=1` et le chemin absolu sont requis sous Git Bash, sinon MSYS
-réécrit `/work`. `ha-pronote-test-2026.9.0` est l'image **plancher** ;
-`ha-pronote-test-2026.9` porte le socle plus récent et ne remplace pas le
-premier.
+réécrit `/work`. `ha-pronote-test-2026.11.0` est l'image **plancher**.
 
 **N'ajoutez jamais `-p no:logging`** : ce plugin fournit `caplog`, et de
 nombreux tests assertent sur des enregistrements de journal ; le retirer ne
 rend pas la suite plus rapide, il la rend fausse. N'ajoutez pas non plus
-`-p no:homeassistant` : c'est le contournement Windows pour la moitié
+`-p no:pytest_homeassistant` : c'est le contournement Windows pour la moitié
 sans-HA, il désactive le garde-fou réseau et ne prouve rien sur la suite
 complète.
 

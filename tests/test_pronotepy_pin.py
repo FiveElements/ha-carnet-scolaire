@@ -72,7 +72,7 @@ def _repository(tmp_path: Path, requirement: str, manifest_pin: str) -> Path:
     """A throwaway tree carrying the two declarations, and nothing else."""
     (tmp_path / "requirements_test.txt").write_text(
         f"# prose naming {requirement.replace('==', ' ')}, not a declaration\n"
-        f"pytest-homeassistant-custom-component==0.13.363\n"
+        f"pytest-homeassistant==2026.11.0b6\n"
         f"{requirement}\n"
         f"ruff==0.14.4\n",
         encoding="utf-8",
@@ -304,7 +304,7 @@ def test_a_bump_leaves_prose_and_json_formatting_alone(tmp_path: Path) -> None:
         root / "custom_components" / "carnet_scolaire" / "manifest.json"
     ).read_text(encoding="utf-8")
     assert "# prose naming pronotepy 2.15.6, not a declaration" in requirements
-    assert "pytest-homeassistant-custom-component==0.13.363" in requirements
+    assert "pytest-homeassistant==2026.11.0b6" in requirements
     assert after == before.replace("2.15.6", "2.15.7")
     assert json.loads(after)["requirements"] == ["pronotepy==2.15.7"]
 

@@ -13,8 +13,8 @@ auprès de PRONOTE et d'EcoleDirecte ; elle s'appelait *Pronote NG* (domaine
 ---
 
 > **Un `.venv` local ne suffit plus pour les portails.** Home Assistant 2026.9
-> exige Python **3.14.2**, et `pytest-homeassistant-custom-component` refuse de
-> s'installer sous 3.13 à partir de `0.13.317`. Un environnement local en 3.13
+> exige Python **3.14.2**, et le harnais `pytest-homeassistant` aussi : il
+> refuse de s'installer sous 3.13. Un environnement local en 3.13
 > installe donc l'ancienne pile, et `mypy --strict` y vérifie le code contre une
 > version de Home Assistant **antérieure au plancher déclaré** — ce qui a déjà
 > laissé passer une clé d'API supprimée depuis. Lancez `ruff`, `mypy` et
@@ -74,7 +74,7 @@ pip install -r requirements_test.txt
 ### 2.2 Sous Windows
 
 **La suite de tests complète ne tourne pas sous Windows.**
-`pytest-homeassistant-custom-component` s'enregistre comme *entry point* pytest
+`pytest-homeassistant` s'enregistre comme *entry point* pytest
 et importe `fcntl`, qui n'existe pas. Ce n'est pas contournable : le plugin est
 chargé avant toute lecture de `conftest.py`.
 
@@ -86,7 +86,7 @@ portail à 100 % : le limiteur, l'ordonnanceur, la passerelle, le détecteur de
 changements, les DTO et l'estimateur de budget.
 
 ```powershell
-pytest tests -p no:homeassistant
+pytest tests -p no:pytest_homeassistant
 ```
 
 Attention : cette invocation désactive aussi le garde-fou réseau du plugin.

@@ -306,7 +306,7 @@ OPTION_RANGES: Final[dict[str, tuple[float, float]]] = {
 #: recent instance, not only by the HACS validation.
 #:
 #: The mechanism is version-gated, and the gate is now closed behind us:
-#: ``hacs.json`` declares a floor of 2026.8.0, which is above the 2026.3 that
+#: ``hacs.json`` declares a floor of 2026.11.0, which is above the 2026.3 that
 #: introduced the proxy, so **every supported instance serves the local
 #: folder**. There is therefore no longer a version on which this constant is
 #: the only way to put the mark on that screen -- the argument that justified
