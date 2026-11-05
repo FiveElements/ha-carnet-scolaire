@@ -28,10 +28,10 @@ jobs:
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          # 3.14, not a preference: `pytest-homeassistant-custom-component`
-          # requires >= 3.14 from 0.13.317 on, and the pin in
-          # requirements_test.txt is the Home Assistant floor declared in
-          # hacs.json. A 3.13 runner cannot install the test stack at all.
+          # 3.14, not a preference: `pytest-homeassistant` requires
+          # >= 3.14.2, and the pin in requirements_test.txt is the Home
+          # Assistant floor declared in hacs.json. A 3.13 runner cannot
+          # install the test stack at all.
           python-version: "3.14"
           cache: pip
           cache-dependency-path: requirements_test.txt
@@ -40,6 +40,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements_test.txt
+          # Same temporary override as the gated test row: type-check against
+          # the released floor, not the beta the harness pins.
+          pip install "homeassistant==$(python -c 'import json; print(json.load(open("hacs.json"))["homeassistant"])')"
 
       - name: ruff check
         run: ruff check --output-format=github .
@@ -59,11 +62,11 @@ jobs:
         include:
           # The pinned baseline carries the coverage gate; the floating row
           # catches upstream breakage early without blocking on it.
-          - ha-version: "2026.10"
-            pytest-hacc: "0.13.371"
+          - ha-version: "2026.11"
+            pytest-ha: "2026.11.0b6"
             gate: true
           - ha-version: "latest"
-            pytest-hacc: ""
+            pytest-ha: ""
             gate: false
             # `fail-fast: false` only stops the other rows being cancelled; it
             # does not stop this one failing the workflow. Without this the
@@ -76,26 +79,36 @@ jobs:
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          # 3.14, not a preference: `pytest-homeassistant-custom-component`
-          # requires >= 3.14 from 0.13.317 on, and the pin in
-          # requirements_test.txt is the Home Assistant floor declared in
-          # hacs.json. A 3.13 runner cannot install the test stack at all.
+          # 3.14, not a preference: `pytest-homeassistant` requires
+          # >= 3.14.2, and the pin in requirements_test.txt is the Home
+          # Assistant floor declared in hacs.json. A 3.13 runner cannot
+          # install the test stack at all.
           python-version: "3.14"
           cache: pip
           cache-dependency-path: requirements_test.txt
 
       - name: Install dependencies (pinned)
-        if: matrix.pytest-hacc != ''
+        if: matrix.pytest-ha != ''
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements_test.txt
+          # TEMPORARY, while the harness for the floor exists only as a beta
+          # (requirements_test.txt pins 2026.11.0b6): put the released Home
+          # Assistant under it, so the floor exercised is the one hacs.json
+          # promises and the check below stays strict. pip reports the
+          # harness's exact pin as a conflict; that is expected. Remove this
+          # line once requirements_test.txt pins pytest-homeassistant==2026.11.0.
+          pip install "homeassistant==$(python -c 'import json; print(json.load(open("hacs.json"))["homeassistant"])')"
 
       - name: Install dependencies (latest)
-        if: matrix.pytest-hacc == ''
+        if: matrix.pytest-ha == ''
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements_test.txt
-          pip install --upgrade pytest-homeassistant-custom-component
+          # `--pre` is required, not a taste: the newest *final* release PyPI
+          # lists under this name is an unrelated 0.1.3 from before Home
+          # Assistant took it over, and every harness is a beta first.
+          pip install --upgrade --pre pytest-homeassistant
 
       # The floor is a promise made to users by hacs.json, and `tests/
       # test_version_floor.py` only checks that the repository repeats the
@@ -104,7 +117,7 @@ jobs:
       # Assistant. Nothing else can -- the mapping lives on PyPI, and a test
       # that fetched it would put the network in the suite.
       - name: The pinned row really installs the declared floor
-        if: matrix.pytest-hacc != ''
+        if: matrix.pytest-ha != ''
         run: |
           python - <<'PY'
           import json, pathlib
@@ -129,7 +142,7 @@ jobs:
       # against `latest` is what turns that class of removal into a warning
       # here instead of a bug report.
       - name: mypy --strict against the floating release
-        if: matrix.pytest-hacc == ''
+        if: matrix.pytest-ha == ''
         continue-on-error: true
         run: mypy --strict custom_components/carnet_scolaire
 

@@ -2127,8 +2127,8 @@ divergence documentée dans `hardened_client.py`, et c'est le travail que la
 proposition demande.
 
 La matrice de test comporte deux lignes : la référence épinglée
-(`pytest-homeassistant-custom-component==0.13.371`, qui porte Home Assistant
-**2026.10.0**) qui **porte le portail de couverture**, et une ligne flottante
+(`pytest-homeassistant`, dont la version est celle de Home Assistant : le
+plancher **2026.11.0**) qui **porte le portail de couverture**, et une ligne flottante
 `latest` qui attrape une rupture amont tôt **sans bloquer** dessus.
 
 Le choix de l'épingle n'est pas « une version récente » mais **exactement le
@@ -2140,13 +2140,13 @@ bout de l'intervalle.
 
 ### 11.2 Pourquoi la suite tourne sous Linux, WSL ou Docker
 
-`pytest_homeassistant_custom_component` — plus exactement le harnais de test de
-Home Assistant qu'il embarque — importe **`fcntl`**, qui n'existe pas sous
+`pytest_homeassistant` — le harnais de test de Home Assistant, publié depuis
+home-assistant/core — importe **`fcntl`**, qui n'existe pas sous
 Windows. Le module ne peut donc pas être chargé du tout sur cette plateforme,
 et pas seulement par ce que ce projet en fait.
 
-la fixture `account` de `tests/conftest.py` traite cela de la seule façon honnête : le plugin est
-enregistré **conditionnellement** (`HAS_HASS_HARNESS = sys.platform != "win32"`),
+la fixture `account` de `tests/conftest.py` traite cela de la seule façon honnête : le plugin se charge seul par son *entry
+point*, et tout ce qui s'en sert est **conditionnel** (`HAS_HASS_HARNESS = sys.platform != "win32"`),
 avec un message d'erreur qui nomme la cause et la solution — « exécutez-les sous
 Linux, WSL ou Docker, comme le fait la CI ». Un contributeur sous Windows peut
 alors exécuter la moitié de la suite qui n'a aucune dépendance Home Assistant :
@@ -2563,14 +2563,31 @@ ne touche le réseau, ce que le dépôt respecte.
 Cette divergence est **résolue**, et la façon dont elle l'a été vaut d'être
 notée : c'est un cas où l'écart documentaire cachait deux vrais défauts.
 
-`SPECIFICATION.md` déclare en en-tête viser **Home Assistant 2026.10 ou
-supérieur**. Le dépôt déclare maintenant le même plancher — **2026.10.0** dans
-`hacs.json` — et `requirements_test.txt` l'épingle exactement :
-`pytest-homeassistant-custom-component==0.13.371` embarque Home Assistant
-2026.10.0. Les trois chiffres sont le même, la matrice exécute celui-là, et la
-ligne flottante `latest` couvre l'autre bout de l'intervalle.
+`SPECIFICATION.md` déclare en en-tête viser **Home Assistant 2026.11 ou
+supérieur**. Le dépôt déclare le même plancher — **2026.11.0** dans
+`hacs.json` — et la matrice l'exécute : `requirements_test.txt` épingle
+`pytest-homeassistant`, dont la version est celle de Home Assistant, et la
+ligne plancher de `validate.yml` vérifie que `homeassistant.const.__version__`
+vaut exactement ce que `hacs.json` annonce. La ligne flottante `latest` couvre
+l'autre bout de l'intervalle.
 
-Le plancher était auparavant à 2026.2, puis à 2026.8, puis à 2026.9. Chaque montée a été faite
+**Pourquoi 2026.11, honnêtement.** Aucune API de 2026.11 n'est requise par le
+code : la montée de 2026.10 à 2026.11 n'a touché que les tests. Elle vient du
+harnais. `pytest-homeassistant-custom-component` est abandonné et s'arrête à
+2026.10 ; il ne démarre pas 2026.11, qui crée à l'import un alias de `httpx`
+vers `httpx2` et refuse de s'exécuter si `httpx` est déjà chargé. Son
+remplaçant officiel, `pytest-homeassistant`, ne publie rien d'antérieur à
+2026.11. Garder 2026.10 aurait donc voulu dire tester le plancher avec un
+harnais mort, et ne plus pouvoir tester les versions suivantes avec le même
+— un plancher qu'on ne lance pas n'est pas un plancher. Le prix est réel : une
+instance en 2026.10, sur laquelle l'intégration fonctionnerait sans doute
+encore, se voit refuser la mise à jour par HACS.
+
+Tant que `pytest-homeassistant==2026.11.0` n'est pas publié, l'épingle est la
+bêta `2026.11.0b6`, et `validate.yml` installe `homeassistant==2026.11.0`
+par-dessus : c'est la version publiée qui est exercée, pas la bêta.
+
+Le plancher était auparavant à 2026.2, puis à 2026.8, puis à 2026.9, puis à 2026.10. Chaque montée a été faite
 en **exécutant** le socle visé, pas en modifiant le chiffre — et les deux fois
 la seule exécution a trouvé un défaut produit qu'aucun portail ne voyait :
 `DeviceInfo.via_device` (le tuple, retiré au profit de `via_device_id`), qui

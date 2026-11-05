@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Event
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import async_capture_events
+from pytest_homeassistant.common import async_capture_events
 
 from custom_components.carnet_scolaire.account import SIGNAL_DELTA
 from custom_components.carnet_scolaire.const import (
@@ -35,7 +35,7 @@ from .fixtures import protocol
 if TYPE_CHECKING:
     from freezegun.api import FrozenDateTimeFactory
     from homeassistant.core import HomeAssistant
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     from custom_components.carnet_scolaire.account import PronoteAccount
 
