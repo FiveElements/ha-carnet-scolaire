@@ -12,8 +12,6 @@ school tomorrow, no alarm" -- and both fail it in the direction that wakes a
 child at six in the morning, or fails to.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo

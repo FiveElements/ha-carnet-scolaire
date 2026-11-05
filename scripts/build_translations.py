@@ -17,8 +17,6 @@ one table, and a test that asserts each file is its output.
 Run: ``python scripts/build_translations.py``
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any

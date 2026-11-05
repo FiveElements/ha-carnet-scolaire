@@ -39,8 +39,6 @@ collaborators as arguments, so this file carries no ``REQUIRES_HASS`` marker
 and runs on Windows as well as in CI.
 """
 
-from __future__ import annotations
-
 import contextlib
 import logging
 import threading

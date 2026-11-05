@@ -30,8 +30,6 @@ Usage::
     python scripts/ecoledirecte_api_version.py --bump 4.102.0   # rewrite
 """
 
-from __future__ import annotations
-
 import argparse
 from collections.abc import Callable
 from dataclasses import dataclass

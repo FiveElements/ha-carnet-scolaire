@@ -22,8 +22,6 @@ the next master tick serve them, so a button mashed ten times still costs one
 batch (§5.1).
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.core import (

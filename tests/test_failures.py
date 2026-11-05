@@ -7,8 +7,6 @@ error's -- the payload it could not read -- and the log a user pastes into a
 public issue.
 """
 
-from __future__ import annotations
-
 import errno
 import socket
 import ssl

@@ -19,8 +19,6 @@ card that attaches cleanly and never fires. Such a trigger is neither listed
 nor accepted (`_producible`).
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.components.device_automation import DEVICE_TRIGGER_BASE_SCHEMA

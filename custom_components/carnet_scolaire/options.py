@@ -6,8 +6,6 @@ function that produced the numbers in the annexe -- a setting whose consequence
 you cannot see gets set at random.
 """
 
-from __future__ import annotations
-
 from datetime import time
 import logging
 from typing import TYPE_CHECKING, Any, Final

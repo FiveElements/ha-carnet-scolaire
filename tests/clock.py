@@ -13,8 +13,6 @@ backwards while the monotonic clock does not move -- move them separately, and
 that asymmetry is exactly what makes ``_roll_day``'s backwards branch testable.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 

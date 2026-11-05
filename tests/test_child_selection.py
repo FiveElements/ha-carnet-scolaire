@@ -14,8 +14,6 @@ declined, a child the account never announced before is still adopted, and an
 ordinary rotation logs no warning and no name.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING, Any, Final
 from unittest.mock import patch

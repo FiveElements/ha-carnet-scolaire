@@ -13,8 +13,6 @@ bug report ("both children show the same tier failing") while handing nobody
 the material to replay a session (annexe A §7).
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.components.diagnostics import async_redact_data

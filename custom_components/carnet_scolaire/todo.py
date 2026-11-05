@@ -16,8 +16,6 @@ the box back. The published snapshot is still refreshed by the tier rather
 than from that check read.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.todo import (

@@ -22,8 +22,6 @@ three-attempt guard rail that protects the address from suspension (annexe B
 §3).
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from typing import TYPE_CHECKING, Any, Final, cast

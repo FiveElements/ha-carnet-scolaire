@@ -6,8 +6,6 @@ is this project's own: simulated clocks, a fake pronotepy client, and a config
 entry that never carries a real credential.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 import sys
 from typing import TYPE_CHECKING, Any

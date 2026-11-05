@@ -22,8 +22,6 @@ Every ``datetime`` here is timezone-aware. The conversion happens once, in the
 gateway, with the establishment's timezone (§4.2).
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import date, datetime
 

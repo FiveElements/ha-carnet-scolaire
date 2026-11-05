@@ -51,8 +51,6 @@ Usage::
     python scripts/pronotepy_pin.py --bump 2.15.7       # move both declarations
 """
 
-from __future__ import annotations
-
 import argparse
 from collections.abc import Callable
 from dataclasses import dataclass

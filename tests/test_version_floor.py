@@ -26,8 +26,6 @@ instead, by a step that reads ``homeassistant.const.__version__`` back after
 the pinned install.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 import re

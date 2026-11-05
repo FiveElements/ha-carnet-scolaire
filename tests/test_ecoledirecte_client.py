@@ -2,8 +2,6 @@
 
 # ruff: noqa: E501 -- Task 7 requires the three plan tests verbatim.
 
-from __future__ import annotations
-
 import asyncio
 import base64
 from collections.abc import Mapping, Sequence

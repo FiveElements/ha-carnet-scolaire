@@ -6,8 +6,6 @@ arbitrary, the comment says which requirement fixed it -- a default nobody can
 justify is a default nobody can tune.
 """
 
-from __future__ import annotations
-
 from datetime import time as dt_time
 from enum import StrEnum
 from typing import Final

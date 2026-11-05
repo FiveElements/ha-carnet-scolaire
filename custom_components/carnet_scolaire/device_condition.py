@@ -8,8 +8,6 @@ school day" would eventually disagree, and the disagreement would show up as an
 automation that fires when its own condition card says it should not.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.const import (

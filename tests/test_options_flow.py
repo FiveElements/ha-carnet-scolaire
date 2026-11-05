@@ -25,8 +25,6 @@ is the kind of bug that is only noticed weeks later, as an unexplained change
 in request volume.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.data_entry_flow import FlowResultType
