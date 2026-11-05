@@ -12,7 +12,7 @@ hide:
 [![Validate](https://img.shields.io/github/actions/workflow/status/FiveElements/ha-carnet-scolaire/validate.yml?branch=main&label=validate&logo=github)](https://github.com/FiveElements/ha-carnet-scolaire/actions/workflows/validate.yml)
 [![Hassfest](https://img.shields.io/github/actions/workflow/status/FiveElements/ha-carnet-scolaire/hassfest.yml?branch=main&label=hassfest&logo=homeassistant&logoColor=white)](https://github.com/FiveElements/ha-carnet-scolaire/actions/workflows/hassfest.yml)
 [![HACS](https://img.shields.io/github/actions/workflow/status/FiveElements/ha-carnet-scolaire/hacs.yml?branch=main&label=HACS)](https://github.com/FiveElements/ha-carnet-scolaire/actions/workflows/hacs.yml)
-![Home Assistant 2026.9.0 minimum](https://img.shields.io/badge/Home%20Assistant-2026.9.0%2B-41BDF5?logo=homeassistant&logoColor=white)
+![Home Assistant 2026.10.0 minimum](https://img.shields.io/badge/Home%20Assistant-2026.10.0%2B-41BDF5?logo=homeassistant&logoColor=white)
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-green)](https://github.com/FiveElements/ha-carnet-scolaire/blob/main/LICENSE)
 
 Ce qui la caractérise, en quatre points :
@@ -121,7 +121,7 @@ préfixe de toutes ses entités et de tous ses services.
     Copier `custom_components/carnet_scolaire/` dans le dossier
     `custom_components/` de votre configuration, puis redémarrer.
 
-Home Assistant **2026.9.0** minimum.
+Home Assistant **2026.10.0** minimum.
 
 Le [guide de l'utilisateur](GUIDE-UTILISATEUR.md) reprend chaque étape, y
 compris les trois modes de connexion et ce qu'il faut avoir sous la main avant
