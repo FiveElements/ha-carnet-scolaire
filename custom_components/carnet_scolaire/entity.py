@@ -16,8 +16,6 @@ transition. Without it they change state at their tier's pace, up to fifteen
 minutes late, which on a wake-up sensor removes the entire point of the sensor.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import callback

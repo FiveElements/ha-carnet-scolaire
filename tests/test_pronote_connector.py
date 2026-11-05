@@ -1,7 +1,5 @@
 """The Pronote connector: declared costs, and the period it may not have."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 import pytest

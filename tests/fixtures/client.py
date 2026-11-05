@@ -16,8 +16,6 @@ Everything is served from :mod:`tests.fixtures.protocol`, so a test that wants
 a degenerate response overrides one function name and leaves the rest alone.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 from typing import TYPE_CHECKING, Any
 

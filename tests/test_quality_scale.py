@@ -11,8 +11,6 @@ why, is how an inventory goes stale. This test needs no Home Assistant: it
 reads YAML.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 import re
 from typing import Any, Final

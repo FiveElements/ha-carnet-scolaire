@@ -26,8 +26,6 @@ within one process, and a hold that survived a restart would be a hold nobody
 could explain.
 """
 
-from __future__ import annotations
-
 import time
 from typing import TYPE_CHECKING, Any, Final
 

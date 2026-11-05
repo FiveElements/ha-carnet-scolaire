@@ -9,8 +9,6 @@ these tests about behaviour: they would otherwise all fail together the day a
 key's parts change, for a reason none of them is about.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from custom_components.carnet_scolaire.const import Tier

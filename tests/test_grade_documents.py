@@ -8,8 +8,6 @@ this is the one address the gateway builds itself. The rule of
 gets a key and the service signs it at the click.
 """
 
-from __future__ import annotations
-
 import json
 from typing import TYPE_CHECKING, Any
 

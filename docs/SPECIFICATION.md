@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | **Domaine** | `pronote` |
-| **Cible** | Home Assistant 2026.9 ou supérieur |
+| **Cible** | Home Assistant 2026.11 ou supérieur |
 | **Dépendance** | `pronotepy == 2.15.7` (épinglée) |
 | **Distribution** | HACS, dépôt personnalisé |
 | **Statut** | Spécification — version 2, 8 septembre 2026 |
@@ -1521,7 +1521,7 @@ fusion :
   `dataClasses.py` importe `autoslot.Slots` sous `# type: ignore` et porte
   plusieurs annotations ignorées : sans cette dérogation, la première exécution
   de CI se battrait contre l'amont au lieu de notre code.
-- `pytest` sur `pytest-homeassistant-custom-component`, **95 % sur chaque
+- `pytest` sur `pytest-homeassistant`, **95 % sur chaque
   module** sans exception, 80 % en global, et 100 % sur `ratelimit.py`,
   `scheduler.py`, `gateway.py`, `delta.py` et les trois
   `connectors/ecoledirecte/ed_*.py` : ce sont les sept modules où une erreur

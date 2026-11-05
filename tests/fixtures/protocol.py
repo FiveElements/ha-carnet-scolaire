@@ -13,8 +13,6 @@ for instants and ``%d/%m/%Y`` for plain dates; anything else raises
 ``DateParsingError``, which would make a fixture bug look like a decoder bug.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 from typing import TYPE_CHECKING, Any
 

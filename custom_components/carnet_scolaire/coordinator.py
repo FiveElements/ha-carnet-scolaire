@@ -10,8 +10,6 @@ account holds several children who share a session, a budget and an IP address
 (§7.1).
 """
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING, Any, Final
 

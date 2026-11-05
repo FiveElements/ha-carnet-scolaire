@@ -43,8 +43,6 @@ order PRONOTE lists them.
 This module is deliberately free of Home Assistant and of ``pronotepy``.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import hashlib
 import json

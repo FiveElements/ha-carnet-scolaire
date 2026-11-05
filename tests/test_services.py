@@ -24,18 +24,16 @@ child's device. That is a wrong-attribution disclosure of exactly the fields
 checks the response is well-formed.
 """
 
-from __future__ import annotations
-
 import json
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
+import probatio
 from pronotepy.exceptions import DataError, PronoteAPIError
 import pytest
 import requests
-import voluptuous as vol
 
 from custom_components.carnet_scolaire.const import (
     DOMAIN,
@@ -70,7 +68,7 @@ from .keys import key_of, thread_key
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     from custom_components.carnet_scolaire.account import PronoteAccount
 
@@ -193,7 +191,7 @@ async def test_refresh_will_not_force_a_login(
     suspended, and it is never what somebody pressing "refresh" wants
     (annexe B §3).
     """
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         await hass.services.async_call(
             DOMAIN,
             SERVICE_REFRESH,
@@ -263,7 +261,7 @@ async def test_naming_several_devices_at_once_is_refused_rather_than_guessed(
     """
     device_id = _child_device(hass, mock_entry, STUDENT_ONE)
 
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         await hass.services.async_call(
             DOMAIN,
             SERVICE_REFRESH,
@@ -1020,7 +1018,7 @@ async def test_a_message_may_reply_or_open_a_thread_but_not_both(
     """Enforced in the schema, so a malformed script fails before it costs."""
     device_id = _child_device(hass, mock_entry, STUDENT_ONE)
 
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         await hass.services.async_call(
             DOMAIN,
             SERVICE_SEND_MESSAGE,
@@ -1033,7 +1031,7 @@ async def test_a_message_may_reply_or_open_a_thread_but_not_both(
             blocking=True,
         )
 
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(probatio.Invalid):
         await hass.services.async_call(
             DOMAIN,
             SERVICE_SEND_MESSAGE,
@@ -1478,7 +1476,7 @@ class TestTheAttachmentAddressIsMintedOnClick:
         And the value never reaches the path it would otherwise be signed into.
         """
         del account
-        with pytest.raises(vol.Invalid):
+        with pytest.raises(probatio.Invalid):
             await self._call(hass, mock_entry, STUDENT_ONE, key)
 
     async def test_the_translation_keys_are_a_published_contract(self) -> None:

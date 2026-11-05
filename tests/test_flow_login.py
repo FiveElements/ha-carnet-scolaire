@@ -35,8 +35,6 @@ above it runs for real: the mode mapping, the ENT resolution, the shape reading,
 the credential export, and the ``finally`` that closes the client.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch

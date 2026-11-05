@@ -17,8 +17,6 @@ with no key to read there was no way to say either.
 neither print it nor inject it.
 """
 
-from __future__ import annotations
-
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
@@ -26,7 +24,7 @@ from unittest.mock import patch
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 import pytest
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from pytest_homeassistant.common import async_fire_time_changed
 
 from custom_components.carnet_scolaire.const import Tier
 

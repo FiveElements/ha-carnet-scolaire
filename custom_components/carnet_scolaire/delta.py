@@ -55,8 +55,6 @@ session that produced the previous timetable, which is the only way to follow a
 *move*, since a lesson's key is built from its slot.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any, Final

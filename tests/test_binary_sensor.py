@@ -12,15 +12,13 @@ school tomorrow, no alarm" -- and both fail it in the direction that wakes a
 child at six in the morning, or fails to.
 """
 
-from __future__ import annotations
-
 import datetime as dt
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from homeassistant.util import dt as dt_util
 import pytest
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from pytest_homeassistant.common import async_fire_time_changed
 
 from custom_components.carnet_scolaire import binary_sensor
 from custom_components.carnet_scolaire.binary_sensor import (
@@ -46,7 +44,7 @@ from .test_delta import a_lesson, timetable
 if TYPE_CHECKING:
     from freezegun.api import FrozenDateTimeFactory
     from homeassistant.core import HomeAssistant
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     from custom_components.carnet_scolaire.account import PronoteAccount
     from custom_components.carnet_scolaire.models import TimetableFacts

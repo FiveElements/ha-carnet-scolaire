@@ -15,8 +15,6 @@ Two consequences show up throughout:
   browser's locale in one stroke (§10.7).
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta

@@ -8,8 +8,6 @@ so a caching mistake here does not cost one request, it costs one per viewer
 per refresh, against a daily cap of a few thousand.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
@@ -21,7 +19,7 @@ from .conftest import REQUIRES_HASS
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     from custom_components.carnet_scolaire.account import PronoteAccount
 

@@ -164,7 +164,7 @@ otherwise disarm itself.
 
 ### Running tests on Windows
 
-The full suite **cannot** run natively: `pytest-homeassistant-custom-component`
+The full suite **cannot** run natively: `pytest-homeassistant`
 registers a pytest entry point that imports `fcntl`, loaded before any
 `conftest.py` is read. A local `.venv` on Python 3.13 also installs an old HA
 stack, so `mypy --strict` there checks against a version *below* the declared
@@ -175,17 +175,21 @@ Use a prebuilt Docker image (build once — the HA test stack is large):
 
 ```bash
 MSYS_NO_PATHCONV=1 docker run --rm -v "C:/project/ai-project/carnet-scolaire/ha-carnet-scolaire:/work" -w /work \
-  ha-pronote-test-2026.9.0 python -m pytest tests -q --no-header --show-capture=no
+  ha-pronote-test-2026.11.0 python -m pytest tests -q --no-header --show-capture=no
 ```
 
-`ha-pronote-test-2026.9.0` is the **floor** image (HA 2026.9.0 via
-`pytest-homeassistant-custom-component==0.13.363`, plus `mypy` and `ruff`);
-`ha-pronote-test-2026.9` carries the newer HA 2026.9.1. Both are `python:3.14`
-plus `requirements_test.txt`. `MSYS_NO_PATHCONV=1` and the absolute path are
+`ha-pronote-test-2026.11.0` is the **floor** image (HA 2026.11.0 under
+`pytest-homeassistant==2026.11.0b6`, plus `mypy` and `ruff`): `python:3.14`
+plus `requirements_test.txt`, then `pip install homeassistant==2026.11.0` over
+the beta harness exactly as `validate.yml` does.
+`pytest-homeassistant` is the official harness, released from
+home-assistant/core under HA's own version number; it replaced
+`pytest-homeassistant-custom-component`, which stopped at 2026.10. Never
+install both — their fixtures overlap. `MSYS_NO_PATHCONV=1` and the absolute path are
 required under Git Bash, or MSYS rewrites `/work`.
 
 Never add `-p no:logging` — it removes the plugin that provides `caplog`, and
-many tests assert on log records. `pytest tests -p no:homeassistant` runs the
+many tests assert on log records. `pytest tests -p no:pytest_homeassistant` runs the
 HA-free half of the suite on Windows (limiter, scheduler, gateway, delta, DTOs,
 budget estimator — the four modules held at 100 %), but it also disables the
 plugin's network guard, so never write a test that could reach the network.
@@ -208,10 +212,14 @@ Two hassfest traps: a translation string may not contain a URL (use
 
 `hacs.json` `homeassistant` ⇄ the `requirements_test.txt` pin ⇄ the gated matrix
 row in `validate.yml` ⇄ 18 blueprint `min_version` values. Currently
-**2026.9.0** / `0.13.363`. `tests/test_version_floor.py` holds all 21, and a CI
+**2026.11.0** / `pytest-homeassistant==2026.11.0b6`. `tests/test_version_floor.py` holds all 21, and a CI
 step compares `homeassistant.const.__version__` to `hacs.json` so the declared
-number is the one actually exercised. PyPI mapping observed so far:
-`0.13.354`→2026.8.0, `0.13.363`→2026.9.0, `0.13.364`→2026.9.1. Raise the floor
+number is the one actually exercised. The harness version *is* the HA version
+now; while the floor's harness exists only as a beta, CI installs the released
+`homeassistant` over it (pip reports the pin conflict — expected) — drop that
+line from `validate.yml` once `pytest-homeassistant==2026.11.0` is on PyPI.
+Mind `--pre` when looking it up: the newest *final* PyPI lists under that name
+is an unrelated `0.1.3`. Raise the floor
 by *running* the new socle green first, then moving the declaration.
 
 ## Architecture

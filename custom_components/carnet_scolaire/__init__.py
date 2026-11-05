@@ -11,8 +11,6 @@ that does not know which child it belongs to has no stable ``unique_id``, and
 §2.4 makes identifier stability a guarantee rather than an aspiration.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING, Final, cast
 

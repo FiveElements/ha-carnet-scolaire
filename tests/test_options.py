@@ -11,8 +11,6 @@ below it: a stored value the UI cannot produce, because a hand-edited
 bypass the UI.
 """
 
-from __future__ import annotations
-
 from datetime import time
 
 import pytest
