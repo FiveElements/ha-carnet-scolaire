@@ -9,8 +9,6 @@ ten presses cost one batch, because the second press finds the tiers already
 requested and the tick already running (§5.1, annexe B §6).
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 

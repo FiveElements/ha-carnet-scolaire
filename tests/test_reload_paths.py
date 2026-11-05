@@ -23,8 +23,6 @@ the reload from the finisher, and a corrected password is stored and never
 used.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 

@@ -20,8 +20,6 @@ No network, no Home Assistant: the fake client answers from hand-written
 payloads. See ``tests/fixtures/`` for why none of them came off a real server.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import datetime as dt
 import logging

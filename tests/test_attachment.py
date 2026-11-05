@@ -17,8 +17,6 @@ unless the caller declares it. A missing declaration would spend budget invisibl
 is the class of defect this project exists to prevent (§11.1).
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 import re
 from typing import TYPE_CHECKING, Any

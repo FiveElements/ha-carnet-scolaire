@@ -13,8 +13,6 @@ These run the whole chain with only the login doubled, on both shapes of
 account, and read the ``N`` off the bodies the fake client actually received.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 

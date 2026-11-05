@@ -20,8 +20,6 @@ menu, the unique id, the abort, the reload -- and half of that lives in the
 framework rather than in the handler.
 """
 
-from __future__ import annotations
-
 import asyncio
 import base64
 from collections.abc import Iterator  # noqa: TC003 -- a pytest fixture annotation

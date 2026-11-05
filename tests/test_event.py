@@ -8,8 +8,6 @@ and it is the check that keeps two accounts on one instance from firing each
 other's automations.
 """
 
-from __future__ import annotations
-
 from collections import Counter
 import datetime as dt
 from datetime import timedelta

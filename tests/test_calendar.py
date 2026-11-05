@@ -8,8 +8,6 @@ would be a second path to the network, outside the limiter's monopoly
 (annexe B §6), driven by how often somebody drags a card.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 from datetime import timedelta
 from typing import TYPE_CHECKING

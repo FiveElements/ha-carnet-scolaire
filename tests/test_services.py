@@ -24,8 +24,6 @@ child's device. That is a wrong-attribution disclosure of exactly the fields
 checks the response is well-formed.
 """
 
-from __future__ import annotations
-
 import json
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch

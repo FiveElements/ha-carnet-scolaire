@@ -12,8 +12,6 @@ because the 10:30 lesson is cancelled, it was scheduled to end at 11:30, and
 lessons resume at 14:00.
 """
 
-from __future__ import annotations
-
 import asyncio
 from datetime import datetime, timedelta
 import pathlib

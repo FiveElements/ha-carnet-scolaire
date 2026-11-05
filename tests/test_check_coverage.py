@@ -8,8 +8,6 @@ same family of defect as a ``--since`` argument the citation gate used to
 ignore.
 """
 
-from __future__ import annotations
-
 import importlib.util
 from pathlib import Path
 from typing import TYPE_CHECKING

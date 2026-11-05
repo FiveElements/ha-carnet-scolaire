@@ -39,8 +39,6 @@ the limiter -- and that is what makes ``Erreur.G = 10`` an observable, and
 therefore measurable, event (§6.5).
 """
 
-from __future__ import annotations
-
 import contextlib
 import logging
 import re

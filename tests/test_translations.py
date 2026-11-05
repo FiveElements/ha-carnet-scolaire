@@ -16,8 +16,6 @@ So the catalogues are checked three ways: against Home Assistant's own schema,
 against the code that references them, and against each other.
 """
 
-from __future__ import annotations
-
 import ast
 import importlib.util
 import json

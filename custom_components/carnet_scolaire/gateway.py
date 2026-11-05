@@ -27,8 +27,6 @@ decoding ``note.V`` ourselves is the only route to the raw sentinel that
 this is a bounded exception, not a policy.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import datetime as dt
 from html import unescape

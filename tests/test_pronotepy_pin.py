@@ -32,8 +32,6 @@ suite blocks sockets, and a test of a version watcher that needed PyPI to be up
 would fail for reasons that have nothing to do with this repository.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import json
 from pathlib import Path

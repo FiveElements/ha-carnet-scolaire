@@ -17,8 +17,6 @@ Two of those had actually happened, and each has a test here:
   still be refused by the service rather than by the editor's filtering.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components import automation

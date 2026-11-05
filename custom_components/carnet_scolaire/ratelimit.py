@@ -49,8 +49,6 @@ clocks and returns decisions, which is what makes it testable to 100 % with no
 network and no instance (annexe B §6).
 """
 
-from __future__ import annotations
-
 import asyncio
 from dataclasses import dataclass, field
 from datetime import (

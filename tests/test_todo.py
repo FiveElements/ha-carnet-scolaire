@@ -22,8 +22,6 @@ whose item carries no PRONOTE identifier, fails with a message. Silence would
 read exactly like success while the establishment saw nothing.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 

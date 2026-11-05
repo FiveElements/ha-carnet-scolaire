@@ -30,8 +30,6 @@ wants to press refresh, so inheriting that rule would hide the control at the
 only moment it is useful.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 

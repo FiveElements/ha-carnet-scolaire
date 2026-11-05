@@ -11,8 +11,6 @@ the failure it prevents. A test called ``test_bad_password_counts`` that does
 not say *why* is a test the next reader deletes.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime, time, timedelta
 import random
 from typing import TYPE_CHECKING

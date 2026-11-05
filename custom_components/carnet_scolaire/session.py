@@ -46,8 +46,6 @@ gap at least as long as the shortest one that previously expired -- and not
 merely the next call after a fresh login succeeding, which it always does.
 """
 
-from __future__ import annotations
-
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass

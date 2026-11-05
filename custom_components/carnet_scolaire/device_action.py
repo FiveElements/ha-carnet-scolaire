@@ -10,8 +10,6 @@ is exactly one implementation of "tick a homework item" and the automation
 trace shows the service call that actually happened.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.const import (

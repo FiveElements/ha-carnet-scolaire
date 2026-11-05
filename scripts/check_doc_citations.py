@@ -70,8 +70,6 @@ Usage::
     python scripts/check_doc_citations.py --no-drift
 """
 
-from __future__ import annotations
-
 import ast
 from functools import cache
 from pathlib import Path

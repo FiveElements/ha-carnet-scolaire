@@ -25,8 +25,6 @@ must be omitted rather than reported as `0`, because that is a protocol change
 and it has to be visible as one.
 """
 
-from __future__ import annotations
-
 from dataclasses import fields, is_dataclass
 import json
 from typing import TYPE_CHECKING, Any, ClassVar
