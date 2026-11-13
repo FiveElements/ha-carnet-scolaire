@@ -1752,6 +1752,10 @@ def _make_ed_client(
     return factory, transport
 
 
+async def _no_ed_sleep(_seconds: float) -> None:
+    """Stand-in for the ED limiter's sleeper: spacing without the wait."""
+
+
 async def _setup_ed_entry(
     hass: HomeAssistant,
     *,
@@ -1778,6 +1782,12 @@ async def _setup_ed_entry(
             "custom_components.carnet_scolaire.connectors.pronote.SessionManager",
             wraps=PronoteConnectorSessionManager,
         ) as session_manager,
+        # The ED limiter's spacing is real time otherwise: ~4 s of idle event
+        # loop per set-up, which made these the slowest tests in the suite.
+        patch(
+            "custom_components.carnet_scolaire.connectors.ecoledirecte.ed_limiter._sleep",
+            new=_no_ed_sleep,
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()

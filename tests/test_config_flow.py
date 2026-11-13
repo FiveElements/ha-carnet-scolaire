@@ -456,6 +456,8 @@ async def test_an_ed_reauth_asks_for_identifier_and_qcm_not_a_pronote_probe(
             result["flow_id"],
             {"username": "demo.example.invalid", "password": "not-a-real-password"},
         )
+    # Drain the reload while `no_setup` still holds, or it reaches the network.
+    await hass.async_block_till_done()
 
     assert done["type"] is FlowResultType.ABORT
     assert done["reason"] == "reauth_successful"
@@ -953,6 +955,8 @@ async def test_reauthentication_asks_for_the_pin_and_forgets_it_again(
             result["flow_id"],
             {"password": "corrected-not-real", CONF_ACCOUNT_PIN: "4321"},
         )
+    # Drain the reload while `no_setup` still holds, or it reaches the network.
+    await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
@@ -991,6 +995,8 @@ async def test_reauthentication_lifts_the_hold_a_human_can_only_lift(
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {"password": "corrected-not-real"}
         )
+    # Drain the reload while `no_setup` still holds, or it reaches the network.
+    await hass.async_block_till_done()
 
     assert probe.call_count == 1, "the human's corrected password was not even tried"
     assert result["reason"] == "reauth_successful"
@@ -1209,6 +1215,8 @@ async def test_reauthentication_accepts_a_pin_without_a_new_password(
         done = await hass.config_entries.flow.async_configure(
             result["flow_id"], {CONF_ACCOUNT_PIN: "1234"}
         )
+    # Drain the reload while `no_setup` still holds, or it reaches the network.
+    await hass.async_block_till_done()
 
     assert done["type"] is FlowResultType.ABORT
     assert done["reason"] == "reauth_successful"

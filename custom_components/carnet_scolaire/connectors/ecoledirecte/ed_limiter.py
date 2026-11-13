@@ -36,6 +36,7 @@ _SHED_THRESHOLD: Final = {
 
 
 async def _sleep(seconds: float) -> None:
+    """Default sleeper, read at construction so a test can replace it."""
     await asyncio.sleep(seconds)
 
 
@@ -48,13 +49,13 @@ class EdRateLimiter:
         *,
         clock: Callable[[], float] = time.monotonic,
         now: Callable[[], datetime] | None = None,
-        sleep: Callable[[float], Awaitable[None]] = _sleep,
+        sleep: Callable[[float], Awaitable[None]] | None = None,
         rng: random.Random | None = None,
     ) -> None:
         self.config = config
         self._clock = clock
         self._now = now or (lambda: datetime.now(UTC))
-        self._sleep = sleep
+        self._sleep = sleep if sleep is not None else _sleep
         self._rng = rng or random.Random()  # noqa: S311 -- backoff jitter
         self._admission = asyncio.Lock()
         self._last_call = clock() - config.min_request_interval

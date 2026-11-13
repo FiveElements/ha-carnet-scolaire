@@ -20,6 +20,9 @@ pytest-homeassistant==2026.11.0b6
 
 # The new harness no longer brings pytest-cov, which the coverage gate needs.
 pytest-cov
+# validate.yml runs the suite with `-n auto`. Unpinned: the harness already
+# brings it, this only says the workflow depends on it.
+pytest-xdist
 
 # 2.15.7, and the two-week gap before this bump is the whole argument for
 # watching this pin.
