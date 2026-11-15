@@ -103,6 +103,9 @@
       "periods": {
         "default": "mdi:calendar-multiple"
       },
+      "next_school_event": {
+        "default": "mdi:calendar-star"
+      },
       "grades_period": {
         "default": "mdi:format-list-numbered"
       },
@@ -231,6 +234,9 @@
       },
       "punishments": {
         "default": "mdi:calendar-alert"
+      },
+      "school_agenda": {
+        "default": "mdi:calendar-month"
       }
     },
     "todo": {
@@ -286,6 +292,9 @@
       },
       "new_evaluation": {
         "default": "mdi:check-decagram"
+      },
+      "new_school_event": {
+        "default": "mdi:calendar-plus"
       }
     },
     "image": {

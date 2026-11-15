@@ -584,6 +584,63 @@ class Menu:
 
 
 # ---------------------------------------------------------------------------
+# Establishment agenda
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class SchoolEvent:
+    """One entry of the establishment's agenda (``PageAgenda``).
+
+    ``end`` is **exclusive** on both kinds of entry. PRONOTE writes an all-day
+    entry's last day ("du 20 décembre au 3 janvier"), so the gateway moves it
+    to the following midnight: one convention for the calendar, the sensor and
+    the event, and the one Home Assistant's calendar already uses.
+    """
+
+    id: str
+    title: str
+    #: Local midnight of the first day when ``all_day``.
+    start: datetime
+    #: Exclusive. Local midnight after the last day when ``all_day``.
+    end: datetime
+    all_day: bool
+    #: The family's label as PRONOTE writes it ("Vacances et jours fériés").
+    category: str | None
+    #: ``#rrggbb`` in lower case, or ``None``.
+    color: str | None
+    is_class_council: bool
+    #: Recognised from ``category``; see ``gateway._is_holiday_family``.
+    is_holiday: bool
+    location: str | None
+    #: The comment as plain text, markup removed.
+    description: str | None
+    #: The people concerned, as PRONOTE labels them, or ``None``.
+    audience: str | None
+    #: PRONOTE's ``N`` for this item, valid **only in the session that read
+    #: it** -- ``id`` is the key this integration mints (see
+    #: :mod:`.item_keys`).
+    ref: str | None = None
+
+    def iso_bounds(self) -> tuple[str, str]:
+        """``start`` and ``end`` as published: bare dates for an all-day entry.
+
+        A date with no offset says "that day, wherever you read it", which an
+        all-day entry means; a timed entry keeps its full instant.
+        """
+        if self.all_day:
+            return self.start.date().isoformat(), self.end.date().isoformat()
+        return self.start.isoformat(), self.end.isoformat()
+
+
+@dataclass(frozen=True, slots=True)
+class AgendaFacts:
+    """The agenda entries PRONOTE returns from today on."""
+
+    events: tuple[SchoolEvent, ...]
+
+
+# ---------------------------------------------------------------------------
 # Static and session facts
 # ---------------------------------------------------------------------------
 

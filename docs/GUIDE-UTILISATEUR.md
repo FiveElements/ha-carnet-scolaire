@@ -296,7 +296,7 @@ enfants suivis, les réglages et l'historique sont conservés.
 | Ce qui est saisi | Selon le mode : QR code, identifiants PRONOTE ou identifiants du portail ENT, et l'adresse de l'espace | Identifiant et mot de passe, sans adresse |
 | Mot de passe conservé | Non en mode QR code, oui sinon | Oui, toujours |
 | Double authentification | Code PIN, jamais conservé, redemandé chaque fois que PRONOTE l'exige | Question à choix multiple, dont la réponse est mémorisée |
-| Données collectées | Emploi du temps, devoirs, notes, absences, actualités, messagerie, menus, bulletins, équipe pédagogique… | Emploi du temps, devoirs, notes et vie scolaire (absences, retards, punitions) uniquement |
+| Données collectées | Emploi du temps, devoirs, notes, absences, actualités, messagerie, menus, agenda de l'établissement, bulletins, équipe pédagogique… | Emploi du temps, devoirs, notes et vie scolaire (absences, retards, punitions) uniquement |
 | Écriture | Cocher un devoir, marquer une actualité lue, envoyer un message, si l'option est activée (§ [7](#7-écrire-dans-pronote)) | Aucune : la liste de devoirs reste en lecture seule |
 | Services | Tous ceux du § [5](#5-les-services) | Seulement `refresh` et `get_rate_limit_status` ; les autres répondent que la source EcoleDirecte ne prend pas en charge l'action |
 
@@ -808,6 +808,54 @@ En pratique, vous n'utiliserez presque jamais ces entités directement : les
 **déclencheurs d'appareil** (§ [9](#9-automatisations)) donnent accès aux mêmes
 changements depuis l'éditeur graphique, avec un nom lisible.
 
+### 4.11 L'agenda de l'établissement
+
+L'onglet « Agenda » de PRONOTE — arrêt des notes, conseils de classe, réunions,
+vacances — est relu une fois par jour (catégorie **Agenda**, une requête par
+enfant). EcoleDirecte n'a pas d'équivalent : ces entités n'y sont pas créées.
+
+| Entité | État | Attributs utiles |
+| --- | --- | --- |
+| **Agenda de l'établissement** *(agenda)* | Un évènement par entrée ; une entrée « journée entière » est affichée comme telle. | — |
+| **Prochain évènement** | Début du prochain évènement **hors vacances et jours fériés** (minuit pour une journée entière). | `title`, `all_day`, `end`, `category`, `is_class_council`, `items` |
+| **Nouvel évènement à l'agenda** *(évènement)* | Se déclenche quand une entrée apparaît (`school_event_added`). | `key`, `title`, `start`, `end`, `all_day`, `category`, `is_class_council`, `is_holiday` |
+
+PRONOTE écrit le **dernier jour** d'une entrée journée entière : « Du 20
+décembre au 3 janvier » inclut le 3. L'intégration publie partout une fin
+**exclusive**, comme le fait Home Assistant : l'agenda et l'attribut `end`
+indiquent le 4 janvier. Les vacances sont reconnues au nom de leur famille
+(« Vacances et jours fériés ») ; elles restent dans `items`, avec
+`is_holiday: true`, mais ne deviennent jamais l'état du capteur. Les pièces
+jointes des entrées ne sont pas reprises.
+
+Prévenir la veille au soir de l'arrêt des notes, sans modèle : le déclencheur
+`time` suit le capteur, et le décalage de quatre heures avant minuit tombe à
+20 h la veille. Remplacez les titres par ceux de votre établissement, tels
+qu'ils apparaissent dans `items`.
+
+```yaml
+alias: Arrêt des notes demain
+mode: single
+triggers:
+  - trigger: time
+    at:
+      entity_id: sensor.enfant_un_prochain_evenement
+      offset: "-04:00:00"
+conditions:
+  - condition: state
+    entity_id: sensor.enfant_un_prochain_evenement
+    attribute: title
+    state:
+      - Arrêt des notes - trimestre 1
+      - Arrêt des notes - trimestre 2
+      - Arrêt des notes - trimestre 3
+actions:
+  - action: notify.mobile_app_telephone_parent
+    data:
+      title: Agenda
+      message: Les notes du trimestre s'arrêtent demain.
+```
+
 ---
 
 ## 5. Les services
@@ -933,7 +981,7 @@ Le champ **Paliers** est facultatif ; laissé vide, il demande toutes les
 catégories. Les valeurs possibles sont celles que propose la liste déroulante :
 `timetable` (Emploi du temps), `homework` (Devoirs), `news` (Actualités),
 `discussions`, `marks` (Notes), `attendance` (Vie scolaire), `evaluations`,
-`menus`, `static` (Données stables), `history` (Périodes closes).
+`menus`, `agenda`, `static` (Données stables), `history` (Périodes closes).
 
 Comme les boutons, ce service **demande un passage prioritaire** et ne place
 aucun appel lui-même. L'appeler cinq fois de suite coûte une collecte, pas cinq.
@@ -1256,7 +1304,7 @@ bonne.** Laissez-la sur la valeur recommandée.
 
 ### 8.5 Page « Intervalles de collecte »
 
-Dix catégories, chacune avec un intervalle en minutes et un interrupteur
+Onze catégories, chacune avec un intervalle en minutes et un interrupteur
 d'activation. L'intervalle accepté va de 1 à 1440 minutes.
 
 | Catégorie | Défaut | Ce qu'elle alimente | Conseil |
@@ -1269,6 +1317,7 @@ d'activation. L'intervalle accepté va de 1 à 1440 minutes.
 | **Vie scolaire** | 360 min | Absences, retards, punitions | À laisser. Pour une alerte d'absence réactive, voyez la remarque ci-dessous. |
 | **Évaluations** | 720 min | Évaluations par compétences | À laisser, ou à désactiver si l'établissement n'en publie pas. |
 | **Menus** | 1440 min | Menus de la cantine | Une fois par jour suffit : le menu du jour ne change pas dans la journée. |
+| **Agenda** | 1440 min | Agenda de l'établissement, prochain évènement, nouvel évènement à l'agenda | Une requête par passage et par enfant. Une fois par jour suffit : ces dates sont posées des semaines à l'avance. |
 | **Données stables** | 1440 min | Équipe pédagogique, photo | Une fois par jour, largement suffisant. |
 | **Périodes closes** | 1440 min | Toutes les entités « (Trimestre 1) », « (Semestre 1) »… | **La première à désactiver si vous voulez économiser.** Coûte huit requêtes par passage et par enfant, pour des données qui ne changent plus par définition. |
 
@@ -1277,7 +1326,7 @@ minutes, les devoirs jusqu'à 15. Cela ajoute quelques dizaines de requêtes par
 jour et par enfant, ce qui reste très en dessous du plafond.
 
 **Ce qu'il ne faut pas faire.** Mettre tous les intervalles à une minute. Avec
-dix catégories à une minute et 16 heures d'activité, vous demandez des milliers
+onze catégories à une minute et 16 heures d'activité, vous demandez des milliers
 de requêtes par jour et par enfant, plus une reconnexion probable à chaque
 passage. Le plafond journalier arrêtera l'intégration bien avant, mais le serveur
 aura eu le temps de voir passer une cadence anormale — et c'est la connexion
@@ -1424,11 +1473,11 @@ La liste des appareils proposés **exclut l'appareil du compte** : « un cours a
 ### 9.2 Construire soi-même : les briques disponibles
 
 Si vous préférez écrire votre automatisation, l'éditeur graphique vous propose,
-sur l'appareil d'un enfant, quinze déclencheurs, dix conditions et deux à
+sur l'appareil d'un enfant, seize déclencheurs, dix conditions et deux à
 quatre actions — moins sur un appareil EcoleDirecte, où n'est proposé que ce
 que la source peut produire (§ [14.3](#143-les-automatisations-dappareil)).
 
-**Les quinze déclencheurs** (« Quand… ») :
+**Les seize déclencheurs** (« Quand… ») :
 
 | Libellé dans l'éditeur | Valeur en YAML |
 | --- | --- |
@@ -1447,6 +1496,7 @@ que la source peut produire (§ [14.3](#143-les-automatisations-dappareil)).
 | Une punition a été donnée | `punishment_added` |
 | Un message a été reçu | `message_received` |
 | Une évaluation a été ajoutée | `evaluation_added` |
+| Un évènement a été ajouté à l'agenda | `school_event_added` |
 
 Dans l'automatisation, le contexte du changement est disponible sous
 `trigger.event.data.attributes` (voir le tableau des attributs au
@@ -2312,7 +2362,7 @@ est au § [4](#4-catalogue-des-entités) et dans
 | `sensor` | Vie scolaire : Prochaine punition, Absences non justifiées, Absences, Retards, Punitions | Oui | Oui |
 | `sensor` | Élève : Période en cours, Classe, Périodes | Oui | Oui |
 | `sensor` | Actualités non lues, Actualités, Messages non lus, Discussions | Oui | Non |
-| `sensor` | Évaluations, Menu du jour, Menu de demain, Équipe pédagogique | Oui | Non |
+| `sensor` | Évaluations, Menu du jour, Menu de demain, Équipe pédagogique, Prochain évènement | Oui | Non |
 | `sensor` | Périodes closes : Notes, Moyennes par matière, Moyenne générale, Bulletin, Absences, Retards, Punitions et Évaluations de chaque période close (§ [4.4](#44-les-périodes-closes)) | Oui | Non |
 | `sensor` | Diagnostic du compte : Appels du jour, Budget restant, Dernière collecte, Prochaine collecte, Connexions du jour, État du limiteur (§ [6](#6-les-entités-de-diagnostic)) | Oui | Oui |
 | `sensor` | Diagnostic du compte : Âge de la session, Durée de vie de la session | Oui | Non |
@@ -2320,10 +2370,11 @@ est au § [4](#4-catalogue-des-entités) et dans
 | `binary_sensor` | Sortie pédagogique, Contrôle prévu, Vacances | Oui | Non |
 | `binary_sensor` | Collectes bridées (sur l'appareil du compte) | Oui | Oui |
 | `calendar` | Emploi du temps, Devoirs, Punitions | Oui | Oui |
+| `calendar` | Agenda de l'établissement | Oui | Non |
 | `todo` | Devoirs | Oui — cochable sur un compte élève quand l'écriture est activée (§ [7](#7-écrire-dans-pronote)) | Oui — en lecture seule |
 | `image` | Photo, si l'établissement en déclare une | Oui | Non |
 | `event` | Nouvelle note, Nouveau devoir, Cours modifié, Nouvelle absence, Nouveau retard, Nouvelle punition | Oui | Oui |
-| `event` | Nouvelle actualité, Nouveau message, Nouvelle évaluation | Oui | Non |
+| `event` | Nouvelle actualité, Nouveau message, Nouvelle évaluation, Nouvel évènement à l'agenda | Oui | Non |
 | `button` | Rafraîchir, Rafraîchir les notes | Oui | Oui |
 
 « Oui » veut dire que l'entité est créée, pas que l'établissement publie la
@@ -2352,7 +2403,7 @@ l'action… ». Le détail de chaque service est au § [5](#5-les-services).
 
 | Brique | PRONOTE | EcoleDirecte |
 | --- | --- | --- |
-| **Déclencheurs** (§ [9.2](#92-construire-soi-même--les-briques-disponibles)) | Les quatorze | Onze : les deux sur les notes et les devoirs, les six sur les cours, et l'absence, le retard et la punition. « Une actualité a été publiée », « Un message a été reçu » et « Une évaluation a été ajoutée » ne sont pas proposés, faute de catégorie pour les produire, et une automatisation écrite à la main qui en utilise un est refusée à la validation, avec un message qui le dit |
+| **Déclencheurs** (§ [9.2](#92-construire-soi-même--les-briques-disponibles)) | Les seize | Douze : les deux sur les notes et les devoirs, les sept sur les cours, et l'absence, le retard et la punition. « Une actualité a été publiée », « Un message a été reçu », « Une évaluation a été ajoutée » et « Un évènement a été ajouté à l'agenda » ne sont pas proposés, faute de catégorie pour les produire, et une automatisation écrite à la main qui en utilise un est refusée à la validation, avec un message qui le dit |
 | **Conditions** | Les dix, selon les entités présentes sur l'appareil | Sept : « Un contrôle est prévu aujourd'hui », « C'est les vacances » et « Ce ne sont pas les vacances » ne sont pas proposées, faute d'entité |
 | **Actions** | « Tout rafraîchir », « Rafraîchir les notes » ; « Marquer une actualité comme lue » si l'écriture est activée ; « Cocher un devoir » si, en plus, le compte est un compte élève | « Tout rafraîchir » et « Rafraîchir les notes » |
 
@@ -2417,9 +2468,10 @@ cause côté serveur ne se lèvent pas côté Home Assistant.
 - **Aucune écriture**, et seulement deux services : `refresh` et
   `get_rate_limit_status`. La liste « Devoirs » est en lecture seule ; les
   autres services sont refusés avant tout envoi.
-- **Onze déclencheurs d'appareil sur quatorze.** Sans actualités, messagerie
-  ni évaluations, « Une actualité a été publiée », « Un message a été reçu » et
-  « Une évaluation a été ajoutée » n'ont rien pour les produire : l'éditeur ne
+- **Douze déclencheurs d'appareil sur seize.** Sans actualités, messagerie,
+  évaluations ni agenda, « Une actualité a été publiée », « Un message a été
+  reçu », « Une évaluation a été ajoutée » et « Un évènement a été ajouté à
+  l'agenda » n'ont rien pour les produire : l'éditeur ne
   les propose pas, et une automatisation qui les reprend — écrite à la main,
   copiée d'une installation PRONOTE ou issue d'un blueprint — est refusée à la
   validation au lieu d'attendre en silence (§ [14.3](#143-les-automatisations-dappareil)).

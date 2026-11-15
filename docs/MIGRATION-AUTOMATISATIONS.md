@@ -195,7 +195,7 @@ et il n'y a plus rien à dédoublonner. Six changements sont distingués :
 annulation, annulation levée, déplacement, changement de salle, de professeur, de
 statut — là où une comparaison maison les confond volontiers.
 
-Le § 9.2 du guide de l'utilisateur liste les quatorze déclencheurs disponibles,
+Le § 9.2 du guide de l'utilisateur liste les seize déclencheurs disponibles,
 et le § 4.10 les attributs que chacun porte.
 
 **Le piège de l'annulation levée.** `lesson_restored` (un cours annulé qui est

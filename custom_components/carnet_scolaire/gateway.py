@@ -34,6 +34,7 @@ import json
 import logging
 import re
 from typing import TYPE_CHECKING, Any, Final
+import unicodedata
 from urllib.parse import ParseResult, parse_qs, quote, urlparse
 from zoneinfo import ZoneInfo
 
@@ -43,6 +44,7 @@ import requests
 
 from . import item_keys
 from .const import (
+    FUNC_AGENDA,
     FUNC_ATTENDANCE,
     FUNC_EVALUATIONS,
     FUNC_HOMEWORK,
@@ -64,6 +66,7 @@ from .failures import describe_failure
 from .models import (
     Absence,
     Acquisition,
+    AgendaFacts,
     AttendanceFacts,
     Average,
     Delay,
@@ -91,6 +94,7 @@ from .models import (
     PunishmentSlot,
     Report,
     ReportSubject,
+    SchoolEvent,
     SessionFacts,
     StaticFacts,
     Student,
@@ -407,6 +411,11 @@ def _information_key(information: Information) -> str:
     return item_keys.mint(
         "news", information.title, information.author, information.created
     )
+
+
+def _school_event_key(event: SchoolEvent) -> str:
+    """Title and bounds -- never the family, the colour or the comment."""
+    return item_keys.mint("agenda", event.title, event.start, event.end)
 
 
 def _message_key(message: Message) -> str:
@@ -2140,6 +2149,118 @@ class PronoteGateway:
         ]
         return GatewayResult(MenusFacts(menus=tuple(items)), calls=calls)
 
+    # -- agenda ------------------------------------------------------------
+
+    def agenda(self, client: HardenedClient) -> GatewayResult[AgendaFacts]:
+        """The establishment's agenda, from today on, in one request.
+
+        ``PageAgenda`` on tab 9, with the body the official client sends for
+        its "Agenda" page minus ``NumeroSemaine``, which only positions its
+        week view. pronotepy has no reader for this tab, so the request goes
+        through ``client.post`` like the others decoded here, and on a parent
+        account the ``membre`` signature names the selected child.
+
+        Every field is read tolerantly: the response was described from the
+        official client's deserialiser, never from a capture, so an entry this
+        module cannot date is skipped and an absent field becomes ``None``.
+        Attachments (``PiecesJointes``) are deliberately not read.
+        """
+        payload = {
+            "avecEventsPasses": False,
+            "listeFamillesFiltre": None,
+            "uniquementMesEvenements": False,
+            "avecRdvPartages": True,
+            "AvecListeClasses": False,
+        }
+        raw = client.post(FUNC_AGENDA[0], FUNC_AGENDA[1], payload)
+        section = _get(raw, "dataSec", "data")
+        if isinstance(section, dict) and not section:
+            # Same reading as the teaching staff: an authorised tab answering
+            # with an empty `data` publishes nothing, which is not a protocol
+            # change -- and an empty agenda is a safe thing to publish.
+            return GatewayResult(AgendaFacts(events=()), calls=1)
+        entries = _required_list(
+            raw, "dataSec", "data", "ListeEvenements", what="the school agenda"
+        )
+        families = {
+            str(family.get("N")): family
+            for family in _list(section, "listeFamilles")
+            if isinstance(family, dict) and family.get("N") is not None
+        }
+
+        items: list[SchoolEvent] = []
+        for entry in entries:
+            event = self._school_event(entry, families)
+            if event is not None:
+                items.append(event)
+        return GatewayResult(
+            AgendaFacts(events=item_keys.restamp(items, _school_event_key)),
+            calls=1,
+        )
+
+    def _school_event(
+        self, entry: Any, families: dict[str, dict[str, Any]]
+    ) -> SchoolEvent | None:
+        """Decode one agenda entry; ``None`` when it cannot be dated.
+
+        An all-day entry's ``DateFin`` is read as **inclusive** -- PRONOTE
+        shows "Du 20 Décembre Au 3 Janvier" for the Christmas holidays -- so
+        its exclusive end is the midnight after that day. A missing or earlier
+        ``DateFin`` means the entry ends where it starts.
+        """
+        if not isinstance(entry, dict):
+            return None
+        began = _parse_datetime(_stamped(entry, "DateDebut"))
+        if began is None:
+            return None
+        ended = _parse_datetime(_stamped(entry, "DateFin")) or began
+        all_day = bool(entry.get("journeeEntiere"))
+        if all_day:
+            first = began.date()
+            last = max(ended.date(), first)
+            start = self._instant(first)
+            end = self._instant(last + dt.timedelta(days=1))
+        else:
+            start = self._instant(began)
+            end = max(self._instant(ended), start)
+
+        family = _unwrap(entry.get("famille"))
+        listed = families.get(str(family.get("N")), {})
+        category = _label_of(family) or _label_of(listed)
+        comment = entry.get("Commentaire")
+        place = entry.get("lieu")
+        return SchoolEvent(
+            id=str(entry.get("N")),
+            title=_label_of(entry) or "",
+            start=start,
+            end=end,
+            all_day=all_day,
+            category=category,
+            color=(
+                _hex_color(entry.get("CouleurCellule"))
+                or _hex_color(family.get("couleur"))
+                or _hex_color(listed.get("couleur"))
+            ),
+            is_class_council=bool(entry.get("estConseilClasse")),
+            is_holiday=_is_holiday_family(category),
+            location=(
+                _label_of(_unwrap(place))
+                if isinstance(place, dict)
+                else (place if isinstance(place, str) and place else None)
+            ),
+            description=_plain_text(comment) or None
+            if isinstance(comment, str)
+            else None,
+            audience=", ".join(
+                dict.fromkeys(
+                    label
+                    for key in _AUDIENCE_LISTS
+                    for label in _strings(_list(entry, key))
+                )
+            )
+            or None,
+        )
+
     # -- static ------------------------------------------------------------
 
     def static(self, client: HardenedClient) -> GatewayResult[StaticFacts]:
@@ -2691,6 +2812,67 @@ def _join_phone(prefix: Any, number: Any) -> str | None:
     if not prefix:
         return str(number)
     return f"+{prefix}{number}"
+
+
+#: The lists naming who an agenda entry concerns, in the order they are read.
+_AUDIENCE_LISTS: Final = ("listePublicIndividu", "listeEleves", "listePublicEntite")
+
+#: ``#rgb``, ``#rrggbb`` or the same without the hash.
+_HEX_COLOR: Final = re.compile(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})")
+
+
+def _unwrap(value: Any) -> dict[str, Any]:
+    """An element as a mapping, whether or not it is wrapped in ``{"V": …}``."""
+    if not isinstance(value, dict):
+        return {}
+    inner = value.get("V")
+    return dict(inner) if isinstance(inner, dict) else dict(value)
+
+
+def _label_of(element: dict[str, Any]) -> str | None:
+    """An element's non-empty ``L``, or ``None``."""
+    label = element.get("L")
+    return label if isinstance(label, str) and label else None
+
+
+def _stamped(entry: dict[str, Any], key: str) -> Any:
+    """A date field's text, typed (``{"_T": 7, "V": …}``) or bare."""
+    value = entry.get(key)
+    return value.get("V") if isinstance(value, dict) else value
+
+
+def _hex_color(raw: Any) -> str | None:
+    """A PRONOTE colour as ``#rrggbb`` in lower case; anything else is ``None``.
+
+    One spelling, so a card can put it in a style without re-validating it.
+    """
+    if not isinstance(raw, str):
+        return None
+    match = _HEX_COLOR.fullmatch(raw.strip())
+    if match is None:
+        return None
+    digits = match.group(1).lower()
+    if len(digits) == 3:
+        digits = "".join(digit * 2 for digit in digits)
+    return f"#{digits}"
+
+
+def _is_holiday_family(label: str | None) -> bool:
+    """Whether a family label names holidays or bank holidays.
+
+    Recognised by its words, ignoring case and accents: "Vacances et jours
+    fériés" is how one establishment spells it, and the family carries no
+    other marker the official client's deserialiser reads. The label itself
+    stays in ``category``, so a wrong guess remains visible.
+    """
+    if not label:
+        return False
+    folded = "".join(
+        char
+        for char in unicodedata.normalize("NFKD", label.casefold())
+        if not unicodedata.combining(char)
+    )
+    return "vacance" in folded or "ferie" in folded
 
 
 def _parse_datetime(raw: Any) -> dt.datetime | None:

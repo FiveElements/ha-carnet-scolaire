@@ -282,6 +282,8 @@ class PronoteConnector:
                 )
             case Tier.MENUS:
                 return await self._run(tier, student_id, priority, self.gateway.menus)
+            case Tier.AGENDA:
+                return await self._run(tier, student_id, priority, self.gateway.agenda)
             case Tier.STATIC:
                 return await self._run(tier, student_id, priority, self.gateway.static)
             case Tier.HISTORY:

@@ -38,6 +38,7 @@ from custom_components.carnet_scolaire.const import (
     EVENT_INFORMATION_ADDED,
     EVENT_LESSON_CANCELED,
     EVENT_MESSAGE_RECEIVED,
+    EVENT_SCHOOL_EVENT_ADDED,
     OPT_WRITE_OPERATIONS_ENABLED,
     Tier,
 )
@@ -723,10 +724,15 @@ async def test_a_child_device_of_an_unloaded_entry_still_reads_as_a_child(
 # What each source can produce
 # ---------------------------------------------------------------------------
 
-#: The three changes an EcoleDirecte entry cannot produce: it collects no news,
-#: discussions or evaluations tier, so nothing ever fires these for it.
+#: The four changes an EcoleDirecte entry cannot produce: it collects no news,
+#: discussions, evaluations or agenda tier, so nothing ever fires these for it.
 ED_IMPOSSIBLE_TRIGGERS = frozenset(
-    {EVENT_INFORMATION_ADDED, EVENT_MESSAGE_RECEIVED, EVENT_EVALUATION_ADDED}
+    {
+        EVENT_INFORMATION_ADDED,
+        EVENT_MESSAGE_RECEIVED,
+        EVENT_EVALUATION_ADDED,
+        EVENT_SCHOOL_EVENT_ADDED,
+    }
 )
 
 

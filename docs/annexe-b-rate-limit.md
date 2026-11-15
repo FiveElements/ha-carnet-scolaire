@@ -351,11 +351,12 @@ seul, et les connexions tombent à **une à trois par jour**.
 | `attendance` | 6 h | 3 | 1 | 3 |
 | `evaluations` | 12 h | 2 | 1 | 2 |
 | `menus` | 24 h | 1 | 1,14 | 1 |
+| `agenda` | 24 h | 1 | 1 (`PageAgenda` 9, PRONOTE seulement) | 1 |
 | `static` | 24 h | 1 | 1 (équipe pédagogique seule) | 1 |
 | `history` | 24 h | 1 | 8 (2 périodes closes × 198/13/19/**201**) | 8 |
-| | | | **Données** | **235** |
+| | | | **Données** | **236** |
 | Connexions | paresseuses | 1 à 3 | 5 à 7 | **5 à 21** |
-| | | | **Total** | **≈ 253** |
+| | | | **Total** | **≈ 254** |
 
 Contre ≈ 423 annoncés en v1 — et ≈ 487 réels avec le modèle corrigé. La
 conception v2 coûte donc **un peu plus de la moitié** de la v1, pour une
@@ -417,7 +418,7 @@ d'intérêt que pour un intervalle inférieur à 110 s, et aucun palier n'y desc
 | --- | --- | --- | --- |
 | Requêtes par jour | ≈ 198 | 2 000 | ×10 |
 | Requêtes dans l'heure la plus chargée | ≈ 25 | 240 | ×9,5 |
-| Requêtes dans le lot le plus chargé | ≈ 19 | 20 (capacité) | ×1,05 |
+| Requêtes dans le lot le plus chargé | ≈ 20 | 20 (capacité) | ×1,0 |
 | Connexions par jour | 1 à 3 | 24 | ×8 |
 
 **Conclusion.** Les plafonds ne contraignent pas le fonctionnement normal ; ils
@@ -425,15 +426,15 @@ attrapent une anomalie. C'est la posture voulue : un limiteur qui bride en usage
 courant serait réglé trop bas, et l'utilisateur le désactiverait.
 
 Le seul rapport serré reste la capacité du seau face au lot maximal, et il
-s'est **resserré** avec la correction de `history` : ×1,05, contre ×1,5
-annoncé. Le lot maximal — les dix paliers échus au même instant, ce qui arrive
-au démarrage et une fois par jour — vaut ≈ 19 requêtes pour une capacité de 20.
+s'est **resserré** avec la correction de `history` (×1,05 contre ×1,5
+annoncé), puis avec le palier `agenda` (×1,0). Le lot maximal — les onze
+paliers échus au même instant, ce qui arrive au démarrage et une fois par jour — vaut ≈ 20 requêtes pour une capacité de 20.
 
 Ce n'est pas un défaut, mais il faut dire pourquoi.
 
 D'abord, le seau se **remplit pendant** que le lot se déroule : 240 requêtes
 par heure, soit 4 par minute, et l'espacement minimal de 1 s étale déjà un lot
-de 19 requêtes sur au moins 19 s. Le seau n'est jamais vidé d'un coup.
+de 20 requêtes sur au moins 20 s. Le seau n'est jamais vidé d'un coup.
 
 Ensuite, si la capacité venait quand même à manquer, la dégradation est celle
 que §2.4 prescrit et non une panne : les quatre paliers qui font le lot
@@ -459,9 +460,9 @@ appliquer, et il faut le lire ainsi.
 
 | Changement | Effet sur le total |
 | --- | --- |
-| Délai d'inactivité serveur < 15 min | 198 → **≈ 346** (dégénérescence en v1, cf. §5.4) |
+| Délai d'inactivité serveur < 15 min | 198 → **≈ 347** (dégénérescence en v1, cf. §5.4) |
 | `timetable` porté à 30 min | 198 → **≈ 160** |
-| Heures creuses désactivées | 198 → **≈ 283** |
+| Heures creuses désactivées | 198 → **≈ 284** |
 | `master_tick` porté à 1 min | aucun effet : les échéances, pas le battement, fixent le coût |
 | Un second enfant sur le même compte | +180 environ (données seulement ; la session est partagée) |
 | `history_periods` = 0 | −8 |

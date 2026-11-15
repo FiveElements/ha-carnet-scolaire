@@ -734,6 +734,88 @@ def news_response(entries: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Agenda -- `PageAgenda`, tab 9
+# ---------------------------------------------------------------------------
+#
+# Shaped after the official client's `ObjetDeserialiser._ajouterEvenement`,
+# which names every field read here; no capture was used. The family is a
+# typed element carrying its own colour, as `ObjetRequetePageAgenda` reads it.
+
+#: The family an establishment files its holidays under.
+HOLIDAY_FAMILY = "Vacances et jours fériés"
+
+
+def school_event(
+    *,
+    identifier: str = "AGENDA-1",
+    title: str | None = "Arrêt des notes - trimestre 2",
+    start: dt.datetime | None = dt.datetime(2026, 3, 20, 0, 0),
+    end: dt.datetime | None = dt.datetime(2026, 3, 20, 23, 59),
+    all_day: bool = True,
+    family: str | None = "Vie de l'établissement",
+    color: str | None = "#3A6EA5",
+    council: bool = False,
+    comment: str | None = None,
+    place: Any = None,
+    audience: Sequence[str] = (),
+) -> dict[str, Any]:
+    """One ``ListeEvenements`` entry; ``None`` removes a field."""
+    entry: dict[str, Any] = {
+        "N": identifier,
+        "journeeEntiere": all_day,
+        "estConseilClasse": council,
+        "estPeriodique": False,
+        "nonPublie": False,
+    }
+    if title is not None:
+        entry["L"] = title
+    if start is not None:
+        entry["DateDebut"] = _stamp(start)
+    if end is not None:
+        entry["DateFin"] = _stamp(end)
+    if family is not None:
+        entry["famille"] = {
+            "_T": 24,
+            "V": {"N": f"FAMILY-{family}", "L": family, "G": 0, "couleur": "#999"},
+        }
+    if color is not None:
+        entry["CouleurCellule"] = color
+    if comment is not None:
+        entry["Commentaire"] = comment
+    if place is not None:
+        entry["lieu"] = place
+    if audience:
+        entry["listePublicIndividu"] = {
+            "_T": 24,
+            "V": [
+                _label(name, f"PUBLIC-{index}") for index, name in enumerate(audience)
+            ],
+        }
+    return entry
+
+
+def agenda_response(
+    entries: list[dict[str, Any]],
+    families: Sequence[tuple[str, str]] = (),
+) -> dict[str, Any]:
+    """A ``PageAgenda`` response; ``families`` are ``(N, label)`` pairs."""
+    return {
+        "dataSec": {
+            "data": {
+                "ListeEvenements": {"_T": 24, "V": entries},
+                "listeFamilles": {
+                    "_T": 24,
+                    "V": [
+                        {"N": identifier, "L": label, "couleur": "#ABC"}
+                        for identifier, label in families
+                    ],
+                },
+            }
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
 # Teaching staff -- the static tier
 # ---------------------------------------------------------------------------
 

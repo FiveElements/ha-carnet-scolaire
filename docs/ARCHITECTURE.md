@@ -783,6 +783,7 @@ Le détail des coûts, tel que le code les déclare et les dépense :
 | `attendance` | 360 min | `NORMAL` | 1 | 1 | `PagePresence` 19 |
 | `evaluations` | 720 min | `LOW` | 1 | 1 | `DernieresEvaluations` 201 |
 | `menus` | 1440 min | `LOW` | 1 | 1 ou 2 | `PageMenus` 10, par semaine |
+| `agenda` | 1440 min | `LOW` | 1 | 1 | `PageAgenda` 9, posté par la passerelle (pronotepy ne le lit pas) |
 | `static` | 1440 min | `LOW` | 1 | 1 | équipe pédagogique |
 | `history` | 1440 min | `LOW` | 4 par période close | idem | les quatre onglets ci-dessus, par période |
 

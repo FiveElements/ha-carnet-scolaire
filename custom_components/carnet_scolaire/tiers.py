@@ -108,6 +108,8 @@ async def collect_tier(  # noqa: PLR0911 -- one arm per tier is the point
             return await _evaluations(account, student_id, priority)
         case Tier.MENUS:
             return await _menus(account, student_id, priority)
+        case Tier.AGENDA:
+            return await _agenda(account, student_id, priority)
         case Tier.STATIC:
             return await _static(account, student_id, priority)
         case Tier.HISTORY:
@@ -307,6 +309,26 @@ async def _menus(
         _snapshot(account, Tier.MENUS, student_id, result.facts, result.calls),
         result.calls,
         [],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Agenda
+# ---------------------------------------------------------------------------
+
+
+async def _agenda(
+    account: PronoteAccount, student_id: str, priority: Priority
+) -> tuple[Snapshot[Any], int, list[DeltaEvent]]:
+    """The establishment's agenda, and the entries that appeared in it."""
+    result = await account.connector.async_collect(
+        Tier.AGENDA, student_id, priority=priority
+    )
+    events = account.delta.agenda(student_id, result.facts)
+    return (
+        _snapshot(account, Tier.AGENDA, student_id, result.facts, result.calls),
+        result.calls,
+        events,
     )
 
 

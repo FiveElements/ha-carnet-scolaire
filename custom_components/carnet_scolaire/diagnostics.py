@@ -204,6 +204,7 @@ def _counts(facts: Any) -> dict[str, int]:
         "information",
         "discussions",
         "menus",
+        "events",
         "teaching_staff",
         "periods",
     ):

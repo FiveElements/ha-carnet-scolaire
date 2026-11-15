@@ -63,6 +63,7 @@ if TYPE_CHECKING:
     from . import PronoteConfigEntry
     from .coordinator import PronoteTierCoordinator
     from .models import (
+        AgendaFacts,
         AttendanceFacts,
         DiscussionsFacts,
         EvaluationsFacts,
@@ -74,6 +75,7 @@ if TYPE_CHECKING:
         MenusFacts,
         NewsFacts,
         Period,
+        SchoolEvent,
         SessionFacts,
         StaticFacts,
         Student,
@@ -1269,6 +1271,85 @@ def _evaluations_attributes(
     }
 
 
+# ---------------------------------------------------------------------------
+# Establishment agenda
+# ---------------------------------------------------------------------------
+
+#: Most entries ``items`` carries. PRONOTE returns the agenda from today to
+#: the end of the school year, and a year of entries -- each with its comment
+#: -- is a payload no card needs in full.
+AGENDA_ITEMS_CAP: Final = 50
+
+
+def _upcoming_school_events(facts: AgendaFacts, now: datetime) -> list[SchoolEvent]:
+    """Entries not over yet, holidays included: one that started stays."""
+    return sorted(
+        (event for event in facts.events if event.end > now),
+        key=lambda event: (event.start, event.end),
+    )
+
+
+def _next_school_event(facts: AgendaFacts, now: datetime) -> SchoolEvent | None:
+    """The next entry to start that is not a holiday.
+
+    Holidays are left out of the *state* because "the next thing happening at
+    school" is the question it answers, and a fortnight of Christmas holidays
+    starting tomorrow would hide the class council the week after.
+    """
+    candidates = [
+        event for event in facts.events if not event.is_holiday and event.start > now
+    ]
+    return min(candidates, key=lambda event: event.start, default=None)
+
+
+def _next_school_event_start(facts: AgendaFacts, account: PronoteAccount) -> StateValue:
+    """When the next non-holiday entry starts -- local midnight if all day."""
+    event = _next_school_event(facts, account.now())
+    return event.start if event else None
+
+
+def _school_event_dict(event: SchoolEvent) -> dict[str, Any]:
+    """One agenda entry for ``items``; ``audience`` only when PRONOTE gives it."""
+    start, end = event.iso_bounds()
+    item: dict[str, Any] = {
+        "key": event.id,
+        "title": event.title,
+        "start": start,
+        "end": end,
+        "all_day": event.all_day,
+        "category": event.category,
+        "color": event.color,
+        "is_class_council": event.is_class_council,
+        "is_holiday": event.is_holiday,
+        "location": event.location,
+        "description": event.description,
+    }
+    if event.audience is not None:
+        item["audience"] = event.audience
+    return item
+
+
+def _next_school_event_attributes(
+    facts: AgendaFacts, account: PronoteAccount
+) -> dict[str, Any]:
+    """The next entry's context, and every entry not over yet.
+
+    The same keys whether or not there is a next entry, so a card reads
+    ``title`` without first asking whether it exists.
+    """
+    now = account.now()
+    event = _next_school_event(facts, now)
+    upcoming = _upcoming_school_events(facts, now)[:AGENDA_ITEMS_CAP]
+    return {
+        "title": event.title if event else None,
+        "all_day": event.all_day if event else None,
+        "end": event.iso_bounds()[1] if event else None,
+        "category": event.category if event else None,
+        "is_class_council": event.is_class_council if event else None,
+        "items": [_school_event_dict(item) for item in upcoming],
+    }
+
+
 def _current_period_name(facts: SessionFacts, _a: PronoteAccount) -> StateValue:
     """The current period's name, or ``None``.
 
@@ -1448,6 +1529,13 @@ PRIMITIVE_SENSORS: Final[tuple[PronoteSensorDescription, ...]] = (
         value_fn=_current_period_name,
         attributes_fn=_current_period_attributes,
     ),
+    PronoteSensorDescription(
+        key="next_school_event",
+        tier=Tier.AGENDA,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=_next_school_event_start,
+        attributes_fn=_next_school_event_attributes,
+    ),
 )
 
 LIST_SENSORS: Final[tuple[PronoteSensorDescription, ...]] = (
@@ -1589,6 +1677,8 @@ CLOCK_DRIVEN_KEYS: Final = frozenset(
         "next_wake_up",
         "next_test",
         "next_punishment",
+        # Built by `PronoteAgendaSensor`, which also wakes when an entry ends.
+        "next_school_event",
     }
 )
 
@@ -1617,11 +1707,11 @@ async def async_setup_entry(
             coordinator = account.coordinators.get(description.tier)
             if coordinator is None:
                 continue
-            cls = (
-                PronoteClockSensor
-                if description.key in CLOCK_DRIVEN_KEYS
-                else PronoteSensor
-            )
+            cls: type[PronoteSensor] = PronoteSensor
+            if description.key == "next_school_event":
+                cls = PronoteAgendaSensor
+            elif description.key in CLOCK_DRIVEN_KEYS:
+                cls = PronoteClockSensor
             yield cls(account, coordinator, student, description)
 
         yield from _history_sensors(account, student)
@@ -1888,7 +1978,7 @@ class PronoteClockSensor(ClockDrivenMixin, PronoteSensor):
     @callback
     def _arm(self) -> None:
         """Schedule a re-evaluation at this sensor's own timestamp."""
-        value = self.native_value
+        value = self._transition_at()
         if not isinstance(value, datetime):
             self._cancel_transition()
             return
@@ -1902,12 +1992,41 @@ class PronoteClockSensor(ClockDrivenMixin, PronoteSensor):
             value + timedelta(seconds=1), self._on_transition
         )
 
+    def _transition_at(self) -> StateValue:
+        """The next instant this sensor's state can change: its own value."""
+        return self.native_value
+
     @callback
     def _on_transition(self, _now: datetime) -> None:
         """Recompute and re-arm."""
         self._clock_unsub = None
         self.async_write_ha_state()
         self._arm()
+
+
+class PronoteAgendaSensor(PronoteClockSensor):
+    """The next school event, re-evaluated when any entry starts *or ends*.
+
+    Its own value is only the next non-holiday start, but ``items`` keeps an
+    entry until it ends -- a holiday that finishes on Sunday night has to
+    leave the list then, not at the next daily collection.
+    """
+
+    def _transition_at(self) -> StateValue:
+        """The earliest start or end still ahead, whatever its family."""
+        facts = self.facts
+        if facts is None:
+            return None
+        now = self.account.now()
+        return min(
+            (
+                instant
+                for event in facts.events
+                for instant in (event.start, event.end)
+                if instant > now
+            ),
+            default=None,
+        )
 
 
 class PronoteHistorySensor(PronoteEntity, SensorEntity):
