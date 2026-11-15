@@ -1335,6 +1335,11 @@ la plus fâcheuse : `Lesson.__init__` résout `ListeContenus` sans
 façon dont une **annulation** arrive souvent — n'a pas de `ListeContenus` du
 tout. Abandonner ces entrées signifiait que l'événement pour lequel cette
 intégration existe, `lesson_canceled`, ne pouvait pas se déclencher pour elles.
+Sans `DateDuCoursFin`, ce décodeur déduit la fin de la grille comme le client
+officiel (`_grid_end`) : `duree` compte des **places**, pas des heures — une
+place vaut `DureeSequence / PlacesParHeure`, une demi-heure sur la grille de
+démonstration — et la fin est l'entrée `(place + duree - 1) % PlacesParJour`
+de `ListeHeuresFin`.
 
 ### 6.3 Absent n'est pas vide
 

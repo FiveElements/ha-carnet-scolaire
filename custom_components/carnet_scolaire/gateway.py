@@ -255,6 +255,10 @@ _LINE_BREAK_TAG: Final = re.compile(
 )
 _ANY_TAG: Final = re.compile(r"<[^>]*>")
 
+#: A ``ListeHeures`` / ``ListeHeuresFin`` label: ``08h30``, or ``08:30`` -- the
+#: official client's ``_getHrMinDeListeHeures`` accepts both separators.
+_GRID_CLOCK: Final = re.compile(r"([01]?\d|2[0-3])[h:]([0-5]\d)")
+
 
 def _homework_key(item: Homework) -> str:
     """Subject, due date and statement -- never ``done``, which a tick flips.
@@ -1214,7 +1218,7 @@ class PronoteGateway:
         except _ENTRY_ERRORS as error:
             # Described, never traced: the traceback of a decoding error
             # prints what it could not decode, and so would the entry's `N`.
-            fallback = self._lesson_raw(entry)
+            fallback = self._lesson_raw(client, entry)
             if fallback is None:
                 _LOGGER.debug(
                     "skipping an undecodable timetable entry: %s",
@@ -1301,7 +1305,55 @@ class PronoteGateway:
         )
         return start + dt.timedelta(hours=1), True
 
-    def _lesson_raw(self, entry: dict[str, Any]) -> Lesson | None:
+    def _grid_end(
+        self,
+        client: HardenedClient,
+        start: dt.datetime,
+        place: int,
+        duration: int,
+    ) -> dt.datetime:
+        """Infer a lesson's end from the timetable grid, as the official client does.
+
+        ``place`` counts places from Monday's first one and ``duree`` counts
+        *places*, whose length is ``DureeSequence / PlacesParHeure``
+        (``ObjetDate.nombrePlacesEnDuree``; ``DureeSequence`` is a Delphi
+        fraction of a day). Half-hour places are common -- the demonstration
+        server's grid -- so ``start + duree`` hours ends a one-hour lesson two
+        hours later.
+
+        The official client takes the lesson's last place, ``place + duree -
+        1``, reduces it with ``% PlacesParJour`` (``ObjetDate.placeEnDate``)
+        and reads that index of ``ListeHeuresFin``. When the grid cannot
+        answer, the length of a place is the next best thing, and an hour per
+        place the last resort; ``end_inferred`` says so either way.
+        """
+        general = _get(client.func_options, "dataSec", "data", "General")
+        per_day = _get(general, "PlacesParJour")
+        if isinstance(per_day, int) and per_day > 0:
+            last = (place + duration - 1) % per_day
+            ends = _list(general, "ListeHeuresFin")
+            label = _get(ends[last], "L") if last < len(ends) else None
+            clock = _GRID_CLOCK.fullmatch(label) if isinstance(label, str) else None
+            if clock is not None:
+                return start.replace(
+                    hour=int(clock[1]), minute=int(clock[2]), second=0, microsecond=0
+                )
+
+        per_hour = _get(general, "PlacesParHeure")
+        sequence = _get(general, "DureeSequence")
+        minutes_per_place = 60.0
+        if (
+            isinstance(per_hour, int)
+            and per_hour > 0
+            and isinstance(sequence, int | float)
+            and sequence > 0
+        ):
+            minutes_per_place = sequence * 24 * 60 / per_hour
+        return start + dt.timedelta(minutes=duration * minutes_per_place)
+
+    def _lesson_raw(
+        self, client: HardenedClient, entry: dict[str, Any]
+    ) -> Lesson | None:
         """Decode the minimum a timetable slot needs, from raw JSON only.
 
         Used when upstream refuses the entry. The most common cause is the most
@@ -1322,9 +1374,14 @@ class PronoteGateway:
         if identifier is None or start is None:
             return None
 
+        place = int(entry.get("place", 0) or 0)
         duration = int(entry.get("duree", 1) or 1)
         raw_end = self._aware(_parse_datetime(_get(entry, "DateDuCoursFin", "V")))
-        end = raw_end if raw_end is not None else start + dt.timedelta(hours=duration)
+        end = (
+            raw_end
+            if raw_end is not None
+            else self._grid_end(client, start, place, duration)
+        )
 
         end, made_up = self._sane_end(start, end, identifier)
 
@@ -1347,7 +1404,7 @@ class PronoteGateway:
             background_color=_get(entry, "CouleurFond") or None,
             virtual_classrooms=(),
             num=int(entry.get("P", 0) or 0),
-            place=int(entry.get("place", 0) or 0),
+            place=place,
             duration=duration,
             end_inferred=raw_end is None or made_up,
         )

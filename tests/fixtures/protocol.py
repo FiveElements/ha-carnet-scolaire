@@ -49,16 +49,30 @@ def _label(name: str, identifier: str | None = None) -> dict[str, Any]:
 # Session material -- what the login already handed us
 # ---------------------------------------------------------------------------
 
-#: ``ListeHeuresFin``, which is what upstream reads when ``DateDuCoursFin`` is
-#: absent. Nine slots, half-hourly places, as a real grid is shaped.
-END_TIMES = [
-    {"G": place, "L": f"{8 + place // 2}h{'30' if place % 2 else '00'}"}
-    for place in range(9)
-]
+#: The timetable grid, shaped as the public demonstration server publishes it:
+#: ``PlacesParJour`` half-hour places from 08h00, ``PlacesParHeure`` places to
+#: an hour, and ``DureeSequence`` -- that hour -- as a Delphi fraction of a day
+#: (``1/24``). A ``place`` counts places from Monday's first one and ``duree``
+#: counts places, so a one-hour lesson has ``duree == 2`` here.
+PLACES_PER_DAY = 20
+PLACES_PER_HOUR = 2
 
-START_TIMES = [
-    {"G": place, "L": f"{8 + place // 2}h{'30' if place % 2 else '00'}"}
-    for place in range(9)
+
+def _clock(place: int, *, plus_minutes: int = 0) -> str:
+    minutes = 8 * 60 + place * 60 // PLACES_PER_HOUR + plus_minutes
+    return f"{minutes // 60:02d}h{minutes % 60:02d}"
+
+
+#: ``ListeHeures``: the start of each place, plus a last entry closing the day
+#: (``PlacesParJour + 1`` entries).
+START_TIMES = [{"G": place, "L": _clock(place)} for place in range(PLACES_PER_DAY + 1)]
+
+#: ``ListeHeuresFin``: the end of each place, which is what both upstream and
+#: the official client read when ``DateDuCoursFin`` is absent. The demo also
+#: publishes ``PlacesParJour + 1`` entries, the last one repeating the close.
+END_TIMES = [
+    {"G": place, "L": _clock(min(place, PLACES_PER_DAY - 1), plus_minutes=30)}
+    for place in range(PLACES_PER_DAY + 1)
 ]
 
 
@@ -71,6 +85,9 @@ def func_options(
     """``FonctionParametres``, as far as this integration reads it."""
     general: dict[str, Any] = {
         "PremierLundi": _day(first_monday),
+        "PlacesParJour": PLACES_PER_DAY,
+        "PlacesParHeure": PLACES_PER_HOUR,
+        "DureeSequence": 1 / 24,
         "ListeHeuresFin": {"V": END_TIMES},
         "ListeHeures": {"V": START_TIMES},
         "ListePeriodes": periods if periods is not None else default_periods(),

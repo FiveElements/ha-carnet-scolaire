@@ -760,6 +760,124 @@ def test_the_raw_fallback_uses_a_supplied_end_when_there_is_one(
     assert lesson.end_inferred is False
 
 
+#: Thursday 12 March 2026 is the fourth day of its week, so its places start at
+#: ``3 * PlacesParJour``; 10h00 is the fifth half-hour place of the day.
+_THURSDAY_TEN = 3 * protocol.PLACES_PER_DAY + 4
+
+
+@pytest.mark.parametrize("with_contents", [True, False], ids=["upstream", "raw"])
+def test_a_one_hour_lesson_on_half_hour_places_ends_an_hour_later(
+    gateway: PronoteGateway, client: FakeClient, with_contents: bool
+) -> None:
+    """``duree`` counts places, not hours.
+
+    On a grid of half-hour places -- the demonstration server's -- a one-hour
+    lesson has ``duree == 2``. The raw decoder ended it at ``start + duree``
+    hours, two hours later: the calendar drew it over the next lesson, "in
+    class" stayed on an hour too long and the end of the day moved with it.
+    Upstream reads ``ListeHeuresFin`` and is right on this grid; both decoders
+    must agree, since a cancellation goes through the raw one.
+    """
+    client.responses["PageEmploiDuTemps"] = protocol.timetable_response(
+        [
+            protocol.lesson(
+                start=dt.datetime(2026, 3, 12, 10, 0),
+                place=_THURSDAY_TEN,
+                duration=2,
+                with_contents=with_contents,
+            )
+        ]
+    )
+    lesson = gateway.timetable(client).facts.lessons[0]
+
+    assert lesson.end == dt.datetime(2026, 3, 12, 11, 0, tzinfo=PARIS)
+    assert lesson.end_inferred is True
+
+
+def test_the_raw_fallback_reads_the_end_of_a_55_minute_place_from_the_grid(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """The end comes from ``ListeHeuresFin``, as the official client reads it.
+
+    ``ObjetDate.placeEnDate`` takes ``(place + duree - 1) % PlacesParJour`` and
+    looks that place up in ``ListeHeuresFin``. On a grid of 55-minute places a
+    two-place lesson from 08h00 ends at 09h50, not at 10h00.
+    """
+    general = client.func_options["dataSec"]["data"]["General"]
+    general["PlacesParJour"] = 8
+    general["PlacesParHeure"] = 1
+    general["DureeSequence"] = 55 / (24 * 60)
+    ends = [8 * 60 + 55 * (place + 1) for place in range(9)]
+    general["ListeHeuresFin"] = {
+        "V": [
+            {"G": place, "L": f"{end // 60:02d}h{end % 60:02d}"}
+            for place, end in enumerate(ends)
+        ]
+    }
+    client.responses["PageEmploiDuTemps"] = protocol.timetable_response(
+        [
+            protocol.lesson(
+                start=dt.datetime(2026, 3, 12, 8, 0),
+                place=3 * 8,
+                duration=2,
+                with_contents=False,
+            )
+        ]
+    )
+    lesson = gateway.timetable(client).facts.lessons[0]
+
+    assert lesson.end == dt.datetime(2026, 3, 12, 9, 50, tzinfo=PARIS)
+    assert lesson.end_inferred is True
+
+
+def test_without_end_labels_the_raw_fallback_uses_the_length_of_a_place(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """``DureeSequence / PlacesParHeure`` is one place, as ``nombrePlacesEnDuree``.
+
+    ``DureeSequence`` is a Delphi duration -- a fraction of a day -- so the
+    demonstration grid's ``1/24`` over two places per hour is thirty minutes.
+    """
+    general = client.func_options["dataSec"]["data"]["General"]
+    general.pop("ListeHeuresFin")
+    client.responses["PageEmploiDuTemps"] = protocol.timetable_response(
+        [
+            protocol.lesson(
+                start=dt.datetime(2026, 3, 12, 10, 0),
+                place=_THURSDAY_TEN,
+                duration=3,
+                with_contents=False,
+            )
+        ]
+    )
+    lesson = gateway.timetable(client).facts.lessons[0]
+
+    assert lesson.end == dt.datetime(2026, 3, 12, 11, 30, tzinfo=PARIS)
+
+
+def test_without_any_grid_the_raw_fallback_counts_an_hour_per_place(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """The last resort, still flagged as inferred, never a crash."""
+    general = client.func_options["dataSec"]["data"]["General"]
+    for key in ("PlacesParJour", "PlacesParHeure", "DureeSequence"):
+        general.pop(key)
+    client.responses["PageEmploiDuTemps"] = protocol.timetable_response(
+        [
+            protocol.lesson(
+                start=dt.datetime(2026, 3, 12, 10, 0),
+                place=_THURSDAY_TEN,
+                duration=1,
+                with_contents=False,
+            )
+        ]
+    )
+    lesson = gateway.timetable(client).facts.lessons[0]
+
+    assert lesson.end == dt.datetime(2026, 3, 12, 11, 0, tzinfo=PARIS)
+    assert lesson.end_inferred is True
+
+
 def test_a_lesson_with_no_identifier_or_no_start_is_dropped(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:
