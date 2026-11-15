@@ -521,13 +521,16 @@ au premier niveau et `period`.
 - **`key`** est la clé frappée depuis le titre, le début et la fin — jamais le
   `N`, qui change à chaque session. Une entrée dont la date change est une
   nouvelle entrée.
-- **`is_holiday`** est vrai quand le libellé de la famille contient
-  « vacance » ou « férié » (sans casse ni accents) ; PRONOTE ne donne aucun
-  autre marqueur. `category` garde le libellé brut, pour qu'une détection
-  erronée reste visible.
+- **`is_holiday`** est vrai pour une entrée de genre 17
+  (`TypeGenreEvenementAgenda.tgea_JourFerie`, champ `G`) : vacances et jours
+  fériés. C'est le seul marqueur ; un titre qui dit « vacances » ne suffit pas.
+- **`category`** est le libellé de la famille (`listeFamilles`) dont la
+  couleur est celle de l'entrée — une entrée ne nomme pas sa famille, sa
+  couleur est le seul lien. `null` quand aucune famille n'a cette couleur :
+  c'est le cas des vacances et des conseils de classe.
 - **`color`** vaut `#rrggbb` en minuscules ou `null` : la couleur de l'entrée
-  (`CouleurCellule`), sinon celle de sa famille, normalisée depuis `#RRGGBB`,
-  `RRGGBB` ou `#RGB` ; toute autre forme donne `null`.
+  (`CouleurCellule`), normalisée depuis `#RRGGBB`, `RRGGBB` ou `#RGB` ; toute
+  autre forme donne `null`.
 - **`audience`** joint par « , » les libellés de `listePublicIndividu`,
   `listeEleves` et `listePublicEntite` ; la clé est **absente** quand PRONOTE
   n'en donne aucun, plutôt qu'une valeur inventée.

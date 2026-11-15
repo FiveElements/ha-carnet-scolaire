@@ -105,7 +105,7 @@ HOLIDAY = protocol.school_event(
     title="Pont",
     start=dt.datetime(2026, 3, 14, 0, 0),
     end=dt.datetime(2026, 3, 15, 0, 0),
-    family=protocol.HOLIDAY_FAMILY,
+    genre=protocol.HOLIDAY_GENRE,
     color="#0A0",
 )
 GRADES_CLOSE = protocol.school_event(identifier="AGENDA-GRADES")
@@ -116,7 +116,7 @@ COUNCIL = protocol.school_event(
     end=dt.datetime(2026, 3, 24, 18, 30),
     all_day=False,
     council=True,
-    family="Conseils de classe",
+    genre=protocol.COUNCIL_GENRE,
     color=None,
     place="Salle 101",
     comment="<p>Ordre du jour&nbsp;: bilan</p>",
@@ -200,7 +200,7 @@ async def test_the_next_school_event_skips_holidays_and_lists_everything_not_ove
     assert holiday["is_holiday"] is True
     assert (holiday["start"], holiday["end"]) == ("2026-03-14", "2026-03-16")
     assert holiday["color"] == "#00aa00"
-    assert holiday["category"] == protocol.HOLIDAY_FAMILY
+    assert holiday["category"] is None
     assert "audience" not in holiday
     assert council == {
         "key": council["key"],
@@ -208,7 +208,7 @@ async def test_the_next_school_event_skips_holidays_and_lists_everything_not_ove
         "start": "2026-03-24T17:15:00+01:00",
         "end": "2026-03-24T18:30:00+01:00",
         "all_day": False,
-        "category": "Conseils de classe",
+        "category": None,
         "color": "#999999",
         "is_class_council": True,
         "is_holiday": False,
@@ -390,7 +390,7 @@ async def test_a_new_entry_fires_once_per_child_and_a_reconnection_fires_nothing
         "start": "2026-03-24T17:15:00+01:00",
         "end": "2026-03-24T18:30:00+01:00",
         "all_day": False,
-        "category": "Conseils de classe",
+        "category": None,
         "is_class_council": True,
         "is_holiday": False,
     }
