@@ -25,32 +25,6 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
-class FakeAttachment:
-    """Stands in for ``pronotepy.Attachment``.
-
-    ``url`` is present and is a *stub*, because the whole point of the
-    ``attachments`` field holding names is that nothing downstream may read a
-    URL. A test that starts passing after touching this attribute has broken
-    that rule.
-    """
-
-    def __init__(self, name: str, payload: bytes = b"not-a-real-image") -> None:
-        self.name = name
-        self._payload = payload
-        self.reads = 0
-
-    @property
-    def url(self) -> str:
-        """A stub URL. The real one interpolates the live session token."""
-        return "https://demo.example.invalid/attachment?Session=STUB"
-
-    @property
-    def data(self) -> bytes:
-        """The bytes, counting reads so a caller cannot fetch twice unnoticed."""
-        self.reads += 1
-        return self._payload
-
-
 class FakeInfo:
     """Stands in for ``pronotepy.ClientInfo``.
 
@@ -60,9 +34,8 @@ class FakeInfo:
     quietly performing an unbudgeted, possibly misattributed request.
     """
 
-    def __init__(self, resource: dict[str, Any], *, photo: bool = True) -> None:
+    def __init__(self, resource: dict[str, Any]) -> None:
         self.raw_resource = resource
-        self._photo = FakeAttachment("photo.jpg") if photo else None
 
     @property
     def id(self) -> str:
@@ -83,13 +56,6 @@ class FakeInfo:
     def establishment(self) -> str:
         """The establishment label, empty when absent."""
         return str(self.raw_resource.get("Etablissement", {"V": {"L": ""}})["V"]["L"])
-
-    @property
-    def profile_picture(self) -> FakeAttachment | None:
-        """The photo attachment, or ``None`` when the account has no photo."""
-        if not self.raw_resource.get("avecPhoto"):
-            return None
-        return self._photo
 
 
 class FakeEncryption:
@@ -292,8 +258,7 @@ class FakeClient:
             student_id=student_id, has_photo=has_photo, marks_tab=marks_tab
         )
         self.info = FakeInfo(
-            self.parametres_utilisateur["dataSec"]["data"]["ressource"],
-            photo=has_photo,
+            self.parametres_utilisateur["dataSec"]["data"]["ressource"]
         )
 
         # -- the session's surface, not the gateway's ----------------------
@@ -328,7 +293,7 @@ class FakeClient:
             for child_id, child_name in children
         }
         self._children = tuple(
-            FakeInfo(payload["dataSec"]["data"]["ressource"], photo=has_photo)
+            FakeInfo(payload["dataSec"]["data"]["ressource"])
             for payload in self._child_payloads.values()
         )
         self._selected_child_id: str | None = None
@@ -396,7 +361,7 @@ class FakeClient:
             has_photo=False,
         )
         self._children = tuple(
-            FakeInfo(payload["dataSec"]["data"]["ressource"], photo=False)
+            FakeInfo(payload["dataSec"]["data"]["ressource"])
             for payload in self._child_payloads.values()
         )
 
@@ -426,7 +391,7 @@ class FakeClient:
             rotated[fresh] = payload
         self._child_payloads = rotated
         self._children = tuple(
-            FakeInfo(payload["dataSec"]["data"]["ressource"], photo=False)
+            FakeInfo(payload["dataSec"]["data"]["ressource"])
             for payload in self._child_payloads.values()
         )
         if self._children:

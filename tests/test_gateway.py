@@ -31,6 +31,7 @@ import pytest
 from custom_components.carnet_scolaire.const import AttachmentKind, GradeStatus
 from custom_components.carnet_scolaire.gateway import (
     MAX_DISCUSSION_EXPANSIONS,
+    AttachmentUnavailable,
     DiscussionIsClosed,
     DiscussionNotFound,
     ItemNotFound,
@@ -70,6 +71,7 @@ from .fixtures.client import (
     FakeClient,
     FakeMessage,
     FakeRecipient,
+    FakeResponse,
     FakeThread,
 )
 
@@ -2319,10 +2321,32 @@ def test_the_profile_photo_is_fetched_under_the_lock(
     Read as a property from an entity, a parent account can show the wrong
     child's face (annexe A §5.4).
     """
+    client.communication.session.response = FakeResponse(b"not-a-real-image")
+
     data, calls = gateway.profile_picture(client)
 
     assert calls == 1
     assert data == b"not-a-real-image"
+    (address,) = client.communication.session.gets
+    assert "/FichiersExternes/" in address
+    assert address.endswith("/photo.jpg?Session=SESSION-NUMBER")
+    assert client.communication.encryption.plaintexts[-1] == (
+        b'{"N":"' + client.info.id.encode() + b'","Actif":true}'
+    )
+
+
+def test_a_refused_photo_is_an_error_rather_than_an_error_page_shown_as_a_face(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """Upstream's ``Attachment.data`` returned the body whatever the status.
+
+    An expired session's HTML page would have been cached as the child's
+    photo; the status is now checked, as for every other document.
+    """
+    client.communication.session.response = FakeResponse(status_code=404)
+
+    with pytest.raises(AttachmentUnavailable):
+        gateway.profile_picture(client)
 
 
 def test_an_account_with_no_photo_costs_no_request(

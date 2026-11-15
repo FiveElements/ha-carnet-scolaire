@@ -310,14 +310,16 @@ def _download(client: HardenedClient, url: str, name: str) -> tuple[bytes, str |
 
 
 def _external_file_url(
-    client: HardenedClient, *, ref: str, name: str, genre: str
+    client: HardenedClient, *, ref: str, name: str, genre: str | None = None
 ) -> str:
-    """A ``FichiersExternes`` address whose segment also names a file type.
+    """A ``FichiersExternes`` address, naming a file type when given one.
 
-    The construction of ``dataClasses.Attachment.__init__``, line for line,
-    with one key added: upstream encrypts ``{"N", "Actif"}`` and nothing else,
-    which is enough for a homework file and not for a graded test's, where
-    ``G`` says which of the two files is wanted. The cipher is still
+    The construction of ``dataClasses.Attachment.__init__``, with its padding
+    corrected and one optional key: upstream encrypts ``{"N", "Actif"}`` and
+    nothing else, which is enough for a homework file or a photo -- the web
+    client's ``ObjetElement`` writes no ``G`` when it has no type either --
+    and not for a graded test's, where ``G`` says which of the two files is
+    wanted. Every file this module downloads goes through here. The cipher is still
     upstream's (``communication.encryption``), so only the plaintext and the
     formatting are repeated here; a pin bump must re-read that constructor.
 
@@ -338,7 +340,11 @@ def _external_file_url(
     404 for every test. The official app's link to the same paper is one
     block shorter than the doubly padded one was.
     """
-    plaintext = json.dumps({"N": ref, "G": genre, "Actif": True}).replace(" ", "")
+    fields: dict[str, Any] = {"N": ref}
+    if genre is not None:
+        fields["G"] = genre
+    fields["Actif"] = True
+    plaintext = json.dumps(fields).replace(" ", "")
     segment = client.communication.encryption.aes_encrypt(plaintext.encode()).hex()
     return (
         f"{client.communication.root_site}/FichiersExternes/{segment}/"
@@ -529,13 +535,11 @@ def _establishment_host(root_site: object) -> str | None:
 #: ``G`` on a ``ListePieceJointe`` entry: a link, as opposed to a file.
 _ATTACHMENT_LINK: Final = 0
 
+#: The name upstream gives the profile photo's file in its address.
+_PHOTO_NAME: Final = "photo.jpg"
+
 #: PRONOTE's route for a file, compared lower-cased against path segments.
 _PRONOTE_FILE_SEGMENT: Final = "fichiersexternes"
-
-#: The other value of ``G``. Named because it is *written* into the payload
-#: handed to ``pronotepy`` when re-deriving a file's address, and a magic ``1``
-#: there would be unreadable.
-_ATTACHMENT_FILE: Final = 1
 
 #: Where a ``listeDevoirs`` entry describes each of its two documents -- the
 #: element carrying the document's own ``N`` and name, and the older bare file
@@ -2209,12 +2213,16 @@ class PronoteGateway:
         ``ClientInfo.profile_picture`` goes through ``ClientInfo._cache()``,
         which short-circuits ``ClientBase.post`` and the parent ``membre``
         signature -- so a parent account reading it as a property can show the
-        wrong child's face (annexe A §5.4).
+        wrong child's face (annexe A §5.4). The address is built here rather
+        than read from that property, whose upstream ``Attachment`` pads the
+        segment twice (see :func:`_external_file_url`); ``raw_resource`` is the
+        login's own data and places no request.
         """
-        attachment = client.info.profile_picture
-        if attachment is None:
+        resource = client.info.raw_resource
+        if not resource.get("avecPhoto"):
             return None, 0
-        data: bytes = attachment.data
+        url = _external_file_url(client, ref=str(resource["N"]), name=_PHOTO_NAME)
+        data, _declared = _download(client, url, _PHOTO_NAME)
         return data, 1
 
     def homework_attachment(
@@ -2227,16 +2235,12 @@ class PronoteGateway:
     ) -> tuple[bytes, str | None, int]:
         """Download one homework document, under the lock, after ``set_child``.
 
-        The address is **derived by upstream and not re-implemented here**, on
-        purpose. It is
-        ``FichiersExternes/<hex>/<name>?Session=<h>`` where the hex segment is
-        ``{"N": id, "Actif": true}`` encrypted with the session's own AES key
-        and IV, and reproducing that arithmetic would give this module a second
-        copy of a cipher construction that only ``pronotepy`` is versioned
-        against -- a pin bump could then diverge silently, which is the class of
-        failure ``hardened_client`` exists to document rather than repeat. So a
-        minimal payload is handed to ``dataClasses.Attachment`` and its ``url``
-        is used.
+        The address is ``FichiersExternes/<hex>/<name>?Session=<h>``, the hex
+        segment being ``{"N": id, "Actif": true}`` encrypted with the session's
+        own AES key and IV. It used to be derived by ``dataClasses.Attachment``,
+        which pads that segment twice: the server removes one padding and
+        refuses whatever leaves a non-blank byte after the JSON, which is most
+        ``N`` lengths. :func:`_external_file_url` builds it padded once.
 
         What is *not* delegated is the status check. ``Attachment.data`` returns
         ``response.content`` whatever the status, so an expired session yields
@@ -2264,10 +2268,9 @@ class PronoteGateway:
         )
         if document is None:
             raise AttachmentUnavailable(name, 404)
-        attachment = dataClasses.Attachment(
-            client, {"L": name, "N": document.ref, "G": _ATTACHMENT_FILE}
+        content, declared = _download(
+            client, _external_file_url(client, ref=document.ref, name=name), name
         )
-        content, declared = _download(client, attachment.url, name)
         return content, declared, 2
 
     def grade_document(
