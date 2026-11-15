@@ -108,6 +108,8 @@ ignore = [
 # shape the server never sends. The gateway is the single place a zone is
 # attached (§4.2), and that is what tests/test_gateway.py checks.
 "tests/fixtures/protocol.py" = ["DTZ001"]
+"tests/test_agenda.py" = ["DTZ001"]
+"tests/test_agenda_entities.py" = ["DTZ001"]
 "tests/test_gateway.py" = ["DTZ001"]
 "tests/test_sensor.py" = ["DTZ001"]
 "tests/clock.py" = ["DTZ001"]

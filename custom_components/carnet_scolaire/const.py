@@ -39,6 +39,9 @@ FUNC_REPORT: Final = ("PageBulletins", 13)
 FUNC_ATTENDANCE: Final = ("PagePresence", 19)
 FUNC_EVALUATIONS: Final = ("DernieresEvaluations", 201)
 FUNC_MENUS: Final = ("PageMenus", 10)
+#: The establishment's agenda -- ``Onglet_Agenda`` in the official client
+#: (``ObjetRequetePageAgenda``). Not read by pronotepy at all.
+FUNC_AGENDA: Final = ("PageAgenda", 9)
 FUNC_TEACHING_STAFF: Final = ("PageEquipePedagogique", 37)
 FUNC_PERSONAL_INFO: Final = ("PageInfosPerso", 16)
 
@@ -53,7 +56,7 @@ PRESENCE_KIND_PUNISHMENT: Final = 41
 class Tier(StrEnum):
     """Collection tiers (SPECIFICATION.md §5.2).
 
-    Ten data tiers plus ``SESSION``, which is not one: it carries the facts that
+    Eleven data tiers plus ``SESSION``, which is not one: it carries the facts that
     arrive with the login itself (periods, class, establishment) and therefore
     costs no call at all.
     """
@@ -67,6 +70,7 @@ class Tier(StrEnum):
     ATTENDANCE = "attendance"
     EVALUATIONS = "evaluations"
     MENUS = "menus"
+    AGENDA = "agenda"
     STATIC = "static"
     HISTORY = "history"
 
@@ -113,6 +117,7 @@ TIER_PRIORITY: Final[dict[Tier, Priority]] = {
     Tier.DISCUSSIONS: Priority.LOW,
     Tier.EVALUATIONS: Priority.LOW,
     Tier.MENUS: Priority.LOW,
+    Tier.AGENDA: Priority.LOW,
     Tier.STATIC: Priority.LOW,
     Tier.HISTORY: Priority.LOW,
 }
@@ -127,6 +132,7 @@ DEFAULT_TIER_INTERVALS: Final[dict[Tier, int]] = {
     Tier.ATTENDANCE: 360,
     Tier.EVALUATIONS: 720,
     Tier.MENUS: 1440,
+    Tier.AGENDA: 1440,
     Tier.STATIC: 1440,
     Tier.HISTORY: 1440,
 }
@@ -504,6 +510,8 @@ EVENT_DELAY_ADDED: Final = "delay_added"
 EVENT_PUNISHMENT_ADDED: Final = "punishment_added"
 EVENT_MESSAGE_RECEIVED: Final = "message_received"
 EVENT_EVALUATION_ADDED: Final = "evaluation_added"
+#: An entry appeared in the establishment's agenda (``PageAgenda``).
+EVENT_SCHOOL_EVENT_ADDED: Final = "school_event_added"
 
 LESSON_EVENT_TYPES: Final = (
     EVENT_LESSON_CANCELED,

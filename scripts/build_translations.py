@@ -67,6 +67,7 @@ SENSORS: list[tuple[str, str, str]] = [
     ("teaching_staff", "Teaching staff", "Équipe pédagogique"),
     ("class_name", "Class", "Classe"),
     ("periods", "Periods", "Périodes"),
+    ("next_school_event", "Next school event", "Prochain évènement"),
 ]
 
 # One set per closed period. The period's own label is a placeholder because it
@@ -133,6 +134,7 @@ CALENDARS: list[tuple[str, str, str]] = [
     ("timetable", "Timetable", "Emploi du temps"),
     ("homework", "Homework", "Devoirs"),
     ("punishments", "Detentions", "Punitions"),
+    ("school_agenda", "School agenda", "Agenda de l'établissement"),
 ]
 
 TODOS: list[tuple[str, str, str]] = [("homework", "Homework", "Devoirs")]
@@ -152,6 +154,7 @@ EVENTS: list[tuple[str, str, str]] = [
     ("new_punishment", "New punishment", "Nouvelle punition"),
     ("new_message", "New message", "Nouveau message"),
     ("new_evaluation", "New skill assessment", "Nouvelle évaluation"),
+    ("new_school_event", "New school event", "Nouvel évènement à l'agenda"),
 ]
 
 IMAGES: list[tuple[str, str, str]] = [("photo", "Photo", "Photo")]
@@ -169,6 +172,7 @@ TIERS: list[tuple[str, str, str]] = [
     ("attendance", "Attendance", "Vie scolaire"),
     ("evaluations", "Skill assessments", "Évaluations"),
     ("menus", "Canteen menus", "Menus"),
+    ("agenda", "School agenda", "Agenda"),
     ("static", "Rarely-changing data", "Données stables"),
     ("history", "Closed periods", "Périodes closes"),
 ]
@@ -1928,6 +1932,11 @@ TRIGGER_TYPES: list[tuple[str, str, str]] = [
         "A skill assessment was added",
         "Une évaluation a été ajoutée",
     ),
+    (
+        "school_event_added",
+        "A school event was added",
+        "Un évènement a été ajouté à l'agenda",
+    ),
 ]
 
 CONDITION_TYPES: list[tuple[str, str, str]] = [
@@ -1987,6 +1996,7 @@ EVENT_TYPES_BY_ENTITY: dict[str, tuple[str, ...]] = {
     "new_punishment": ("punishment_added",),
     "new_message": ("message_received",),
     "new_evaluation": ("evaluation_added",),
+    "new_school_event": ("school_event_added",),
 }
 
 # ---------------------------------------------------------------------------
@@ -2039,6 +2049,7 @@ ENTITY_ICONS: dict[str, dict[str, str | dict[str, Any]]] = {
         "teaching_staff": "mdi:human-male-board",
         "class_name": "mdi:google-classroom",
         "periods": "mdi:calendar-multiple",
+        "next_school_event": "mdi:calendar-star",
         # A closed period reads like its current-period sibling.
         "grades_period": "mdi:format-list-numbered",
         "averages_period": "mdi:chart-bar",
@@ -2107,6 +2118,7 @@ ENTITY_ICONS: dict[str, dict[str, str | dict[str, Any]]] = {
         "timetable": "mdi:calendar-clock",
         "homework": "mdi:calendar-edit",
         "punishments": "mdi:calendar-alert",
+        "school_agenda": "mdi:calendar-month",
     },
     "todo": {"homework": "mdi:clipboard-check-outline"},
     "button": {"refresh": "mdi:refresh", "refresh_marks": "mdi:sync"},
@@ -2137,6 +2149,7 @@ ENTITY_ICONS: dict[str, dict[str, str | dict[str, Any]]] = {
         "new_punishment": "mdi:gavel",
         "new_message": "mdi:email-plus",
         "new_evaluation": "mdi:check-decagram",
+        "new_school_event": "mdi:calendar-plus",
     },
     "image": {"photo": "mdi:account-box"},
 }

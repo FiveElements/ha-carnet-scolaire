@@ -41,6 +41,7 @@ scalaire, directement utilisable par un déclencheur `state` ou
 | `sensor.<é>_actualites_non_lues` | nombre | — | **`items`** | `news` | `Information.read` |
 | `sensor.<é>_messages_non_lus` | **somme** des non-lus | — | **`items`** | `discussions` | `sum(Discussion.unread)` |
 | `sensor.<é>_periode_en_cours` | nom de la période | — | `start`, `end`, `index` | `session` | `Client.current_period` |
+| `sensor.<é>_prochain_evenement` | horodatage du début du prochain évènement de l'agenda **hors vacances et jours fériés** (minuit local pour une journée entière) | `timestamp` | `title`, `all_day`, `end`, `category`, `is_class_council`, **`items`** | `agenda` | — (`PageAgenda`, onglet 9) |
 
 **Exigence.** `sensor.<é>_messages_non_lus` vaut `sum(d.unread for d in
 discussions)`. `Discussion.unread` est un **entier** (`nbNonLus`), pas un
@@ -506,6 +507,43 @@ l'interprétation restant celle d'upstream), `subjects[]`.
 `coefficient`, `comments[]`, `teachers[]`. Le capteur porte en plus `comments`
 au premier niveau et `period`.
 
+**`items[]` de l'agenda** (`sensor.<é>_prochain_evenement`) — `key`, `title`,
+`start`, `end`, `all_day`, `category`, `color`, `is_class_council`,
+`is_holiday`, `location`, `description`, et `audience` quand PRONOTE la donne.
+
+- **Bornes.** Pour une entrée `all_day`, `start` et `end` sont des **dates
+  seules** `"AAAA-MM-JJ"`, sans heure ni décalage ; sinon un ISO 8601 complet
+  **avec** décalage (`"2026-12-01T17:15:00+01:00"`). `end` est **exclusif**
+  partout : PRONOTE écrit le dernier jour d'une entrée journée entière (« Du
+  20 décembre au 3 janvier » inclut le 3) et l'intégration publie le
+  lendemain (`"2027-01-04"`), comme le calendrier. Une `DateFin` absente ou
+  antérieure au début ramène la fin au début.
+- **`key`** est la clé frappée depuis le titre, le début et la fin — jamais le
+  `N`, qui change à chaque session. Une entrée dont la date change est une
+  nouvelle entrée.
+- **`is_holiday`** est vrai quand le libellé de la famille contient
+  « vacance » ou « férié » (sans casse ni accents) ; PRONOTE ne donne aucun
+  autre marqueur. `category` garde le libellé brut, pour qu'une détection
+  erronée reste visible.
+- **`color`** vaut `#rrggbb` en minuscules ou `null` : la couleur de l'entrée
+  (`CouleurCellule`), sinon celle de sa famille, normalisée depuis `#RRGGBB`,
+  `RRGGBB` ou `#RGB` ; toute autre forme donne `null`.
+- **`audience`** joint par « , » les libellés de `listePublicIndividu`,
+  `listeEleves` et `listePublicEntite` ; la clé est **absente** quand PRONOTE
+  n'en donne aucun, plutôt qu'une valeur inventée.
+- **`description`** est le commentaire en texte simple, balises retirées.
+- La liste garde les entrées dont la fin est postérieure à maintenant —
+  une entrée commencée y reste jusqu'à sa fin —, vacances comprises, triées
+  par début et **plafonnées à 50**. Aucun autre horizon que celui que PRONOTE
+  renvoie (de ce jour à la fin de l'année).
+- L'état ne compte que les entrées `is_holiday == false` dont le début est à
+  venir. Quand il n'y en a pas, il vaut `unknown` mais `fetched_at`, `stale` et
+  `items` restent présents, et `title`, `all_day`, `end`, `category`,
+  `is_class_council` valent `null` : « rien de prévu » se distingue de « jamais
+  collecté », qui seul rend l'entité indisponible.
+- Les **pièces jointes** des entrées (`PiecesJointes`) sont hors périmètre :
+  ni lues, ni exposées.
+
 **Exigence.** Ces formes sont un **contrat**. Une carte tierce qui les lit doit
 pouvoir être écrite sans lire le code source de l'intégration, et un champ
 renommé en silence casse un tableau de bord sans aucun message d'erreur — le
@@ -598,6 +636,7 @@ la nature du changement ; les attributs portent le contexte.
 | `event.<é>_nouvelle_punition` | `punishment_added` | `nature`, `reasons`, `giver`, `exclusion`, `schedule`, `punishment_id` | `attendance` |
 | `event.<é>_nouveau_message` | `message_received` | `discussion`, `author`, `created`, `discussion_id`, `unread` | `discussions` |
 | `event.<é>_nouvelle_evaluation` | `evaluation_added` | `subject`, `name`, `acquisitions`, `date`, `evaluation_id` | `evaluations` |
+| `event.<é>_nouvel_evenement_a_l_agenda` | `school_event_added` | `key`, `title`, `start`, `end`, `all_day`, `category`, `is_class_council`, `is_holiday` (bornes au format de `items[]` de l'agenda, §2.1 : dates seules et fin exclusive pour une journée entière) | `agenda` |
 
 **Deux attributs ne sont pas toujours renseignés.** Sur
 `event.<é>_nouveau_message`, `author` et `created` sont `null` quand la passerelle
@@ -639,6 +678,7 @@ utilisateur alors que la séparation ne l'est pas.
 | `calendar.<é>_emploi_du_temps` | un évènement par cours **dédoublonné**, `uid` = `Lesson.id` | `timetable` | `Lesson` |
 | `calendar.<é>_devoirs` | un évènement d'une journée par échéance | `homework` | `Homework.date` |
 | `calendar.<é>_punitions` | les créneaux programmés (retenues) | `attendance` | `Punishment.schedule` |
+| `calendar.<é>_agenda_de_l_etablissement` | un évènement par entrée de l'agenda : `summary` = titre, `description` = commentaire en texte, `location` = lieu, `uid` = clé frappée ; journée entière en **dates**, fin exclusive (lendemain du dernier jour PRONOTE) | `agenda` | — (`PageAgenda`, onglet 9) |
 
 **Exigence.** Un cours annulé reste dans l'agenda, avec son statut en
 description et le préfixe traduit `annulé` dans le résumé. Le supprimer
@@ -795,6 +835,7 @@ deviennent pas des entités.
 | Destinataires possibles | `Recipient` | utile au seul service `send_message`, pas un état |
 | Élèves de la classe | `StudentClass.students()` | données d'autres élèves |
 | Corbeille et brouillons | `Discussion.labels` | filtrés à l'entrée |
+| Pièces jointes de l'agenda | `PageAgenda` → `PiecesJointes` | hors périmètre de la première version du palier `agenda` |
 
 **Exigence.** Cette table est maintenue. Toute donnée `pronotepy` non exposée y
 figure avec sa raison — sans quoi l'écart entre ce que le protocole rend et ce

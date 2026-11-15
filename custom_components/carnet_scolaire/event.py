@@ -35,6 +35,7 @@ from .const import (
     EVENT_INFORMATION_ADDED,
     EVENT_MESSAGE_RECEIVED,
     EVENT_PUNISHMENT_ADDED,
+    EVENT_SCHOOL_EVENT_ADDED,
     LESSON_EVENT_TYPES,
     Tier,
 )
@@ -117,6 +118,11 @@ EVENTS: Final[tuple[PronoteEventDescription, ...]] = (
         key="new_evaluation",
         tier=Tier.EVALUATIONS,
         event_types=[EVENT_EVALUATION_ADDED],
+    ),
+    PronoteEventDescription(
+        key="new_school_event",
+        tier=Tier.AGENDA,
+        event_types=[EVENT_SCHOOL_EVENT_ADDED],
     ),
 )
 

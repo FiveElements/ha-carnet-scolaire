@@ -1,4 +1,4 @@
-"""Calendars: the timetable, the homework deadlines and the detentions.
+"""Calendars: the timetable, homework deadlines, detentions and the agenda.
 
 The timetable calendar is where the de-duplication of §2.2.1 becomes visible.
 PRONOTE returns the original lesson *and* its replacement when a slot changes,
@@ -131,6 +131,32 @@ def _punishment_events(facts: Any, _account: PronoteAccount) -> list[CalendarEve
     return events
 
 
+def _agenda_events(facts: Any, _account: PronoteAccount) -> list[CalendarEvent]:
+    """One event per agenda entry, all-day entries as dates.
+
+    The gateway already made an all-day entry's end exclusive -- the midnight
+    after PRONOTE's last day -- which is Home Assistant's own convention, so
+    the dates go across unchanged.
+    """
+    events: list[CalendarEvent] = []
+    for item in facts.events:
+        start: date | datetime = item.start
+        end: date | datetime = item.end
+        if item.all_day:
+            start, end = item.start.date(), item.end.date()
+        events.append(
+            CalendarEvent(
+                start=start,
+                end=end,
+                summary=item.title,
+                description=item.description,
+                location=item.location,
+                uid=item.id,
+            )
+        )
+    return events
+
+
 CALENDARS: Final[tuple[PronoteCalendarDescription, ...]] = (
     PronoteCalendarDescription(
         key="timetable", tier=Tier.TIMETABLE, events_fn=_lesson_events
@@ -141,6 +167,9 @@ CALENDARS: Final[tuple[PronoteCalendarDescription, ...]] = (
     PronoteCalendarDescription(
         key="punishments", tier=Tier.ATTENDANCE, events_fn=_punishment_events
     ),
+    PronoteCalendarDescription(
+        key="school_agenda", tier=Tier.AGENDA, events_fn=_agenda_events
+    ),
 )
 
 
@@ -149,7 +178,7 @@ async def async_setup_entry(
     entry: PronoteConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Create the three calendars for every child."""
+    """Create the calendars for every child."""
     account = entry.runtime_data
     supported = account.connector.capabilities.tiers
 

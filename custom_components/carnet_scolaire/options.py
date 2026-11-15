@@ -90,6 +90,7 @@ REQUESTS_PER_BATCH: Final[dict[Tier, float]] = {
     Tier.ATTENDANCE: 1.0,
     Tier.EVALUATIONS: 1.0,
     Tier.MENUS: 1.14,
+    Tier.AGENDA: 1.0,
     Tier.STATIC: 1.0,
     Tier.HISTORY: 8.0,
 }

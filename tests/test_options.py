@@ -279,7 +279,7 @@ def test_the_default_estimate_matches_the_annexe() -> None:
     estimate = estimate_daily_requests({}, session_lifetime_minutes=30.0)
 
     assert 160 <= estimate <= 210
-    assert estimate == 199
+    assert estimate == 200
 
 
 def test_the_degenerate_case_stays_under_the_v1_model() -> None:
@@ -291,7 +291,7 @@ def test_the_degenerate_case_stays_under_the_v1_model() -> None:
     estimate = estimate_daily_requests({}, session_lifetime_minutes=5.0)
 
     assert estimate <= 500
-    assert estimate == 346
+    assert estimate == 347
 
 
 def test_an_unmeasured_lifetime_quotes_the_pessimistic_figure() -> None:
@@ -321,7 +321,7 @@ def test_disabling_quiet_hours_raises_the_estimate() -> None:
     )
 
     assert without > with_quiet
-    assert without == 283
+    assert without == 284
 
 
 def test_a_daily_tier_is_counted_once_and_not_two_thirds_of_a_time() -> None:

@@ -754,7 +754,7 @@ minuterie propre ; ils portent une **échéance**.
 
 ### 5.2 Les paliers
 
-Dix paliers de données, plus la session qui n'en est pas un. La v1 en comptait
+Onze paliers de données, plus la session qui n'en est pas un. La v1 en comptait
 treize ; trois ont disparu non par ambition rognée mais parce qu'elles
 raisonnaient en *jours* là où le protocole facture en *semaines*.
 
@@ -769,6 +769,7 @@ raisonnaient en *jours* là où le protocole facture en *semaines*.
 | `attendance` | absences, retards, punitions | `PagePresence` 19 | 6 h | normale |
 | `evaluations` | évaluations par compétences | `DernieresEvaluations` 201 | 12 h | basse |
 | `menus` | menus de la cantine | `PageMenus` 10 | 24 h | basse |
+| `agenda` | agenda de l'établissement, de ce jour à la fin de l'année (PRONOTE seulement) | `PageAgenda` 9 | 24 h | basse |
 | `static` | équipe pédagogique | `PageEquipePedagogique` 37 | 24 h | basse |
 | `history` | périodes closes : notes, présence, bulletins | 198 / 19 / 13 | 24 h | basse |
 

@@ -24,6 +24,7 @@ refresh:
             - "attendance"
             - "evaluations"
             - "menus"
+            - "agenda"
             - "static"
             - "history"
 

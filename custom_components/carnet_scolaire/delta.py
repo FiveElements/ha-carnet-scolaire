@@ -74,6 +74,7 @@ from .const import (
     EVENT_MESSAGE_RECEIVED,
     EVENT_PUNISHMENT_ADDED,
     EVENT_ROOM_CHANGED,
+    EVENT_SCHOOL_EVENT_ADDED,
     EVENT_TEACHER_CHANGED,
 )
 
@@ -82,6 +83,7 @@ if TYPE_CHECKING:
 
     from .models import (
         Absence,
+        AgendaFacts,
         AttendanceFacts,
         Delay,
         Discussion,
@@ -96,6 +98,7 @@ if TYPE_CHECKING:
         MarksFacts,
         NewsFacts,
         Punishment,
+        SchoolEvent,
         TimetableFacts,
     )
 
@@ -347,6 +350,30 @@ class DeltaDetector:
             )
             for eid in new
             if eid in index
+        ]
+
+    # -- agenda ------------------------------------------------------------
+
+    def agenda(self, student_id: str, facts: AgendaFacts) -> list[DeltaEvent]:
+        """Entries that appeared in the establishment's agenda, by minted key.
+
+        The key is built from the title and the bounds, so a reconnection --
+        which re-encrypts every ``N`` -- recognises the entries it already
+        announced. An entry whose date moves is a new entry, as a homework
+        statement rewritten by its teacher is.
+        """
+        new = self._new_ids(student_id, "agenda", (item.id for item in facts.events))
+        if not new:
+            return []
+        index = {item.id: item for item in facts.events}
+        return [
+            DeltaEvent(
+                "new_school_event",
+                EVENT_SCHOOL_EVENT_ADDED,
+                _school_event_context(index[key]),
+            )
+            for key in new
+            if key in index
         ]
 
     # -- discussions -------------------------------------------------------
@@ -791,6 +818,21 @@ def _evaluation_context(evaluation: Evaluation) -> dict[str, Any]:
         ],
         "date": evaluation.date.isoformat(),
         "evaluation_id": evaluation.id,
+    }
+
+
+def _school_event_context(event: SchoolEvent) -> dict[str, Any]:
+    """Attributes for ``event.<student>_nouvel_evenement_a_l_agenda``."""
+    start, end = event.iso_bounds()
+    return {
+        "key": event.id,
+        "title": event.title,
+        "start": start,
+        "end": end,
+        "all_day": event.all_day,
+        "category": event.category,
+        "is_class_council": event.is_class_council,
+        "is_holiday": event.is_holiday,
     }
 
 

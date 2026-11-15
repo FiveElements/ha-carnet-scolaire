@@ -330,6 +330,7 @@ class FakeClient:
             "DernieresEvaluations": protocol.evaluations_response(
                 [protocol.evaluation()]
             ),
+            "PageAgenda": protocol.agenda_response([protocol.school_event()]),
             "PageInfosPerso": protocol.personal_info_response(),
             "PageEquipePedagogique": protocol.teaching_staff_response(
                 [protocol.teaching_staff()]
