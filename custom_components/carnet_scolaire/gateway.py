@@ -2288,12 +2288,12 @@ class PronoteGateway:
         document's own ``N`` and, only on a 404 and only when it differs, one
         by the grade's; any other refusal is the answer.
 
-        One live instance refuses the paper (404) while the answers open, for
-        a request identical in every visible respect to the web client's own
-        link: same ``N``, same ``G``, same key order, same name. Tried there
-        and dropped for want of effect: a ``Navigation`` to the grades tab
-        first, and a browser navigation's ``Referer`` and ``Sec-Fetch``
-        headers. The refusal reaches the card as a 502, as any other does.
+        One live instance refused the paper (404) while the answers opened,
+        until the segment stopped being padded twice (see
+        :func:`_external_file_url`). Tried there first and dropped for want of
+        effect: a ``Navigation`` to the grades tab, and a browser navigation's
+        ``Referer`` and ``Sec-Fetch`` headers. A refusal reaches the card as a
+        502, as any other does.
 
         The address is the one place this module builds what
         ``dataClasses.Attachment`` would (see :func:`_external_file_url`):

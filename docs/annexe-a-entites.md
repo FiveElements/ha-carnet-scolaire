@@ -432,11 +432,12 @@ document de devoir noté est toujours un fichier, d'où `kind` toujours `local`,
 et il s'ouvre comme un fichier de devoir : `carnet_scolaire.get_attachment_url`
 signe la `key` au clic, puis le relais relit les notes de la période et
 télécharge le document — deux requêtes en général, trois au plus, imputées au
-palier des notes et déclarées au pire cas. **Limite connue :** sur au moins
-un établissement, PRONOTE refuse le sujet (404) alors que le corrigé du même
-devoir s'ouvre, pour une requête identique en tout point visible au lien du
-client web, et alors que l'appli PRONOTE officielle l'ouvre. Le relais répond alors 502, et la carte présente le sujet comme
-indisponible. Chaque document est demandé par
+palier des notes et déclarées au pire cas. Un document que PRONOTE refuse
+fait répondre 502 au relais, et la carte le présente comme indisponible.
+Jusqu'à la 0.1.24, c'était le cas du sujet sur au moins un établissement : le
+segment chiffré de l'adresse était rempli deux fois, et le serveur, qui n'en
+retire qu'un remplissage, refusait le sujet tandis que le corrigé, plus long
+de deux caractères, passait. Corrigé en 0.1.25. Chaque document est demandé par
 **son propre** `N`, celui que PRONOTE range dans `elmSujet` et `elmCorrige`,
 sous le type `DevoirSujet` ou `DevoirCorrige` ; s'il est refusé (404), le
 relais le redemande par le `N` de la note et journalise un avertissement, sans
