@@ -923,6 +923,42 @@ def test_every_credential_reaches_the_constructor_unchanged() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("login_mode", "expected_username", "expected_password"),
+    [
+        (str(LoginMode.CREDENTIALS), "parent-under-test", "not-a-real-password"),
+        (str(LoginMode.ENT), "parent-under-test", "not-a-real-password"),
+        # A token is not typed by anyone: it is whatever the server last
+        # issued, byte for byte, and touching it would break the next login.
+        (str(LoginMode.QR_CODE), " parent-under-test\t", " not-a-real-password\n"),
+    ],
+)
+def test_a_typed_username_and_password_lose_their_surrounding_whitespace(
+    login_mode: str,
+    expected_username: str,
+    expected_password: str,
+) -> None:
+    """A password pasted with a trailing space must not read as a wrong one.
+
+    PRONOTE's own client trims both fields before hashing
+    (``ObjetMoteurConnexion.getLogin`` / ``getMotDePasse``); pronotepy does
+    not. Without this, a credential copied with a space around it fails as
+    "invalid credentials" -- and spends a slot on the failed-login guard --
+    for an entry that the official page accepts. Done here rather than in the
+    form so that entries already stored with the space are repaired too.
+    """
+    with patch.object(hardened_client, "HardenedClient", _StubClient):
+        client = build_client(
+            login_mode=login_mode,
+            pronote_url=URL,
+            username=" parent-under-test\t",
+            password=" not-a-real-password\n",
+            uuid="UUID-UNDER-TEST",
+        )
+
+    assert client.args == (URL, expected_username, expected_password)
+
+
 def test_the_timeouts_are_published_before_the_client_is_constructed() -> None:
     """Ordering, not merely presence.
 

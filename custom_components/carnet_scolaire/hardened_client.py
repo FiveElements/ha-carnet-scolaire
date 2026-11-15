@@ -528,6 +528,14 @@ def build_client(
     calls it from the event loop (§3.2).
     """
     mode = "token" if login_mode == "qr_code" else "normal"
+    if mode == "normal":
+        # PRONOTE's own client trims both before hashing
+        # (`ObjetMoteurConnexion.getLogin` / `getMotDePasse`); pronotepy does
+        # not, so a credential pasted with a space failed as a wrong one. Here
+        # rather than in the form, so entries already stored that way login
+        # too. Never in token mode: the token is the server's, byte for byte.
+        username = username.strip()
+        password = password.strip()
 
     with (
         _patched_communication(connect_timeout, read_timeout),
