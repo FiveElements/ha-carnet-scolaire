@@ -1490,7 +1490,9 @@ douteuse.
 
 `Grade` porte une invariante vérifiée à l'exécution
 (`models.py`) : `value` et `status` sont mutuellement exclusifs, et
-`__post_init__` lève si les deux sont présents. C'est une promesse que le
+`__post_init__` lève si les deux sont présents — sauf pour
+`GradeStatus.CONGRATULATIONS`, une note assortie d'une mention qui garde sa
+valeur (§4.3). C'est une promesse que le
 système de types ne peut pas faire et qu'aucun appelant ne vérifiait. La
 passerelle est le seul producteur, donc cela ne peut se déclencher que sur un
 bug de la passerelle — c'est-à-dire précisément quand il vaut la peine

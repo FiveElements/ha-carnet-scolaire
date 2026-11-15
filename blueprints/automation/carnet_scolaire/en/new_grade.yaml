@@ -70,7 +70,7 @@ blueprint:
         notify_sentinels:
           name: Also notify grades with no value
           description: >-
-            Absent, Exempted, Not graded, Not handed in, Congratulations...
+            Absent, Exempted, Not graded, Not handed in...
             These grades have no numeric value: their state reads `unknown` and
             the reason sits in the `status` attribute. No threshold applies.
           default: false

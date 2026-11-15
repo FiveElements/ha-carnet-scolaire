@@ -214,6 +214,17 @@ def test_a_grade_may_hold_a_value_or_a_status_but_not_both() -> None:
         a_grade(value=14.5, status=GradeStatus.ABSENT)
 
 
+def test_a_congratulations_grade_may_hold_its_value() -> None:
+    """The one status that is a mention on a mark, not a mark's absence.
+
+    ``|8|20`` is worth 20 and counts in the average; refusing the pair here
+    would make the gateway drop the number a threshold trigger needs (§4.3).
+    """
+    grade = a_grade(value=20.0, status=GradeStatus.CONGRATULATIONS)
+
+    assert (grade.value, grade.status) == (20.0, GradeStatus.CONGRATULATIONS)
+
+
 # ---------------------------------------------------------------------------
 # Attendance
 # ---------------------------------------------------------------------------

@@ -708,6 +708,17 @@ basculer sur `unknown` avec le motif en attribut quand la note est une
 sentinelle. Un état qui vaudrait tantôt `14,5` tantôt `Absent` ne serait
 exploitable ni par un seuil ni par un graphique.
 
+**Exception : félicitations.** Elle arrive sous la forme `|8|<valeur>` et
+n'est pas l'absence d'une note mais une note assortie d'une mention : le client
+PRONOTE lit le champ qui suit le second `|` comme la valeur de la note et la
+compte dans la moyenne. `Grade` porte alors **les deux** : `value` (virgule
+décimale comme ailleurs) et `status = CONGRATULATIONS`. Sans cela, la meilleure
+note de la période n'aurait pas de valeur et un `numeric_state` « note ≥ 18 »
+ne se déclencherait pas pour elle. Un `|8` sans valeur reste sans valeur ;
+tous les autres statuts restent exclusifs de `value`. Le code de la sentinelle
+est le champ entier jusqu'au `|` suivant : un futur `|10` est `UNKNOWN`, pas
+`|1`.
+
 ### 4.4 Instantanés
 
 **Exigence.** Chaque palier produit un instantané immuable horodaté :

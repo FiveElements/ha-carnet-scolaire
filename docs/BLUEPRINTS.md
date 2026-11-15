@@ -235,9 +235,10 @@ sur combien elle est notée donne n'importe quoi. Le blueprint utilise le
 `out_of` du payload pour ramener la note sur 20 avant de comparer.
 
 **Les notes sans valeur.** « Absent », « Dispensé », « Non noté », « Non
-rendu », « Félicitations » n'ont pas de valeur numérique : aucun seuil ne peut
+rendu » n'ont pas de valeur numérique : aucun seuil ne peut
 s'y appliquer, et elles ont donc leur propre case. Décochée, elles ne notifient
-pas ; cochée, elles notifient toujours, seuil ou pas.
+pas ; cochée, elles notifient toujours, seuil ou pas. « Félicitations » n'en
+fait pas partie : c'est une note qui garde sa valeur, et le seuil s'y applique.
 
 Message fourni : `MATHÉMATIQUES : 14/20 (coef. 2).` — et `14`, pas `14.0`.
 

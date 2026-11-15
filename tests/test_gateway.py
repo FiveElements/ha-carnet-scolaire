@@ -316,7 +316,9 @@ def test_numbers_arrive_with_a_comma_and_sometimes_are_not_numbers() -> None:
     [
         ("|1", GradeStatus.ABSENT),
         ("|8", GradeStatus.CONGRATULATIONS),
+        ("|8|20", GradeStatus.CONGRATULATIONS),
         ("|9", GradeStatus.UNKNOWN),
+        ("|10", GradeStatus.UNKNOWN),
         ("|", GradeStatus.UNKNOWN),
         ("14,5", None),
         (None, None),
@@ -1414,6 +1416,34 @@ def test_a_grade_holds_a_value_or_a_status_never_both(
     assert grades[0].status is None
     assert grades[1].value is None
     assert grades[1].status is GradeStatus.ABSENT
+
+
+def test_a_congratulations_grade_keeps_the_value_it_is_worth(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """``|8|<valeur>`` is a full mark with a mention, and it counts.
+
+    PRONOTE's own client reads the field after the second ``|`` as the grade's
+    value and counts it in the average. Decoding it as a bare status left the
+    top mark of the term with no number, so a ``numeric_state`` trigger on
+    ``derniere_note`` above 18 never fired for it (§4.3). A bare ``|8`` still
+    decodes with no value: there is nothing to read.
+    """
+    client.responses["DernieresNotes"] = protocol.marks_response(
+        grades=[
+            protocol.grade(identifier="GRADE-1", value="|8|20"),
+            protocol.grade(identifier="GRADE-2", value="|8|9,5|1"),
+            protocol.grade(identifier="GRADE-3", value="|8"),
+        ]
+    )
+    period = current_period(gateway, client)
+    grades = gateway.marks(client, period, with_report=False).facts.grades  # type: ignore[arg-type]
+
+    assert [(grade.value, grade.status) for grade in grades] == [
+        (20.0, GradeStatus.CONGRATULATIONS),
+        (9.5, GradeStatus.CONGRATULATIONS),
+        (None, GradeStatus.CONGRATULATIONS),
+    ]
 
 
 def test_a_bonus_grade_is_not_also_optional(
