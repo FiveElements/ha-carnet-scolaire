@@ -457,7 +457,9 @@ annoncer une seconde fois.
 l'un des deux est nul. C'est ce qui permet à l'état de
 `sensor.<é>_derniere_note` d'être numérique — donc utilisable par un
 `numeric_state` et par un graphe — au lieu d'être tantôt `14.5` tantôt
-`Absent`.
+`Absent`. Seule exception, `congratulations` : une note avec félicitations
+(`|8|20`) est une vraie note, comptée dans la moyenne ; elle garde sa
+valeur, et l'état est ce nombre.
 
 **`averages[]`** — `subject_id`, `subject`, **`student`** (et non `average`),
 `class_average`, `min`, `max`, `out_of`, **`background_color`** (décodée ici

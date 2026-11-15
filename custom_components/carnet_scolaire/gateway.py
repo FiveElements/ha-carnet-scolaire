@@ -830,14 +830,31 @@ def _grade_sentinel(raw: Any) -> GradeStatus | None:
     Upstream's table has exactly eight entries and is indexed by
     ``int(string[1]) - 1``, so a future ``|9`` raises ``IndexError`` there and
     fails *every* grade in the batch. This is how we decline to inherit that
-    (§3.3.3).
+    (§3.3.3). The code is the whole field up to the next ``|``, as PRONOTE's
+    own client reads it: a future ``|10`` is UNKNOWN, not ``|1`` (absent).
     """
     if raw is None:
         return None
     text = str(raw).strip()
     if not text.startswith("|"):
         return None
-    return GRADE_SENTINELS.get(text[1:2], GradeStatus.UNKNOWN)
+    code = text[1:].split("|", 1)[0]
+    return GRADE_SENTINELS.get(code, GradeStatus.UNKNOWN)
+
+
+def _grade_value(raw: Any, status: GradeStatus | None) -> float | None:
+    """The grade's number: none for a sentinel, except a congratulations.
+
+    ``|8|<valeur>`` is a mark with a mention -- PRONOTE's own client reads the
+    field after the second ``|`` as the grade's value and counts it in the
+    average (§4.3). Every other sentinel stands for a missing mark.
+    """
+    if status is None:
+        return _number(raw)
+    if status is not GradeStatus.CONGRATULATIONS:
+        return None
+    fields = str(raw).strip().split("|")
+    return _number(fields[2]) if len(fields) > 2 else None
 
 
 def _strings(values: Iterable[Any], key: str = "L") -> tuple[str, ...]:
@@ -1533,9 +1550,9 @@ class PronoteGateway:
         """Decode one grade by hand -- the single documented exception (§3.3.2).
 
         Not for the sake of saving a call: for the two reasons in this module's
-        docstring. ``value`` and ``status`` are mutually exclusive, which is
-        what lets the "last grade" sensor hold a numeric state usable by a
-        threshold trigger.
+        docstring. ``value`` and ``status`` are mutually exclusive -- save for a
+        congratulations, which is a mark -- which is what lets the "last grade"
+        sensor hold a numeric state usable by a threshold trigger.
         """
         identifier = entry.get("N")
         if identifier is None:
@@ -1543,7 +1560,7 @@ class PronoteGateway:
 
         raw_value = _get(entry, "note", "V")
         status = _grade_sentinel(raw_value)
-        value = None if status is not None else _number(raw_value)
+        value = _grade_value(raw_value, status)
 
         parsed_date = _parse_date(_get(entry, "date", "V"))
         if parsed_date is None:

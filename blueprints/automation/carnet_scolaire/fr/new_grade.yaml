@@ -71,7 +71,7 @@ blueprint:
         notify_sentinels:
           name: Notifier aussi les notes sans valeur
           description: >-
-            Absent, Dispensé, Non noté, Non rendu, Félicitations... Ces notes
+            Absent, Dispensé, Non noté, Non rendu... Ces notes
             n'ont pas de valeur numérique : leur état vaut `unknown` et la
             raison est dans l'attribut `status`. Aucun seuil ne s'y applique.
           default: false

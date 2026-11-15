@@ -256,7 +256,8 @@ class Grade:
     ``numeric_state`` trigger works -- and fall back to ``unknown`` with the
     reason in an attribute when the grade is a sentinel. A state that were
     sometimes ``14.5`` and sometimes ``Absent`` would be usable neither by a
-    threshold nor by a graph.
+    threshold nor by a graph. The one exception is ``CONGRATULATIONS``: a mark
+    with a mention, which keeps its number (``|8|20`` is worth 20).
     """
 
     id: str
@@ -306,7 +307,10 @@ class Grade:
         function ran first, and the entity's contract with every
         ``numeric_state`` trigger downstream rests on that never happening.
         """
-        if self.value is not None and self.status is not None:
+        if self.value is not None and self.status not in (
+            None,
+            GradeStatus.CONGRATULATIONS,
+        ):
             raise ValueError(
                 f"grade {self.id} carries both a value ({self.value}) and a "
                 f"status ({self.status}); §4.3 makes them exclusive"

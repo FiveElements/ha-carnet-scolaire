@@ -526,10 +526,11 @@ PRONOTE renvoie une plage de semaines dans tous les cas.
 
 **Ce qu'il faut savoir sur « Dernière note ».** Son état est un nombre, jamais
 du texte. Quand la note la plus récente n'est pas une note mais une mention —
-« Absent », « Non noté », « Dispensé », « Non rendu », « Félicitations »… —
+« Absent », « Non noté », « Dispensé », « Non rendu »… —
 l'état vaut `unknown` et l'attribut `status` porte le motif. C'est volontaire :
 un état qui vaudrait tantôt `14.5` et tantôt `Absent` ne serait exploitable ni
-par un seuil, ni par un graphique.
+par un seuil, ni par un graphique. Une note avec « Félicitations », elle, est
+une vraie note : l'état est sa valeur, et `status` vaut `congratulations`.
 
 **Attention aux notes qui ne sont pas sur 20.** L'attribut `out_of` donne le
 barème. Une note de 8 sur 10 est un bon résultat ; comparée à un seuil de 10
@@ -1674,7 +1675,7 @@ Ces messages apparaissent dans **Paramètres → Système → Réparations**.
 | **Les données sont figées ; l'attribut `stale` vaut `true`.** | Heures calmes (comportement normal la nuit). Budget serré. Temporisation après une erreur serveur. Suspension des connexions. Établissement injoignable. | Lisez « État du limiteur » : il donne la cause en un mot, et son attribut `until` donne l'heure de reprise. « Heures calmes » la nuit est normal. « Bridé » signale un budget serré : allongez des intervalles. « Temporisation » signale un problème côté serveur : ça se résout tout seul. |
 | **Pas de photo de l'élève.** | L'établissement ne publie pas de photo pour cet élève. | C'est le cas le plus fréquent, et il n'y a rien à faire : l'entité **Photo** n'est même pas créée si PRONOTE ne déclare aucune photo. Si elle existe mais reste vide, elle sera retentée au prochain rechargement de l'intégration : la photo n'est cherchée qu'une fois, exprès, pour ne pas dépenser le budget quotidien sur une image inexistante. |
 | **Les moyennes sont vides, ou la « Période en cours » est indisponible.** | Changement de trimestre, ou établissement qui ne publie pas de notes. Pendant les vacances scolaires, entre deux périodes, PRONOTE ne publie souvent plus de moyenne courante. | C'est normal, et l'intégration préfère ne rien dire que dire faux : quand la période en cours ne peut pas être déterminée de façon fiable, l'entité devient indisponible plutôt que de désigner la mauvaise période. Les chiffres du trimestre écoulé restent lisibles dans les entités « Moyenne générale (Trimestre 1) », « Bulletin (Trimestre 1) », etc. Les moyennes reviendront à l'ouverture de la période suivante. |
-| **Une note reste à « unknown » alors qu'elle est bien dans PRONOTE.** | La « note » est en réalité une mention : « Absent », « Non noté », « Dispensé », « Non rendu », « Félicitations ». | Regardez l'attribut `status` du capteur « Dernière note » : il porte le motif. C'est volontaire — un état numérique ne peut pas contenir du texte sans casser les seuils et les graphiques. |
+| **Une note reste à « unknown » alors qu'elle est bien dans PRONOTE.** | La « note » est en réalité une mention : « Absent », « Non noté », « Dispensé », « Non rendu ». | Regardez l'attribut `status` du capteur « Dernière note » : il porte le motif. C'est volontaire — un état numérique ne peut pas contenir du texte sans casser les seuils et les graphiques. |
 | **Le nombre de cours du jour semble doublé.** | Ce défaut est corrigé : PRONOTE renvoie le cours d'origine *et* son remplacement, et l'intégration ne garde que le plus récent. | Si vous observez encore un doublon, signalez-le : c'est un bug. |
 | **Une case cochée dans la liste de devoirs revient toute seule.** | L'écriture n'est pas activée, l'appel a été refusé par le limiteur, ou PRONOTE a accepté la coche sans l'enregistrer. | Vérifiez « Autoriser l'écriture dans PRONOTE » dans les options. Une écriture reportée, ou relue inchangée, affiche une erreur explicite plutôt que d'échouer en silence. |
 | **La liste de devoirs n'a pas de case à cocher, alors que l'écriture est activée.** | Le compte est un compte parent. | C'est voulu : PRONOTE n'enregistre pas une coche envoyée depuis un compte parent. Seul le compte de l'élève peut cocher un devoir. |
