@@ -71,6 +71,7 @@ from .ent_providers import resolve_ent_provider
 from .failures import describe_failure
 from .hardened_client import (
     BootstrapUnavailable,
+    SessionDesynchronized,
     build_client,
     export_credentials,
     protocol_error_code,
@@ -296,9 +297,10 @@ class SerialExecutor:
         obvious guess is wrong. The abandoned callable keeps running in the
         worker, but the pool has a single thread, so the *next* submission does
         not run beside it -- it waits in the pool's queue and burns its own
-        deadline there. Nothing can therefore desynchronise the encrypted
-        request counter this way. The real cost is a stall, which is why the
-        caller marks the account as failing rather than retrying.
+        deadline there. Two requests can therefore never race on the encrypted
+        request counter. The abandoned one can still be lost in transit with
+        nobody watching, though, so the caller discards the session along with
+        marking the account as failing, rather than retrying on it.
         """
         if self._closed:
             message = "the account's executor has been shut down"
@@ -317,8 +319,8 @@ class SerialExecutor:
                 _LOGGER.debug(
                     "A PRONOTE call exceeded %.0fs and was abandoned. The worker "
                     "thread is still finishing it, so the next call queues "
-                    "behind it rather than running beside it -- expect a stall, "
-                    "not a broken session",
+                    "behind it rather than running beside it; the session is "
+                    "dropped, since its outcome is unknown",
                     self.deadline,
                 )
                 raise
@@ -567,10 +569,12 @@ class SessionManager:
             # it is a real failure even though nothing came back to classify.
             self._note_unreachable("a PRONOTE call exceeded its deadline")
             self._limiter.note_failure()
+            await self._discard_lost_session()
             raise IntegrationFault("a PRONOTE call exceeded its deadline") from error
         except OSError as error:
             self._note_unreachable(describe_failure(error))
             self._limiter.note_failure()
+            await self._discard_lost_session()
             raise
         except PronoteAPIError as error:
             return await self._handle_protocol_error(
@@ -675,6 +679,11 @@ class SessionManager:
         cost: int,
     ) -> Any:
         """Decide what a protocol error means, and retry only when it helps."""
+        if isinstance(error, SessionDesynchronized):
+            self._limiter.note_failure()
+            await self._discard_lost_session()
+            raise error
+
         code = protocol_error_code(error)
 
         # By type, not by code. `_Communication.post` raises `ExpiredObject`
@@ -763,6 +772,10 @@ class SessionManager:
                 lambda: self._executor.run(self._bind(client, fn, student_id)),
                 cost=cost,
             )
+        except SessionDesynchronized:
+            self._limiter.note_failure()
+            await self._discard_lost_session()
+            raise
         except PronoteAPIError:
             _LOGGER.warning(
                 "tier %s was refused again on a session opened moments ago, so "
@@ -771,6 +784,11 @@ class SessionManager:
                 tier,
             )
             self._limiter.note_failure()
+            raise
+        except OSError as error:
+            self._note_unreachable(describe_failure(error))
+            self._limiter.note_failure()
+            await self._discard_lost_session()
             raise
         self._last_success = self._clock()
         self._note_reachable()
@@ -994,6 +1012,25 @@ class SessionManager:
         self._session_batch_id = None
         if client is not None:
             await self._release(client)
+
+    async def _discard_lost_session(self) -> None:
+        """Drop a client whose last exchange has an unknown outcome.
+
+        pronotepy advances its order number only when ``requests`` returns,
+        so a request lost in transit -- a timeout, a reset connection, a call
+        abandoned at its deadline -- may have been counted by the server and
+        not by the client; and :class:`SessionDesynchronized` says the two
+        already disagree. The official client ends the session in both cases.
+        Keeping it signs the next request out of order: at best a false
+        "session expired", at worst an answer read under the wrong child.
+
+        Not a reconnection: the caller has already charged the failure to the
+        backoff, and the login that replaces this session goes through
+        :meth:`_login` -- the limiter's hold, spacing and login cap -- on the
+        next call, like the very first one.
+        """
+        _LOGGER.debug("the last PRONOTE exchange was lost; dropping the session")
+        await self._reopen()
 
     async def _release(self, client: HardenedClient) -> None:
         """Release a client from the worker thread, never from the loop.

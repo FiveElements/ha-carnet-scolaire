@@ -93,7 +93,7 @@ session.py      one asyncio.Lock + one single-worker executor per config entry
    ↓
 ratelimit.py    spacing, token bucket, daily cap, two login counters
    ↓
-hardened_client.py  fixes four upstream behaviours that defeat a limiter
+hardened_client.py  fixes five upstream behaviours that defeat a limiter
    ↓
 gateway.py      one public function per *protocol call*; the only pronotepy importer
    ↓
@@ -125,6 +125,10 @@ Serialisation matters for a second reason: the protocol numbers requests with an
 encrypted counter that advances by two, and two concurrent calls on one session
 desynchronise it and break the session. `set_child()` also *mutates* the client,
 so the lock covers more than the call itself.
+A request lost in transit (timeout, reset connection, abandoned call) or an HTTP
+failure leaves that counter unknown, and an answer numbered other than sent + 1
+proves it wrong (`SessionDesynchronized`): `SessionManager` drops the client in
+every such case, and the next call logs in again through the limiter.
 
 `pronotepy==2.15.7` is pinned and `hardened_client.py` documents each divergence
 it corrects. Raising the pin means re-reading every one of them.
