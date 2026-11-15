@@ -1,7 +1,7 @@
 """The hardened pronotepy client -- a prerequisite, not an option (§3.6).
 
-Four upstream behaviours make the plain client unusable behind a rate limiter
-that claims to be the only path to the network. All four are verified against
+Five upstream behaviours make the plain client unusable behind a rate limiter
+that claims to be the only path to the network. All five are verified against
 pronotepy 2.15.7.
 
 **1. It re-authenticates behind the caller's back.** ``ClientBase.post``
@@ -32,8 +32,16 @@ server that accepts the connection and never answers pins the single worker
 thread for ever, the ``asyncio.Lock`` is never released, and §5.4's staleness
 regime disguises a permanent deadlock as a slow network.
 
+**5. It never checks the order number.** ``_Communication.post`` sends ``n``
+and expects ``n + 1`` back, but the check is a ``TODO``: it advances its
+counter by two whenever ``requests`` returns -- an HTTP 5xx included -- and
+not at all when ``requests`` raises, although the server may have received and
+counted that request. Either way the two counters can part silently, which the
+official client treats as a lost connection. See :class:`SessionDesynchronized`.
+
 So: this module owns one client class whose ``post()`` never re-authenticates,
-which stamps the child signature itself, and whose transport carries timeouts.
+which stamps the child signature itself, whose transport carries timeouts and
+reports an exchange whose order number cannot be trusted.
 Re-login becomes the :class:`~.session.SessionManager`'s decision, counted by
 the limiter -- and that is what makes ``Erreur.G = 10`` an observable, and
 therefore measurable, event (§6.5).
@@ -47,7 +55,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 import pronotepy
 from pronotepy import dataClasses, pronoteAPI
-from pronotepy.exceptions import PronoteAPIError
+from pronotepy.exceptions import CryptoError, PronoteAPIError
 import requests
 
 if TYPE_CHECKING:
@@ -125,6 +133,27 @@ class BootstrapDelegated(BootstrapUnavailable):
     """
 
 
+class SessionDesynchronized(PronoteAPIError):  # noqa: N818 -- a condition, not an error class
+    """The order number of this session can no longer be trusted.
+
+    Raised in two shapes, both of which mean the next request would be signed
+    with a number the server may not expect:
+
+    * the response carried an order number other than the one sent plus one;
+    * the server answered with an HTTP failure after upstream had already
+      advanced its counter, so whether the server counted the request is
+      unknown.
+
+    A transport exception (``requests`` raising) is the third shape, and it
+    stays an ``OSError``: upstream has *not* advanced its counter there, and
+    the session manager drops the client on every ``OSError`` anyway.
+
+    Carries no ``pronote_error_code``, so it never reads as "session expired":
+    the remedy is to discard the client, and the next call -- admitted by the
+    limiter like any login -- opens a new session.
+    """
+
+
 class _TimeoutSession(requests.Session):
     """A ``requests.Session`` that refuses to wait for ever.
 
@@ -151,10 +180,11 @@ class _TimeoutSession(requests.Session):
 class _HardenedCommunication(pronoteAPI._Communication):
     """Bootstrap transport with timeouts and honest failure classification.
 
-    Two overrides, and no more: replacing the session so every request is
-    bounded, and replacing ``_parse_html`` so the only bootstrap verdict is
+    Three overrides, and no more: replacing the session so every request is
+    bounded, replacing ``_parse_html`` so the only bootstrap verdict is
     "the ``Start({…})`` block is missing" -- never a claim about the caller's
-    IP address.
+    IP address -- and wrapping ``post`` so a request whose order number cannot
+    be trusted any more says so.
     """
 
     #: Fallback used when no login is in progress on this thread. The real
@@ -216,6 +246,71 @@ class _HardenedCommunication(pronoteAPI._Communication):
             raise ValueError(message)
 
         return attributes
+
+    def post(
+        self,
+        function_name: str,
+        data: dict[str, Any],
+        decryption_change: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Post through upstream, then check the order number it never checks.
+
+        The response's ``no`` is read with the cipher in force before the
+        request and with the one in force after it, because
+        ``decryption_change`` swaps it in the middle of the exchange and which
+        of the two the server used is not documented. A number that neither
+        cipher can read is not judged: refusing every response over our own
+        guess about the cipher would end every login. A number one of them
+        reads, and that is not the expected one, is a desynchronised session.
+        """
+        sent = self.request_number
+        before = (self.encryption.aes_key, self.encryption.aes_iv)
+        try:
+            response: dict[str, Any] = super().post(
+                function_name, data, decryption_change
+            )
+        except PronoteAPIError as error:
+            if self.request_number != sent and not self.last_response.ok:
+                message = (
+                    f"HTTP {self.last_response.status_code} after the order "
+                    "number had advanced"
+                )
+                raise SessionDesynchronized(message) from error
+            raise
+
+        after = (self.encryption.aes_key, self.encryption.aes_iv)
+        received = _order_numbers(response.get("no"), (after, before))
+        if received and sent + 1 not in received:
+            message = f"{function_name} answered out of order"
+            raise SessionDesynchronized(message)
+        return response
+
+
+def _order_numbers(raw: object, ciphers: tuple[tuple[bytes, bytes], ...]) -> set[int]:
+    """Every reading of a response's order number the given ciphers allow.
+
+    Empty when nothing reads as a number -- an absent field, a value that is
+    not hexadecimal, or a cipher that is not the server's.
+    """
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        return {raw}
+    if not isinstance(raw, str):
+        return set()
+    try:
+        blob = bytes.fromhex(raw)
+    except ValueError:
+        return set()
+    numbers: set[int] = set()
+    cipher = pronoteAPI._Encryption()
+    for key, iv in ciphers:
+        cipher.aes_key, cipher.aes_iv = key, iv
+        try:
+            text = cipher.aes_decrypt(blob)
+        except CryptoError, ValueError:
+            continue
+        if text.isdigit():
+            numbers.add(int(text))
+    return numbers
 
 
 def _current_timeouts() -> tuple[float, float]:

@@ -40,7 +40,10 @@ from custom_components.carnet_scolaire.const import (
     Priority,
     SessionStrategy,
 )
-from custom_components.carnet_scolaire.hardened_client import protocol_error_code
+from custom_components.carnet_scolaire.hardened_client import (
+    SessionDesynchronized,
+    protocol_error_code,
+)
 from custom_components.carnet_scolaire.ratelimit import (
     RateLimitConfig,
     RateLimiter,
@@ -53,6 +56,7 @@ from custom_components.carnet_scolaire.session import (
     PRESUMED_DEAD_AFTER_SECONDS,
     SHORT_TIMEOUT_EVIDENCE,
     IntegrationFault,
+    LoginRefused,
     SerialExecutor,
     SessionCredentials,
     SessionManager,
@@ -228,6 +232,13 @@ async def harness_fixture(
             announced=announced,
         )
         await manager.close()
+
+
+def _advance_past_the_hold(harness: Harness) -> None:
+    """Move the clock just past whatever hold the limiter is applying."""
+    until = harness.limiter.hold_until_wallclock
+    if until is not None:
+        harness.clock.advance((until - harness.clock.now()).total_seconds() + 1)
 
 
 def _work(*, result: Any = None, raises: BaseException | None = None) -> Callable:
@@ -601,11 +612,18 @@ async def test_an_unreachable_server_is_logged_once_and_again_when_it_returns(
     ]
     assert len(down) == 1
 
-    # The first timeout opened a backoff hold. Advance past it so the next
-    # call is another real attempt, not a silent ``TierDeferred``.
-    harness.clock.advance(120)
+    # The first timeout opened a backoff hold and dropped the session. Advance
+    # past it so the next call is another real attempt -- a login, which a
+    # server that is still down refuses the same way.
+    _advance_past_the_hold(harness)
     caplog.clear()
-    with pytest.raises(IntegrationFault):
+    with (
+        patch(
+            "custom_components.carnet_scolaire.session.build_client",
+            side_effect=requests.ConnectTimeout("connect timed out"),
+        ),
+        pytest.raises(requests.ConnectTimeout),
+    ):
         await harness.manager.run(
             "homework", Priority.NORMAL, _work(raises=TimeoutError())
         )
@@ -615,7 +633,7 @@ async def test_an_unreachable_server_is_logged_once_and_again_when_it_returns(
         if record.levelno == logging.INFO and "unavailable" in record.getMessage()
     ]
 
-    harness.clock.advance(120)
+    _advance_past_the_hold(harness)
     caplog.clear()
     await harness.manager.run("timetable", Priority.HIGH, _work())
     up = [
@@ -932,6 +950,136 @@ async def test_an_os_error_on_a_call_marks_the_server_unreachable_and_re_raises(
     # And the failure is recorded, so the next attempt is held off rather than
     # made at the tier's cadence against a server that is down.
     assert harness.limiter.retry_delay() > 0
+
+
+# ---------------------------------------------------------------------------
+# An exchange whose outcome is unknown loses the session
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "lost",
+    [
+        requests.ReadTimeout("read timed out"),
+        requests.ConnectionError("connection reset"),
+        OSError("network is down"),
+        TimeoutError("the call outlived its deadline"),
+        SessionDesynchronized("PageAccueil answered out of order"),
+    ],
+    ids=["read-timeout", "connection-reset", "os-error", "deadline", "out-of-order"],
+)
+async def test_an_exchange_with_an_unknown_outcome_discards_the_session(
+    harness: Harness,
+    lost: BaseException,
+) -> None:
+    """The request may have been counted by the server and not by pronotepy.
+
+    Prevents the client from being kept with an order number the server no
+    longer shares: the next request would be signed out of order, and for a
+    parent its answer could be published under the other child.
+    """
+    await harness.manager.run("timetable", Priority.HIGH, _work())
+    assert harness.manager.is_open
+
+    with pytest.raises((OSError, PronoteAPIError, IntegrationFault)):
+        await harness.manager.run("homework", Priority.NORMAL, _work(raises=lost))
+
+    assert not harness.manager.is_open
+    assert harness.limiter.retry_delay() > 0
+
+
+async def test_a_discarded_session_is_reopened_only_once_the_backoff_allows(
+    harness: Harness,
+) -> None:
+    """Dropping the client must not turn into a login per tick.
+
+    Prevents a reconnection loop: the failure engages the backoff, the login
+    that replaces the lost session goes through the limiter like any other,
+    and it is refused -- without being sent -- while the hold lasts.
+    """
+    with pytest.raises(OSError, match="connection reset"):
+        await harness.manager.run(
+            "timetable", Priority.HIGH, _work(raises=OSError("connection reset"))
+        )
+
+    with pytest.raises(LoginRefused):
+        await harness.manager.run("timetable", Priority.HIGH, _work())
+    assert harness.logins() == 1
+
+    _advance_past_the_hold(harness)
+    await harness.manager.run("timetable", Priority.HIGH, _work())
+
+    assert harness.logins() == 2
+    assert harness.manager.is_open
+
+
+async def test_a_transport_failure_on_the_replay_discards_the_fresh_session(
+    harness: Harness,
+) -> None:
+    """The replay after ``G = 10`` is an exchange like any other.
+
+    Prevents the session opened for the replay from being kept after its one
+    request was lost in transit.
+    """
+    attempts: list[int] = []
+
+    def fn(_client: Any) -> Any:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise ProtocolError(ERROR_SESSION_EXPIRED)
+        raise requests.ReadTimeout("read timed out")
+
+    with pytest.raises(requests.ReadTimeout):
+        await harness.manager.run("timetable", Priority.HIGH, fn)
+
+    assert harness.logins() == 2
+    assert not harness.manager.is_open
+    assert harness.limiter.retry_delay() > 0
+
+
+async def test_a_desynchronised_replay_discards_the_fresh_session(
+    harness: Harness,
+) -> None:
+    """An out-of-order answer on the replay is not a reason to keep its client.
+
+    Prevents the replay's client from surviving with an order number the
+    server does not share.
+    """
+    attempts: list[int] = []
+
+    def fn(_client: Any) -> Any:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise ProtocolError(ERROR_SESSION_EXPIRED)
+        raise SessionDesynchronized("PageAccueil answered out of order")
+
+    with pytest.raises(SessionDesynchronized):
+        await harness.manager.run("timetable", Priority.HIGH, fn)
+
+    assert harness.logins() == 2
+    assert not harness.manager.is_open
+
+
+async def test_a_refusal_with_no_code_that_is_not_a_lost_exchange_keeps_the_session(
+    harness: Harness,
+) -> None:
+    """Only a lost exchange discards the client, not every refusal.
+
+    Prevents a refusal upstream raises before sending -- an unauthorised tab,
+    which leaves both counters untouched -- from costing a login on every
+    tick.
+    """
+    await harness.manager.run("timetable", Priority.HIGH, _work())
+
+    with pytest.raises(PronoteAPIError):
+        await harness.manager.run(
+            "homework",
+            Priority.NORMAL,
+            _work(raises=PronoteAPIError("Action not permitted.")),
+        )
+
+    assert harness.manager.is_open
+    assert harness.logins() == 1
 
 
 async def test_a_client_that_will_not_release_cleanly_does_not_break_the_unload(

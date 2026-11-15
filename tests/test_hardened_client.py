@@ -57,6 +57,7 @@ from custom_components.carnet_scolaire.hardened_client import (
     BootstrapDelegated,
     BootstrapUnavailable,
     HardenedClient,
+    SessionDesynchronized,
     _ConfinedRegistry,
     _current_timeouts,
     _HardenedCommunication,
@@ -1516,3 +1517,199 @@ def test_the_credential_shapes_are_logged_without_the_credentials(
     assert f"login={len(secret)}ch/lower=False/hex=False" in caplog.text
     assert "token=8ch/lower=True/hex=True" in caplog.text
     assert "mode=qr_code" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# The order number upstream never checks
+# ---------------------------------------------------------------------------
+
+
+class _Answer:
+    """The little of a ``requests.Response`` that upstream's ``post`` reads."""
+
+    def __init__(self, payload: dict[str, Any], status: int = 200) -> None:
+        self._payload = payload
+        self.status_code = status
+        self.ok = status < 400
+
+    def json(self) -> dict[str, Any]:
+        """A fresh copy each time, as ``requests`` parses afresh each time."""
+        return dict(self._payload)
+
+
+class _AnsweringSession:
+    """A session that answers every POST with what the test computes."""
+
+    def __init__(self, answer: Callable[[], _Answer]) -> None:
+        self._answer = answer
+
+    def request(self, *_args: Any, **_kwargs: Any) -> _Answer:
+        """Answer, without a socket."""
+        return self._answer()
+
+    def close(self) -> None:
+        """Nothing to close."""
+
+
+def _numbered(communication: _HardenedCommunication, number: int) -> str:
+    """An order number, enciphered the way the request's own is."""
+    return communication.encryption.aes_encrypt(str(number).encode()).hex()
+
+
+@contextlib.contextmanager
+def _posting_transport(
+    answer: Callable[[_HardenedCommunication], _Answer],
+) -> Iterator[_HardenedCommunication]:
+    """A real transport, past its bootstrap, answering with ``answer``."""
+    with _bootstrap_transport() as communication:
+        communication.attributes = {"h": "1", "a": "8"}
+        communication.session.close()
+        communication.session = _AnsweringSession(lambda: answer(communication))  # type: ignore[assignment]
+        yield communication
+
+
+def test_a_response_carrying_the_next_order_number_is_accepted() -> None:
+    """The ordinary exchange: ``n`` out, ``n + 1`` back, counter at ``n + 2``.
+
+    Prevents the check from refusing the one answer every healthy session
+    gives -- which would end every login on its first request.
+    """
+    with _posting_transport(
+        lambda c: _Answer({"no": _numbered(c, c.request_number + 1), "dataSec": {}})
+    ) as communication:
+        sent = communication.request_number
+        communication.post("PageAccueil", {})
+
+    assert communication.request_number == sent + 2
+
+
+@pytest.mark.parametrize("offset", [-1, 3])
+def test_a_response_carrying_another_order_number_is_a_desynchronised_session(
+    offset: int,
+) -> None:
+    """The ``TODO`` upstream left: a number other than ``n + 1`` is refused.
+
+    Prevents a session whose counter has parted from the server's from being
+    kept and reused -- for a parent, a child's answer read under the other's
+    name, or a false "session expired".
+    """
+    with (
+        _posting_transport(
+            lambda c: _Answer(
+                {"no": _numbered(c, c.request_number + offset), "dataSec": {}}
+            )
+        ) as communication,
+        pytest.raises(SessionDesynchronized),
+    ):
+        communication.post("PageAccueil", {})
+
+
+@pytest.mark.parametrize("which", ["before", "after"])
+def test_the_order_number_may_be_enciphered_on_either_side_of_a_cipher_change(
+    which: str,
+) -> None:
+    """``FonctionParametres`` swaps the IV mid-exchange; both readings count.
+
+    Prevents a guess about which IV the server used from refusing the first
+    request of every login.
+    """
+    new_iv = bytes(range(16))
+
+    def answer(c: _HardenedCommunication) -> _Answer:
+        expected = str(c.request_number + 1).encode()
+        if which == "after":
+            c.encryption.aes_iv, old = new_iv, c.encryption.aes_iv
+            number = c.encryption.aes_encrypt(expected).hex()
+            c.encryption.aes_iv = old
+        else:
+            number = c.encryption.aes_encrypt(expected).hex()
+        return _Answer({"no": number, "dataSec": {}})
+
+    with _posting_transport(answer) as communication:
+        communication.post("FonctionParametres", {}, decryption_change={"iv": new_iv})
+
+    assert communication.encryption.aes_iv == new_iv
+
+
+@pytest.mark.parametrize("number", [None, "not-hex", "abcd", "00" * 16, True])
+def test_an_order_number_nothing_can_read_is_not_judged(number: object) -> None:
+    """Absent, garbled or under an unknown cipher: the answer is kept.
+
+    Prevents our own assumption about the cipher from turning into a refusal
+    of every response -- a permanent outage built from a guess.
+    """
+    payload: dict[str, Any] = {"dataSec": {}}
+    if number is not None:
+        payload["no"] = number
+    with _posting_transport(lambda _c: _Answer(payload)) as communication:
+        communication.post("PageAccueil", {})
+
+
+@pytest.mark.parametrize(("offset", "refused"), [(1, False), (3, True)])
+def test_a_plain_integer_order_number_is_compared_as_is(
+    offset: int,
+    refused: bool,
+) -> None:
+    """A server answering ``no`` in clear is checked rather than ignored.
+
+    Prevents an unencrypted variant of the protocol from escaping the check.
+    """
+    with _posting_transport(
+        lambda c: _Answer({"no": c.request_number + offset, "dataSec": {}})
+    ) as communication:
+        if refused:
+            with pytest.raises(SessionDesynchronized):
+                communication.post("PageAccueil", {})
+        else:
+            communication.post("PageAccueil", {})
+
+
+def test_an_http_failure_after_the_counter_advanced_is_a_desynchronised_session() -> (
+    None
+):
+    """Upstream adds two on an HTTP 5xx; whether the server counted is unknown.
+
+    Prevents the session from being reused with a counter the server may not
+    share, and keeps the failure free of any ``Erreur.G`` code so it is never
+    mistaken for "session expired".
+    """
+    with (
+        _posting_transport(lambda _c: _Answer({}, status=503)) as communication,
+        pytest.raises(SessionDesynchronized) as caught,
+    ):
+        communication.post("PageAccueil", {})
+
+    assert protocol_error_code(caught.value) is None
+
+
+def test_a_protocol_refusal_keeps_its_code_and_is_not_a_desynchronisation() -> None:
+    """``Erreur.G`` answers come back in order; they are not a lost exchange.
+
+    Prevents ``G = 10`` from being reclassified, which would remove the one
+    replay the session manager is allowed.
+    """
+    with (
+        _posting_transport(
+            lambda _c: _Answer({"Erreur": {"G": 10, "Titre": "expired"}})
+        ) as communication,
+        pytest.raises(PronoteAPIError) as caught,
+    ):
+        communication.post("PageAccueil", {})
+
+    assert not isinstance(caught.value, SessionDesynchronized)
+    assert protocol_error_code(caught.value) == 10
+
+
+def test_a_tab_refused_before_sending_is_not_a_desynchronisation() -> None:
+    """Upstream refuses an unauthorised tab before any request goes out.
+
+    Prevents a client-side refusal, which leaves both counters untouched, from
+    discarding a healthy session -- once per tick, a login per tick.
+    """
+    with (
+        _posting_transport(lambda _c: _Answer({})) as communication,
+        pytest.raises(PronoteAPIError) as caught,
+    ):
+        communication.post("PageVoid", {"Signature": {"onglet": 999}})
+
+    assert not isinstance(caught.value, SessionDesynchronized)
