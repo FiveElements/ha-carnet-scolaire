@@ -28,7 +28,6 @@ from custom_components.carnet_scolaire.gateway import (
     PronoteGateway,
     ProtocolChanged,
     _hex_color,
-    _is_holiday_family,
 )
 from custom_components.carnet_scolaire.options import REQUESTS_PER_BATCH
 
@@ -152,7 +151,8 @@ def test_an_all_day_entry_ends_at_the_midnight_after_its_last_day(
             title="Vacances de Noël",
             start=dt.datetime(2026, 12, 20, 0, 0),
             end=dt.datetime(2027, 1, 3, 0, 0),
-            family=protocol.HOLIDAY_FAMILY,
+            genre=protocol.HOLIDAY_GENRE,
+            color="#FFCCD6",
         ),
     )
 
@@ -162,7 +162,6 @@ def test_an_all_day_entry_ends_at_the_midnight_after_its_last_day(
     assert event.end == dt.datetime(2027, 1, 4, tzinfo=PARIS)
     assert event.iso_bounds() == ("2026-12-20", "2027-01-04")
     assert event.is_holiday
-    assert event.category == protocol.HOLIDAY_FAMILY
 
 
 def test_a_single_day_entry_lasts_exactly_that_day(
@@ -190,7 +189,7 @@ def test_a_timed_class_council_keeps_its_hours_in_the_establishment_s_zone(
             end=dt.datetime(2026, 3, 24, 18, 30),
             all_day=False,
             council=True,
-            family="Conseils de classe",
+            genre=protocol.COUNCIL_GENRE,
         ),
     ).events
 
@@ -242,10 +241,21 @@ def test_a_place_written_as_plain_text_is_kept(
     assert event.location == "CDI"
 
 
+def test_a_place_given_as_a_bare_element_is_read_by_its_label(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """``lieu`` without its ``{"V": …}`` wrapper is the element itself."""
+    (event,) = _decode(
+        gateway, client, protocol.school_event(place={"N": "PLACE-1", "L": "CDI"})
+    ).events
+
+    assert event.location == "CDI"
+
+
 def test_every_optional_field_may_be_absent(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:
-    """No title, no end, no family, no colour, no comment: still an entry.
+    """No title, no end, no genre, no colour, no comment: still an entry.
 
     A missing end is the start; nothing is invented for the rest.
     """
@@ -257,7 +267,7 @@ def test_every_optional_field_may_be_absent(
             end=None,
             all_day=False,
             start=dt.datetime(2026, 3, 25, 10, 0),
-            family=None,
+            genre=None,
             color=None,
         ),
     ).events
@@ -312,36 +322,78 @@ def test_an_entry_that_cannot_be_dated_is_skipped_and_the_rest_kept(
     assert [event.ref for event in facts.events] == ["AGENDA-3"]
 
 
-def test_the_family_label_is_found_in_the_family_list_when_the_entry_omits_it(
+def test_the_category_is_the_family_painted_in_the_entry_s_colour(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:
-    """An entry may name its family by ``N`` only; the response lists the rest."""
-    entry = protocol.school_event(family=None, color=None)
-    entry["famille"] = {"N": "FAMILY-7"}
-    client.responses["PageAgenda"] = protocol.agenda_response(
-        [entry], families=[("FAMILY-7", "Jours fériés")]
+    """A real entry names no family; its ``CouleurCellule`` is its family's.
+
+    The first decoder read a ``famille`` key no real entry carries, and every
+    entry of a live agenda came back without a category. Case is ignored: a
+    colour is compared as it is published.
+    """
+    standard, outing, unmatched, colourless = _decode(
+        gateway,
+        client,
+        protocol.school_event(identifier="AGENDA-1"),
+        protocol.school_event(identifier="AGENDA-2", color="#ff8c00"),
+        protocol.school_event(identifier="AGENDA-3", color="#11B1D2"),
+        protocol.school_event(identifier="AGENDA-4", color=None),
+    ).events
+
+    assert standard.category == "Vie de l'établissement"
+    assert outing.category == "Sorties"
+    assert outing.color == "#ff8c00"
+    assert unmatched.category is None
+    assert unmatched.color == "#11b1d2"
+    assert colourless.category is None
+
+
+def test_a_family_without_a_label_or_a_colour_names_nothing(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """A malformed family is skipped, and of two sharing a colour the first wins."""
+    response = protocol.agenda_response(
+        [protocol.school_event(color="#000000")],
+        families=(("Première", "#000"), ("Seconde", "#000000"), ("Sans", "rouge")),
     )
+    listed = response["dataSec"]["data"]["listeFamilles"]["V"]
+    listed[:0] = ["not a family", {"N": "FAMILY-X", "couleur": "#000"}]
+    client.responses["PageAgenda"] = response
 
     (event,) = gateway.agenda(client).facts.events
 
-    assert event.category == "Jours fériés"
-    assert event.is_holiday
-    assert event.color == "#aabbcc"
+    assert event.category == "Première"
 
 
-def test_the_entry_s_own_colour_wins_over_its_family_s(
+def test_a_holiday_is_recognised_by_its_genre_alone(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:
-    """``CouleurCellule`` first, the family's ``couleur`` when it is absent."""
-    own, inherited = _decode(
+    """Genre 17 (``tgea_JourFerie``) is the only marker a holiday carries.
+
+    Its colour matches no family, so the first decoder -- which looked for
+    holiday words in a family label -- recognised none on a live instance.
+    A title that says "vacances" is not a holiday unless its genre says so.
+    """
+    holiday, titled, council = _decode(
         gateway,
         client,
-        protocol.school_event(identifier="AGENDA-1", color="#3A6EA5"),
-        protocol.school_event(identifier="AGENDA-2", color=None),
+        protocol.school_event(
+            identifier="AGENDA-1",
+            title="Toussaint",
+            genre=protocol.HOLIDAY_GENRE,
+            color="#FFCCD6",
+        ),
+        protocol.school_event(identifier="AGENDA-2", title="Vacances : rappel"),
+        protocol.school_event(
+            identifier="AGENDA-3", genre=protocol.COUNCIL_GENRE, council=True
+        ),
     ).events
 
-    assert own.color == "#3a6ea5"
-    assert inherited.color == "#999999"
+    assert holiday.is_holiday
+    assert holiday.category is None
+    assert not titled.is_holiday
+    assert not council.is_holiday
+    assert council.is_class_council
 
 
 @pytest.mark.parametrize(
@@ -363,24 +415,6 @@ def test_a_colour_is_published_as_six_lower_case_digits_or_not_at_all(
 ) -> None:
     """A card puts it in a style unchecked, so only one spelling gets through."""
     assert _hex_color(raw) == expected
-
-
-@pytest.mark.parametrize(
-    ("label", "expected"),
-    [
-        ("Vacances et jours fériés", True),
-        ("VACANCES SCOLAIRES", True),
-        ("Jour ferie", True),
-        ("Vie de l'établissement", False),
-        ("", False),
-        (None, False),
-    ],
-)
-def test_holidays_are_recognised_by_their_family_s_words(
-    label: str | None, expected: bool
-) -> None:
-    """Case and accents ignored: the family carries no other marker."""
-    assert _is_holiday_family(label) is expected
 
 
 def test_the_key_survives_a_new_session_and_never_contains_the_n(
@@ -498,11 +532,9 @@ def test_the_debug_log_describes_the_response_without_any_of_its_data(
     capture would leak -- no title, no date, no identifier.
     """
     caplog.set_level("DEBUG", logger="custom_components.carnet_scolaire.gateway")
-    entry = protocol.school_event(
-        title="Arret des notes - DEMO-TITLE", family="Vacances DEMO"
-    )
+    entry = protocol.school_event(title="Arret des notes - DEMO-TITLE")
     client.responses["PageAgenda"] = protocol.agenda_response(
-        [entry], families=(("FAM-1", "Famille DEMO"),)
+        [entry], families=(("Famille DEMO", "#3A6EA5"),)
     )
 
     gateway.agenda(client)
@@ -511,9 +543,6 @@ def test_the_debug_log_describes_the_response_without_any_of_its_data(
     message = record.getMessage()
     assert "ListeEvenements" in message
     assert "'DateDebut'" in message
-    assert "'famille'" in message
-    for leaked in ("DEMO-TITLE", "DEMO", "FAM-1", "2026"):
+    assert "'G'" in message
+    for leaked in ("DEMO-TITLE", "DEMO", "FAMILY-0", "3A6EA5", "2026"):
         assert leaked not in message
-    (links,) = [r for r in caplog.records if "agenda links" in r.getMessage()]
-    for leaked in ("DEMO-TITLE", "DEMO", "FAM-1", "2026"):
-        assert leaked not in links.getMessage()

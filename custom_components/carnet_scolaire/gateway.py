@@ -34,7 +34,6 @@ import json
 import logging
 import re
 from typing import TYPE_CHECKING, Any, Final
-import unicodedata
 from urllib.parse import ParseResult, parse_qs, quote, urlparse
 from zoneinfo import ZoneInfo
 
@@ -2192,26 +2191,15 @@ class PronoteGateway:
                 _structure(entries[:1]),
                 _structure(_get(section, "listeFamilles")),
             )
-            # How an entry points at its family is still unknown -- not by
-            # `famille`, absent from real entries. Genre codes and colours
-            # describe no one, so they are the two candidates logged.
-            _LOGGER.debug(
-                "agenda links: entries %s; family colours %s",
-                [
-                    (
-                        _get(entry, "G"),
-                        _get(entry, "CouleurCellule"),
-                        _structure(entry, 3),
-                    )
-                    for entry in entries
-                ],
-                [_get(family, "couleur") for family in _list(section, "listeFamilles")],
-            )
-        families = {
-            str(family.get("N")): family
-            for family in _list(section, "listeFamilles")
-            if isinstance(family, dict) and family.get("N") is not None
-        }
+        # An entry names no family: it is painted in its family's colour, and
+        # that colour is the only link a real response carries.
+        families: dict[str, str] = {}
+        for family in _list(section, "listeFamilles"):
+            if not isinstance(family, dict):
+                continue
+            colour, label = _hex_color(family.get("couleur")), _label_of(family)
+            if colour is not None and label is not None:
+                families.setdefault(colour, label)
 
         items: list[SchoolEvent] = []
         for entry in entries:
@@ -2223,9 +2211,7 @@ class PronoteGateway:
             calls=1,
         )
 
-    def _school_event(
-        self, entry: Any, families: dict[str, dict[str, Any]]
-    ) -> SchoolEvent | None:
+    def _school_event(self, entry: Any, families: dict[str, str]) -> SchoolEvent | None:
         """Decode one agenda entry; ``None`` when it cannot be dated.
 
         An all-day entry's ``DateFin`` is read as **inclusive** -- PRONOTE
@@ -2249,9 +2235,7 @@ class PronoteGateway:
             start = self._instant(began)
             end = max(self._instant(ended), start)
 
-        family = _unwrap(entry.get("famille"))
-        listed = families.get(str(family.get("N")), {})
-        category = _label_of(family) or _label_of(listed)
+        color = _hex_color(entry.get("CouleurCellule"))
         comment = entry.get("Commentaire")
         place = entry.get("lieu")
         return SchoolEvent(
@@ -2260,14 +2244,10 @@ class PronoteGateway:
             start=start,
             end=end,
             all_day=all_day,
-            category=category,
-            color=(
-                _hex_color(entry.get("CouleurCellule"))
-                or _hex_color(family.get("couleur"))
-                or _hex_color(listed.get("couleur"))
-            ),
+            category=families.get(color) if color is not None else None,
+            color=color,
             is_class_council=bool(entry.get("estConseilClasse")),
-            is_holiday=_is_holiday_family(category),
+            is_holiday=entry.get("G") == _AGENDA_PUBLIC_HOLIDAY,
             location=(
                 _label_of(_unwrap(place))
                 if isinstance(place, dict)
@@ -2839,6 +2819,11 @@ def _join_phone(prefix: Any, number: Any) -> str | None:
     return f"+{prefix}{number}"
 
 
+#: ``TypeGenreEvenementAgenda.tgea_JourFerie``: an agenda entry of this genre
+#: is a holiday or a bank holiday. Its colour matches no family of
+#: ``listeFamilles``, so the genre is the only marker.
+_AGENDA_PUBLIC_HOLIDAY: Final = 17
+
 #: The lists naming who an agenda entry concerns, in the order they are read.
 _AUDIENCE_LISTS: Final = ("listePublicIndividu", "listeEleves", "listePublicEntite")
 
@@ -2846,10 +2831,8 @@ _AUDIENCE_LISTS: Final = ("listePublicIndividu", "listeEleves", "listePublicEnti
 _HEX_COLOR: Final = re.compile(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})")
 
 
-def _unwrap(value: Any) -> dict[str, Any]:
+def _unwrap(value: dict[str, Any]) -> dict[str, Any]:
     """An element as a mapping, whether or not it is wrapped in ``{"V": …}``."""
-    if not isinstance(value, dict):
-        return {}
     inner = value.get("V")
     return dict(inner) if isinstance(inner, dict) else dict(value)
 
@@ -2880,24 +2863,6 @@ def _hex_color(raw: Any) -> str | None:
     if len(digits) == 3:
         digits = "".join(digit * 2 for digit in digits)
     return f"#{digits}"
-
-
-def _is_holiday_family(label: str | None) -> bool:
-    """Whether a family label names holidays or bank holidays.
-
-    Recognised by its words, ignoring case and accents: "Vacances et jours
-    fériés" is how one establishment spells it, and the family carries no
-    other marker the official client's deserialiser reads. The label itself
-    stays in ``category``, so a wrong guess remains visible.
-    """
-    if not label:
-        return False
-    folded = "".join(
-        char
-        for char in unicodedata.normalize("NFKD", label.casefold())
-        if not unicodedata.combining(char)
-    )
-    return "vacance" in folded or "ferie" in folded
 
 
 def _parse_datetime(raw: Any) -> dt.datetime | None:

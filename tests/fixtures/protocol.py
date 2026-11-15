@@ -737,12 +737,22 @@ def news_response(entries: list[dict[str, Any]]) -> dict[str, Any]:
 # Agenda -- `PageAgenda`, tab 9
 # ---------------------------------------------------------------------------
 #
-# Shaped after the official client's `ObjetDeserialiser._ajouterEvenement`,
-# which names every field read here; no capture was used. The family is a
-# typed element carrying its own colour, as `ObjetRequetePageAgenda` reads it.
+# Shaped after the keys and types a live response was seen to carry (never
+# its values): an entry names no family. It carries a genre `G` and a colour
+# `CouleurCellule`, and the colour is that of its family in `listeFamilles`.
+# Holidays (genre 17) and class councils (genre 2) match no family colour.
 
-#: The family an establishment files its holidays under.
-HOLIDAY_FAMILY = "Vacances et jours fériés"
+#: ``TypeGenreEvenementAgenda``: a plain entry, a class council, a holiday.
+STANDARD_GENRE = 0
+COUNCIL_GENRE = 2
+HOLIDAY_GENRE = 17
+
+#: The families `agenda_response` lists unless told otherwise: the default
+#: entry's colour is the first one's.
+FAMILIES: tuple[tuple[str, str], ...] = (
+    ("Vie de l'établissement", "#3A6EA5"),
+    ("Sorties", "#FF8C00"),
+)
 
 
 def school_event(
@@ -752,7 +762,7 @@ def school_event(
     start: dt.datetime | None = dt.datetime(2026, 3, 20, 0, 0),
     end: dt.datetime | None = dt.datetime(2026, 3, 20, 23, 59),
     all_day: bool = True,
-    family: str | None = "Vie de l'établissement",
+    genre: int | None = STANDARD_GENRE,
     color: str | None = "#3A6EA5",
     council: bool = False,
     comment: str | None = None,
@@ -773,11 +783,8 @@ def school_event(
         entry["DateDebut"] = _stamp(start)
     if end is not None:
         entry["DateFin"] = _stamp(end)
-    if family is not None:
-        entry["famille"] = {
-            "_T": 24,
-            "V": {"N": f"FAMILY-{family}", "L": family, "G": 0, "couleur": "#999"},
-        }
+    if genre is not None:
+        entry["G"] = genre
     if color is not None:
         entry["CouleurCellule"] = color
     if comment is not None:
@@ -796,9 +803,9 @@ def school_event(
 
 def agenda_response(
     entries: list[dict[str, Any]],
-    families: Sequence[tuple[str, str]] = (),
+    families: Sequence[tuple[str, str]] = FAMILIES,
 ) -> dict[str, Any]:
-    """A ``PageAgenda`` response; ``families`` are ``(N, label)`` pairs."""
+    """A ``PageAgenda`` response; ``families`` are ``(label, colour)`` pairs."""
     return {
         "dataSec": {
             "data": {
@@ -806,8 +813,8 @@ def agenda_response(
                 "listeFamilles": {
                     "_T": 24,
                     "V": [
-                        {"N": identifier, "L": label, "couleur": "#ABC"}
-                        for identifier, label in families
+                        {"N": f"FAMILY-{index}", "L": label, "couleur": colour}
+                        for index, (label, colour) in enumerate(families)
                     ],
                 },
             }
