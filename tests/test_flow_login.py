@@ -223,6 +223,29 @@ def test_the_rotated_credentials_come_back_to_be_persisted(
     assert client.credential_exports == 1
 
 
+def test_the_address_the_token_login_opened_is_trimmed_before_it_is_persisted(
+    client: FakeClient,
+    build: Any,
+) -> None:
+    """The derived mobile address is rebuilt at each login, never stored.
+
+    ``pronotepy`` exports the address it logged in with, and a token login
+    opens ``mobile.parent.html?fd=1&...``. Persisting that would store a query
+    string the entry has promised never to keep (``urls.py``); the trimmed
+    form is enough, since ``build_client`` derives the rest again.
+    """
+    exported = client.export_credentials()
+    exported[CONF_PRONOTE_URL] = (
+        "https://demo.example.invalid/pronote/mobile.parent.html?fd=1&login=true"
+    )
+    with patch.object(client, "export_credentials", return_value=exported):
+        described = probe_account(_credentials_data())
+
+    assert described[CONF_PRONOTE_URL] == (
+        "https://demo.example.invalid/pronote/mobile.parent.html"
+    )
+
+
 def test_reading_the_account_s_shape_costs_no_extra_request(
     client: FakeClient,
     build: Any,

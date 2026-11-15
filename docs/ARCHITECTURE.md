@@ -1997,6 +1997,15 @@ Avec des valeurs manifestement fictives, la transformation ressemble à ceci :
 | `https://compte-factice:secret-factice@demo.example.invalid/pronote/` | `https://demo.example.invalid/pronote/` |
 | `https://demo.example.invalid:8443/pronote/eleve.html#page=1` | `https://demo.example.invalid:8443/pronote/eleve.html` |
 
+Une connexion par jeton (mode QR code) n'ouvre pas cette adresse telle quelle :
+`pronotepy` y envoie l'en-tête `User-Agent: iPhone`, et PRONOTE 2026.2 répond à
+cet en-tête, sur une page sans `fd=1`, par « Votre navigateur est incompatible »
+sans bloc `Start({...})`. `urls.mobile_login_url`, appelé par
+`hardened_client.build_client` à chaque connexion par jeton, reconstruit donc la
+page `mobile.` et la requête que `qrcode_login` ajoute à l'enrôlement ; cette
+forme dérivée n'est jamais stockée (`flow_login._describe` retaille l'adresse
+que la bibliothèque exporte).
+
 Le port non standard est **conservé** — c'est `netloc` et non `hostname` qui est
 repris, parce que certains établissements en publient un — tandis que les
 informations d'authentification, la chaîne de requête et le fragment

@@ -27,7 +27,11 @@ half of the same promise, is skipped in its entirety.
 
 import pytest
 
-from custom_components.carnet_scolaire.urls import public_url, url_host
+from custom_components.carnet_scolaire.urls import (
+    mobile_login_url,
+    public_url,
+    url_host,
+)
 
 #: A pasted deep link of the shape an ENT hands back: a page URL plus a
 #: single-sign-on ticket. Synthetic, and saying so in the value itself.
@@ -272,3 +276,55 @@ def test_an_address_with_no_host_yields_the_empty_string_rather_than_none(
     propagate -- ``urlsplit`` raises ``ValueError`` on an unclosed bracket.
     """
     assert url_host(raw) == ""
+
+
+# ---------------------------------------------------------------------------
+# mobile_login_url: what a token login actually opens
+# ---------------------------------------------------------------------------
+
+#: What ``pronotepy.ClientBase.qrcode_login`` appends to the QR code's address.
+MOBILE_QUERY = "fd=1&bydlg=A6ABB224-12DD-4E31-AD3E-8A39A1C2C335&login=true"
+MOBILE_URL = f"https://demo.example.invalid/pronote/mobile.parent.html?{MOBILE_QUERY}"
+
+
+@pytest.mark.parametrize(
+    "stored",
+    [
+        pytest.param(TRIMMED_URL, id="desktop-page"),
+        pytest.param(
+            "https://demo.example.invalid/pronote/mobile.parent.html",
+            id="mobile-page",
+        ),
+        pytest.param(MOBILE_URL, id="already-derived"),
+        pytest.param(PASTED_URL, id="sso-ticket"),
+    ],
+)
+def test_a_token_login_opens_the_mobile_page_with_fd_1(stored: str) -> None:
+    """Without ``fd=1`` the server answers the mobile User-Agent with no login.
+
+    A token login sends ``User-Agent: iPhone`` (``HEADERS_MOBILE``). On
+    PRONOTE 2026.2, that header on a page without ``fd=1`` gets "Votre
+    navigateur est incompatible" and no ``Start({...})`` block, so every login
+    after the QR enrolment failed as ``BootstrapUnavailable``: only the
+    enrolment worked, because ``qrcode_login`` builds this very address itself.
+    Idempotent, because entries created before the fix stored the derived form;
+    and nothing the user pasted survives, a ticket least of all.
+    """
+    assert mobile_login_url(stored) == MOBILE_URL
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        pytest.param("", id="empty"),
+        pytest.param("nonsense", id="prose"),
+        pytest.param("https://[oops/pronote/parent.html", id="unparseable"),
+    ],
+)
+def test_an_address_that_is_not_one_is_handed_on_unchanged(raw: str) -> None:
+    """The server's own refusal is the better diagnosis, as for ``public_url``.
+
+    Raising here would turn a typo into an "unexpected error" on the very form
+    whose job is to let the user correct it.
+    """
+    assert mobile_login_url(raw) == raw
