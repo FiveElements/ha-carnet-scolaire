@@ -52,8 +52,6 @@ reason to outlive the click, so a copied address -- a link shared by mistake,
 a screenshot of the browser bar -- is dead before it can be reused.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 import hashlib
 import hmac

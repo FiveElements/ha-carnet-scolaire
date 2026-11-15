@@ -18,7 +18,7 @@ bonne, et pas seulement si elle fait passer les tests. -->
 - [ ] `ruff check .` et `ruff format --check .`
 - [ ] `mypy --strict custom_components/carnet_scolaire`
 - [ ] `pytest tests` — au complet, sous Linux, WSL ou Docker
-      (`pytest -p no:homeassistant` ne couvre que la moitié de la suite)
+      (`pytest -p no:pytest_homeassistant` ne couvre que la moitié de la suite)
 - [ ] `python scripts/check_coverage.py coverage.xml` — 80 % global, et 100 %
       sur `ratelimit.py`, `scheduler.py`, `gateway.py`, `delta.py`
 - [ ] `mkdocs build --strict`, si vous avez touché à `docs/`

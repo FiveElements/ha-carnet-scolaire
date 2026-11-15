@@ -30,8 +30,6 @@ anything generic can, because they say something precise about the one item
 the gesture named.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.exceptions import HomeAssistantError

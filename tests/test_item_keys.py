@@ -15,8 +15,6 @@ The fake serves the same content under a different ``N`` to stand for the
 reconnection, which is exactly what the server did.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import datetime as dt
 import re

@@ -8,8 +8,6 @@ signature: read as a property from an entity, a parent account can render the
 wrong child's face (annexe A §5.4).
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.image import ImageEntity

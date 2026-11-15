@@ -1,5 +1,7 @@
 """Map EcoleDirecte JSON payloads to the integration's frozen DTOs."""
 
+# Kept on Python 3.14: `ZoneInfo` is imported under TYPE_CHECKING, and
+# `inspect.signature()` on these functions evaluates their annotations.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping

@@ -23,8 +23,6 @@ different versions makes the corrections unverified. The parser lives in
 is read from the repository and never restated.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path

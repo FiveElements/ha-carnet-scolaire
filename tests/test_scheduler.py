@@ -10,8 +10,6 @@ bounded by the tier's own interval, and an options save must not make all ten
 tiers due at the same instant.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime, timedelta
 
 import pytest

@@ -21,8 +21,6 @@ this file runs on any platform, and it drives the real ``SerialExecutor``
 rather than a stand-in, which is how the deadline behaviour becomes observable.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import logging

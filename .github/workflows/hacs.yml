@@ -12,6 +12,11 @@ on:
 permissions:
   contents: read
 
+# A superseded pull-request run is cancelled; a run on `main` always finishes.
+concurrency:
+  group: hacs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   hacs:
     name: HACS validation

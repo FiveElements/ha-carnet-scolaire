@@ -34,8 +34,6 @@ data -- or a ``KeyError`` whose key is one of :data:`PROTOCOL_KEYS`. Nothing
 else about it is printed.
 """
 
-from __future__ import annotations
-
 import errno
 import re
 import socket

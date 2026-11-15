@@ -23,8 +23,6 @@ A test that searched for a realistic-looking token would tempt somebody to
 paste a real one in, and this file is committed to a public repository.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -51,7 +49,7 @@ from .conftest import CHILDREN, REQUIRES_HASS, child_key
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     from custom_components.carnet_scolaire.account import PronoteAccount
 

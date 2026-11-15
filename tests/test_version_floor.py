@@ -3,7 +3,7 @@
 A version floor is a promise made to somebody at install time: HACS reads
 ``hacs.json`` and refuses the integration on an older instance. The promise is
 only worth something if the number is *exercised*, which is why
-``requirements_test.txt`` pins the plugin release carrying exactly that Home
+``requirements_test.txt`` pins the harness release carrying exactly that Home
 Assistant version rather than a merely recent one -- and why raising the floor
 has twice been done by running the target socle instead of editing the number.
 Both times the run found a product defect no gate could see: ``via_device``,
@@ -26,8 +26,6 @@ instead, by a step that reads ``homeassistant.const.__version__`` back after
 the pinned install.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 import re
@@ -38,9 +36,11 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 BLUEPRINTS = ROOT / "blueprints" / "automation" / "carnet_scolaire"
 
-#: The pin line in ``requirements_test.txt``, whatever version it names.
+#: The pin line in ``requirements_test.txt``, whatever version it names -- a
+#: beta (``2026.11.0b6``) included, for the weeks the harness of a new floor
+#: exists only as one.
 _PIN = re.compile(
-    r"^pytest-homeassistant-custom-component==(?P<version>[0-9.]+)$", re.MULTILINE
+    r"^pytest-homeassistant==(?P<version>[0-9.]+(?:b[0-9]+)?)$", re.MULTILINE
 )
 
 
@@ -76,7 +76,7 @@ def _declared_floor() -> str:
 
 
 def _pinned_plugin() -> str:
-    """The ``pytest-homeassistant-custom-component`` release the suite pins."""
+    """The ``pytest-homeassistant`` release the suite pins."""
     match = _PIN.search((ROOT / "requirements_test.txt").read_text(encoding="utf-8"))
     assert match is not None, "the test stack is no longer pinned to one release"
     return match.group("version")
@@ -103,7 +103,7 @@ def test_the_gated_matrix_row_installs_the_pin_the_repository_declares() -> None
     """
     row = _gated_matrix_row()
 
-    assert row["pytest-hacc"] == _pinned_plugin()
+    assert row["pytest-ha"] == _pinned_plugin()
 
 
 def test_the_gated_matrix_row_is_labelled_with_the_floor_it_tests() -> None:

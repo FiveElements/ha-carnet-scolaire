@@ -8,8 +8,6 @@ school day" would eventually disagree, and the disagreement would show up as an
 automation that fires when its own condition card says it should not.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, Final
 
 from homeassistant.const import (
@@ -28,7 +26,7 @@ from homeassistant.helpers import (
     config_validation as cv,
     entity_registry as er,
 )
-import voluptuous as vol
+import probatio
 
 from .const import DOMAIN
 
@@ -56,8 +54,8 @@ CONDITION_MAP: Final[dict[str, tuple[str, str]]] = {
 
 CONDITION_SCHEMA: Final = cv.DEVICE_CONDITION_BASE_SCHEMA.extend(
     {
-        vol.Required(CONF_TYPE): vol.In(CONDITION_MAP),
-        vol.Optional(CONF_ENTITY_ID): vol.Any(str, None),
+        probatio.Required(CONF_TYPE): probatio.In(CONDITION_MAP),
+        probatio.Optional(CONF_ENTITY_ID): probatio.Any(str, None),
     }
 )
 

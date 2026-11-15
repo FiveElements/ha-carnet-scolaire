@@ -17,8 +17,6 @@ unless the caller declares it. A missing declaration would spend budget invisibl
 is the class of defect this project exists to prevent (§11.1).
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 import re
 from typing import TYPE_CHECKING, Any
@@ -75,17 +73,12 @@ def _listed_file(
     return item.id, item.attachments[0].id
 
 
-def test_the_address_is_built_by_upstream_and_carries_the_session(
+def test_the_address_is_encrypted_by_the_session_and_carries_it(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:
-    """Not re-implemented here, and the test proves which code ran.
-
-    The encrypted segment is produced by ``communication.encryption``, so an
-    address that did not pass through it -- a hand-rolled path, a cached
-    string, a constant -- would not contain the fake's keyed digest. Asserting
-    on the *shape* rather than on a literal is deliberate: the point is that
-    upstream's construction was used, not that it produces any particular
-    bytes.
+    """The segment goes through ``communication.encryption``, and the test
+    proves it: an address that did not -- a cached string, a constant --
+    would not carry the fake's keyed digest.
     """
     homework_id, attachment_id = _listed_file(gateway, client)
     content, declared, cost = gateway.homework_attachment(
@@ -128,6 +121,35 @@ def test_a_refused_download_is_an_error_and_not_an_error_page(
 
     assert refusal.value.status == 403
     assert refusal.value.name == "enonce.pdf"
+
+
+def test_the_server_reads_bare_json_once_it_strips_one_padding(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """Upstream's ``Attachment`` padded the segment twice.
+
+    The server removes one padding and refuses whatever leaves a non-blank
+    byte after the JSON: with a 47-character ``N`` the second padding left
+    bytes of value 12, and the file answered 404 -- so most homework files
+    opened or not depending on the length of an identifier that changes at
+    every login. Run through upstream's real cipher and decrypted as the
+    server does.
+    """
+    from pronotepy.pronoteAPI import _Encryption
+
+    homework_id, attachment_id = _listed_file(gateway, client, n="N" * 47)
+    cipher = _Encryption()
+    client.communication.encryption = cipher  # type: ignore[assignment]
+
+    gateway.homework_attachment(
+        client, homework_id=homework_id, attachment_id=attachment_id, name="enonce.pdf"
+    )
+
+    (address,) = client.communication.session.gets
+    segment = address.split("/FichiersExternes/")[1].split("/")[0]
+    assert cipher.aes_decrypt(bytes.fromhex(segment)) == (
+        b'{"N":"' + b"N" * 47 + b'","Actif":true}'
+    )
 
 
 def test_a_document_opened_after_a_reconnection_is_fetched_by_its_new_identifier(

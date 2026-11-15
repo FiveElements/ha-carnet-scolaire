@@ -18,8 +18,6 @@ while a server that answers badly must **not** -- sending a parent to re-enter
 credentials that are correct is worse than saying nothing.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from pathlib import Path
@@ -134,7 +132,7 @@ from .conftest import CHILDREN, REQUIRES_HASS, child_key
 if TYPE_CHECKING:
     from freezegun.api import FrozenDateTimeFactory
     from homeassistant.core import HomeAssistant
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     from .fixtures.client import FakeClient
 
@@ -1633,7 +1631,7 @@ async def test_an_ed_entry_instantiates_no_pronote_network_primitive(
     hass: HomeAssistant,
 ) -> None:
     """A second backend must not silently inherit PRONOTE's thread and login costs."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -1682,7 +1680,7 @@ async def test_an_ed_account_without_children_follows_child_key_resource_ids(
     hass: HomeAssistant,
 ) -> None:
     """ED persists the selection as minted keys, not a second children list."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -1754,6 +1752,10 @@ def _make_ed_client(
     return factory, transport
 
 
+async def _no_ed_sleep(_seconds: float) -> None:
+    """Stand-in for the ED limiter's sleeper: spacing without the wait."""
+
+
 async def _setup_ed_entry(
     hass: HomeAssistant,
     *,
@@ -1761,7 +1763,7 @@ async def _setup_ed_entry(
     options: dict[str, Any] | None = None,
 ) -> tuple[Any, Any]:
     """Stand an ED entry up through real platform forward."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     factory, _transport = _make_ed_client(script or _ed_collect_script())
     entry = MockConfigEntry(
@@ -1780,6 +1782,12 @@ async def _setup_ed_entry(
             "custom_components.carnet_scolaire.connectors.pronote.SessionManager",
             wraps=PronoteConnectorSessionManager,
         ) as session_manager,
+        # The ED limiter's spacing is real time otherwise: ~4 s of idle event
+        # loop per set-up, which made these the slowest tests in the suite.
+        patch(
+            "custom_components.carnet_scolaire.connectors.ecoledirecte.ed_limiter._sleep",
+            new=_no_ed_sleep,
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -2010,7 +2018,7 @@ async def test_an_ecoledirecte_entry_offers_no_menu_button(
 
 async def test_an_ed_505_at_setup_opens_reauthentication(hass: HomeAssistant) -> None:
     """A runtime 505 is bad credentials, not a silently broken entry."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     factory, _transport = _make_ed_client(
         [
@@ -2044,7 +2052,7 @@ async def test_an_ed_not_ready_retry_restores_the_punitive_limiter(
     hass: HomeAssistant,
 ) -> None:
     """A fresh limiter every 80 s is the weekend-of-thousands-of-logins defect."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     class BoomTransport:
         async def request(self, *_args: object, **_kwargs: object) -> object:

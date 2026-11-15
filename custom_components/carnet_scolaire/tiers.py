@@ -11,8 +11,6 @@ doubles the cost with nothing breaking, and that is the regression this project
 exists to prevent.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, Final
 
 from .const import TIER_PRIORITY, Priority, Tier

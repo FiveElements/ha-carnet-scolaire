@@ -19,8 +19,6 @@ only one that is ever stored, displayed or reported. ``url_host`` narrows it
 further for the cases that only need to say *which* establishment.
 """
 
-from __future__ import annotations
-
 from urllib.parse import urlsplit, urlunsplit
 
 

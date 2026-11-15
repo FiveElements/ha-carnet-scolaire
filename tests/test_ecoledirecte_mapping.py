@@ -3,8 +3,6 @@
 # The plan's tests are copied verbatim, including its intentionally long names.
 # ruff: noqa: E501
 
-from __future__ import annotations
-
 import inspect
 import json
 from pathlib import Path

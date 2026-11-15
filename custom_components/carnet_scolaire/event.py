@@ -19,8 +19,6 @@ the guarantee that an automation reacting to "a grade arrived" finds
 ``sensor.<student>_derniere_note`` already holding it (§5.1).
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 

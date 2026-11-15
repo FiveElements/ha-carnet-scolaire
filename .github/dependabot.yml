@@ -10,9 +10,9 @@ version: 2
 #   not. `pronotepy-watch.yml` raises both together. A Dependabot bump would
 #   move only the first, and the tests would run against a version the
 #   integration does not install.
-# - `pytest-homeassistant-custom-component` is pinned to the declared floor:
-#   the release carrying Home Assistant 2026.9.0, hacs.json's minimum. Raising
-#   it would silently stop testing that floor -- see requirements_test.txt.
+# - `pytest-homeassistant` is pinned to the declared floor: its version is
+#   Home Assistant's, and it carries 2026.11, hacs.json's minimum. Raising it
+#   would silently stop testing that floor -- see requirements_test.txt.
 #
 # Ignoring them here only stops version-update pull requests: a security
 # advisory against either still raises a Dependabot alert.
@@ -30,7 +30,7 @@ updates:
       prefix: chore(deps)
     ignore:
       - dependency-name: pronotepy
-      - dependency-name: pytest-homeassistant-custom-component
+      - dependency-name: pytest-homeassistant
     groups:
       tooling:
         patterns: ['*']

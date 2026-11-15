@@ -16,8 +16,6 @@ The order of operations inside a tick is not incidental:
    data (§4.4).
 """
 
-from __future__ import annotations
-
 import asyncio
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta

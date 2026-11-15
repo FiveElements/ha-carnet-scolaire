@@ -8,8 +8,6 @@ this is the one address the gateway builds itself. The rule of
 gets a key and the service signs it at the click.
 """
 
-from __future__ import annotations
-
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -204,6 +202,37 @@ def test_the_segment_keys_follow_the_web_clients_order(
 
     plaintext = client.communication.encryption.plaintexts[-1]
     assert plaintext.startswith(b'{"N":"DOC-SUJET-1","G":"DevoirSujet","Actif":true}')
+
+
+@pytest.mark.parametrize("role", list(GradeDocumentRole))
+def test_the_server_reads_bare_json_once_it_strips_one_padding(
+    gateway: PronoteGateway, client: FakeClient, role: GradeDocumentRole
+) -> None:
+    """The live defect: the segment was padded twice, and the paper died of it.
+
+    ``aes_encrypt`` pads by itself; padding before it too left ``k`` bytes of
+    value ``k`` after the JSON once the server removed one padding. A JSON
+    blank (9, 10, 13) was tolerated and anything else refused: with a
+    45-character ``N`` the answers ended on 10 and opened, the paper -- two
+    characters shorter -- on 12, and answered 404 for every test.
+
+    Run through upstream's real cipher with an ``N`` of that length for both
+    roles, and decrypted as the server does: one padding removed, then
+    nothing may follow the closing brace.
+    """
+    from pronotepy.pronoteAPI import _Encryption
+
+    _graded(client, subject_ref="N" * 45, correction_ref="N" * 45)
+    cipher = _Encryption()
+    client.communication.encryption = cipher  # type: ignore[assignment]
+
+    _download(gateway, client, role=role)
+
+    (address,) = client.communication.session.gets
+    segment = address.split("/FichiersExternes/")[1].split("/")[0]
+    plaintext = cipher.aes_decrypt(bytes.fromhex(segment))
+    assert plaintext.endswith(b"}")
+    assert json.loads(plaintext)["N"] == "N" * 45
 
 
 def _answering(client: FakeClient, *statuses: int) -> None:

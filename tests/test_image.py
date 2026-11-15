@@ -8,9 +8,7 @@ so a caching mistake here does not cost one request, it costs one per viewer
 per refresh, against a daily cap of a few thousand.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from custom_components.carnet_scolaire.const import Tier
@@ -18,10 +16,11 @@ from custom_components.carnet_scolaire.image import PronoteProfileImage
 from custom_components.carnet_scolaire.ratelimit import TierDeferred
 
 from .conftest import REQUIRES_HASS
+from .fixtures.client import FakeResponse
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     from custom_components.carnet_scolaire.account import PronoteAccount
 
@@ -40,13 +39,11 @@ def _photo_entity(hass: HomeAssistant, account: PronoteAccount) -> PronoteProfil
     )
 
 
-async def _attachment(account: PronoteAccount, parent_client: FakeClient) -> Any:
-    """The fake attachment the first child's photo resolves to."""
-    student_id = account.students[0].id
-    return next(
-        info.profile_picture
-        for info in parent_client.children
-        if str(info.id) == student_id
+def _photo_gets(parent_client: FakeClient) -> int:
+    """How many photo downloads reached the wire."""
+    return sum(
+        url.endswith("/photo.jpg?Session=SESSION-NUMBER")
+        for url in parent_client.communication.session.gets
     )
 
 
@@ -57,20 +54,19 @@ async def test_the_photo_is_fetched_once_and_then_served_from_memory(
 ) -> None:
     """A card re-rendered ten times must cost one request, not ten.
 
-    ``FakeAttachment.data`` counts its reads for exactly this assertion: the
-    second call must come back with the same bytes without touching the
-    attachment again.
+    The fake session records every GET for exactly this assertion: the second
+    call must come back with the same bytes without downloading again.
     """
+    parent_client.communication.session.response = FakeResponse(b"not-a-real-image")
     entity = _photo_entity(hass, account)
-    attachment = await _attachment(account, parent_client)
-    before = attachment.reads
+    before = _photo_gets(parent_client)
 
     first = await entity.async_image()
     second = await entity.async_image()
 
     assert first == b"not-a-real-image"
     assert second == first
-    assert attachment.reads == before + 1
+    assert _photo_gets(parent_client) == before + 1
 
 
 async def test_an_establishment_that_publishes_no_photo_is_asked_only_once(
@@ -85,7 +81,7 @@ async def test_an_establishment_that_publishes_no_photo_is_asked_only_once(
     configuration, not an error.
     """
     for info in parent_client.children:
-        info._photo = None
+        info.raw_resource["avecPhoto"] = False
 
     entity = _photo_entity(hass, account)
 
@@ -96,6 +92,7 @@ async def test_an_establishment_that_publishes_no_photo_is_asked_only_once(
 async def test_a_deferred_photo_may_be_asked_again_later(
     hass: HomeAssistant,
     account: PronoteAccount,
+    parent_client: FakeClient,
 ) -> None:
     """Postponed is not "no photo", and conflating the two is permanent.
 
@@ -107,6 +104,7 @@ async def test_a_deferred_photo_may_be_asked_again_later(
     ``test_ratelimit.py`` -- held at 100 % -- so the refusal is injected at the
     session seam here rather than by draining a budget of twenty thousand.
     """
+    parent_client.communication.session.response = FakeResponse(b"not-a-real-image")
     entity = _photo_entity(hass, account)
     extras = account.extras
     assert extras is not None

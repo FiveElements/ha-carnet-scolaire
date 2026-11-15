@@ -11,8 +11,6 @@ and with it a session, a socket pool and an object read after its session
 closed, which raises ``Erreur.G = 22``.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import datetime as dt
 from typing import get_type_hints

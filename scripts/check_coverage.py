@@ -12,8 +12,6 @@ Indexing by ``Path(filename).name`` would let a second ``ratelimit.py``
 gate while CI stayed green.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET

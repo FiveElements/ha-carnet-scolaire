@@ -15,8 +15,6 @@ Each one only restated ``> 0`` of a numeric sensor that already exists, and a
 entity to keep consistent (annexe A §3.1).
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta

@@ -10,8 +10,6 @@ one that replaced it -- and every "am I in class" question answers twice.
 recognises the same event rather than duplicating it.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta

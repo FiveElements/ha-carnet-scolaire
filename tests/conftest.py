@@ -1,12 +1,10 @@
 """Shared fixtures.
 
-The Home Assistant half comes from ``pytest_homeassistant_custom_component``,
-which supplies ``hass``, ``enable_custom_integrations`` and the recorder
-scaffolding. The rest is this project's own: simulated clocks, a fake pronotepy
-client, and a config entry that never carries a real credential.
+The Home Assistant half comes from ``pytest_homeassistant``, which supplies
+``hass``, ``enable_custom_integrations`` and the recorder scaffolding. The rest
+is this project's own: simulated clocks, a fake pronotepy client, and a config
+entry that never carries a real credential.
 """
-
-from __future__ import annotations
 
 from datetime import UTC, datetime
 import sys
@@ -39,8 +37,8 @@ from .fixtures.client import FakeClient
 
 if TYPE_CHECKING:
     # Annotations only, so they are safe to import unconditionally even though
-    # half of them cannot be *loaded* on Windows: `from __future__ import
-    # annotations` is in force, and this block never runs.
+    # half of them cannot be *loaded* on Windows: annotations are evaluated
+    # lazily (PEP 649), and this block never runs.
     from collections.abc import AsyncIterator, Iterator
 
     from freezegun.api import FrozenDateTimeFactory
@@ -49,9 +47,10 @@ if TYPE_CHECKING:
     from custom_components.carnet_scolaire.account import PronoteAccount
 
 #: Home Assistant's own test harness imports ``fcntl``, so it cannot be loaded
-#: on Windows at all -- not by anything this project does. The plugin is
-#: therefore registered conditionally, which lets a contributor on Windows still
-#: run the half of this suite that has no Home Assistant dependency: the
+#: on Windows at all -- not by anything this project does. It registers itself
+#: through a pytest entry point, so nothing here loads it; what is conditional
+#: is everything that *uses* it, which lets a contributor on Windows still run
+#: the half of this suite that has no Home Assistant dependency: the
 #: limiter, the scheduler, the gateway, the delta detector, the DTOs and the
 #: budget estimator -- which is also the half carrying the 100 % gate.
 #:
@@ -59,13 +58,10 @@ if TYPE_CHECKING:
 #: :data:`REQUIRES_HASS` is the marker the dependent modules skip on.
 HAS_HASS_HARNESS = sys.platform != "win32"
 
-if HAS_HASS_HARNESS:
-    pytest_plugins = ["pytest_homeassistant_custom_component"]
-
 REQUIRES_HASS = pytest.mark.skipif(
     not HAS_HASS_HARNESS,
     reason=(
-        "pytest-homeassistant-custom-component imports fcntl, which does not "
+        "pytest-homeassistant imports fcntl, which does not "
         "exist on Windows; run these under Linux, WSL or Docker, as CI does"
     ),
 )
@@ -259,8 +255,8 @@ def domain_fixture() -> str:
 # The Home Assistant half
 # ---------------------------------------------------------------------------
 #
-# Guarded by `HAS_HASS_HARNESS` for the same reason the plugin is: importing
-# `pytest_homeassistant_custom_component.common` reaches `fcntl` transitively,
+# Guarded by `HAS_HASS_HARNESS` because importing
+# `pytest_homeassistant.common` reaches `fcntl` transitively,
 # so on Windows this block cannot even be defined -- and a bare import at the
 # top of the module would break the half of the suite that does run there.
 
@@ -268,7 +264,7 @@ if HAS_HASS_HARNESS:
     from unittest.mock import patch
 
     from homeassistant.config_entries import ConfigEntryState
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     async def _no_sleep(_seconds: float) -> None:
         """Skip the limiter's spacing wait without skipping its decision.

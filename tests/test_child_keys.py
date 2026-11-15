@@ -14,8 +14,6 @@ half of the suite -- the half that can be run natively on Windows, where the
 adoption class below is skipped for want of the harness.
 """
 
-from __future__ import annotations
-
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Final
 from unittest.mock import patch

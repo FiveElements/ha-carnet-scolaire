@@ -15,8 +15,6 @@ gesture, because repeatedly retrying one is what gets an address suspended, and
 the suspension is undocumented and costly (annexe B §3.1).
 """
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING, Any, Final
 

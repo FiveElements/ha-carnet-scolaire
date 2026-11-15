@@ -2,8 +2,6 @@
 
 # ruff: noqa: PT018 -- the two plan tests are copied verbatim.
 
-from __future__ import annotations
-
 import asyncio
 import base64
 from dataclasses import dataclass

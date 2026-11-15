@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, cast
 
 from ..const import CONF_SOURCE  # noqa: TID252

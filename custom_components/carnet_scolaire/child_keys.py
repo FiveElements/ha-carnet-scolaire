@@ -30,8 +30,6 @@ a pure function over two lists, so it can be tested exhaustively and runs in
 the HA-free half of the suite.
 """
 
-from __future__ import annotations
-
 import re
 from typing import TYPE_CHECKING, Final
 

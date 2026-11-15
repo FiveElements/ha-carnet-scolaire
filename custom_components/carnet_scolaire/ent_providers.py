@@ -30,8 +30,6 @@ Precedence goes to upstream: if a ``pronotepy`` release exports one of these
 names, its own function is used and the local one is ignored.
 """
 
-from __future__ import annotations
-
 import html
 import re
 from typing import TYPE_CHECKING, Any, Final

@@ -14,8 +14,6 @@ Like the limiter, this module knows neither PRONOTE nor Home Assistant: it takes
 an injectable clock and answers questions.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, replace
 from datetime import datetime
 import logging

@@ -30,8 +30,6 @@ wants to press refresh, so inheriting that rule would hide the control at the
 only moment it is useful.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
@@ -53,7 +51,7 @@ from .conftest import CHILDREN, REQUIRES_HASS, child_key
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity import Entity
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    from pytest_homeassistant.common import MockConfigEntry
 
     from custom_components.carnet_scolaire.account import PronoteAccount
 

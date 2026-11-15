@@ -4,8 +4,6 @@ Every page here is hand-written and every address fictional: the login is
 exercised against a stand-in ``requests.Session``, never the network.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any
 

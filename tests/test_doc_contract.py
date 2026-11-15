@@ -15,8 +15,6 @@ seventh event type must fail here, in the same commit, rather than being
 noticed on a dashboard months later.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 import re
 

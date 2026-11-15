@@ -9,7 +9,7 @@ name = "ha-carnet-scolaire"
 version = "0.0.0"
 description = "Home Assistant integration for PRONOTE, designed for automations"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.14.2"
 license = { text = "MIT" }
 authors = [{ name = "Jérôme Morille" }]
 
@@ -175,7 +175,10 @@ implicit_reexport = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-q --strict-markers --strict-config"
+# `-p no:respx`: respx's plugin imports `httpx` at collection, before Home
+# Assistant (2026.11 on) can alias it to `httpx2` -- and HA refuses to start
+# once `httpx` is already loaded.
+addopts = "-q --strict-markers --strict-config -p no:respx"
 filterwarnings = ["error::DeprecationWarning:custom_components.carnet_scolaire.*"]
 
 [tool.coverage.run]

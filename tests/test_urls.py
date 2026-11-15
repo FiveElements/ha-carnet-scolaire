@@ -25,8 +25,6 @@ Windows checkout too -- where ``test_config_flow.py``, which owns the *flow*
 half of the same promise, is skipped in its entirety.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from custom_components.carnet_scolaire.urls import public_url, url_host

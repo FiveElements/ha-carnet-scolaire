@@ -11,8 +11,6 @@ Home Assistant, is worse than no event at all -- it teaches the user to ignore
 the notification.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import datetime as dt
 from zoneinfo import ZoneInfo
