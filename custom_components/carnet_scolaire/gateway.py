@@ -539,6 +539,10 @@ def _establishment_host(root_site: object) -> str | None:
 #: ``G`` on a ``ListePieceJointe`` entry: a link, as opposed to a file.
 _ATTACHMENT_LINK: Final = 0
 
+#: ``G`` on a ``ListeCours`` entry: ``TypeStatutCours.ConseilDeClasse`` in the
+#: web client, which draws it on green. Not a lesson (0, 2, 3 and 4 are).
+_CLASS_COUNCIL: Final = 1
+
 #: The name upstream gives the profile photo's file in its address.
 _PHOTO_NAME: Final = "photo.jpg"
 
@@ -1193,9 +1197,17 @@ class PronoteGateway:
             # the census cannot -- whether the server sends the field at all.
             _LOGGER.debug("timetable entry fields: %s", _field_names(entries[0]))
 
+        # `avecConseilDeClasse` is what the web client sends, and it brings the
+        # class councils in as entries of their own. `pronotepy` never reads
+        # their `G`; decoded as lessons, an evening council moved "end of the
+        # school day" and made a day without lessons a school day.
         lessons = [
             lesson
-            for lesson in (self._lesson(client, entry) for entry in entries)
+            for lesson in (
+                self._lesson(client, entry)
+                for entry in entries
+                if _get(entry, "G") != _CLASS_COUNCIL
+            )
             if lesson is not None
         ]
         return lessons, 1
