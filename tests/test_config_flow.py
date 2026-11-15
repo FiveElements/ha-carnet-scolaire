@@ -2974,6 +2974,89 @@ def _named_entry(
     return entry
 
 
+async def _add_through_credentials(
+    hass: HomeAssistant, outcome: dict[str, Any]
+) -> dict[str, Any]:
+    """Run the add flow to its end with the probe answering ``outcome``."""
+    flow_id = await _start(hass)
+    with patch(
+        "custom_components.carnet_scolaire.config_flow._probe",
+        return_value=outcome,
+    ):
+        return await _submit_credentials(hass, flow_id)
+
+
+async def test_the_same_account_with_a_fresh_signature_cannot_be_added_twice(
+    hass: HomeAssistant, no_spacing: None
+) -> None:
+    """The ``unique_id`` alone never collides: its signature rotates per session.
+
+    Comparing the whole string let the same family be added a second time --
+    every entity twice, two request budgets, twice the logins from one address,
+    which PRONOTE sanctions. Same host, same prefix, a child the entry already
+    follows: that is the account the entry holds, and the add is refused.
+    """
+    entry = _named_entry(hass, ["Enfant Un"])
+
+    result = await _add_through_credentials(
+        hass,
+        {
+            **_outcome(("STUDENT-1", "Enfant Un")),
+            "account_id": f"{TRIMMED_URL}::46#a-rotated-signature",
+        },
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert hass.config_entries.async_entries(DOMAIN) == [entry]
+
+
+async def test_another_family_of_the_same_establishment_can_still_be_added(
+    hass: HomeAssistant, no_spacing: None
+) -> None:
+    """The ``46#`` prefix is shared by every account of a school.
+
+    Refusing on the host and prefix alone would forbid a second family -- or
+    a separated parent -- at the same establishment. None of the entry's
+    children is announced, so the add goes through.
+    """
+    _named_entry(hass, ["Enfant Un"])
+
+    result = await _add_through_credentials(
+        hass,
+        {
+            **_outcome(("OTHER-1", "Autre Enfant")),
+            "account_id": f"{TRIMMED_URL}::46#another-family-signature",
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 2
+
+
+async def test_an_entry_without_recorded_names_does_not_block_an_add(
+    hass: HomeAssistant, no_spacing: None
+) -> None:
+    """Nothing to compare is not a match.
+
+    The reconnection paths pass such an entry so its owner can repair it; the
+    add flow taking that fallback would refuse every other family of the
+    establishment on the strength of an entry that cannot say whose it is.
+    """
+    entry = _named_entry(hass, [])
+    assert not entry.data[CONF_CHILD_KEYS]
+
+    result = await _add_through_credentials(
+        hass,
+        {
+            **_outcome(("STUDENT-1", "Enfant Un")),
+            "account_id": f"{TRIMMED_URL}::46#a-rotated-signature",
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
 async def test_a_password_reconnection_to_another_family_is_refused(
     hass: HomeAssistant, no_spacing: None, caplog: pytest.LogCaptureFixture
 ) -> None:
