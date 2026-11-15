@@ -2831,10 +2831,8 @@ _AUDIENCE_LISTS: Final = ("listePublicIndividu", "listeEleves", "listePublicEnti
 _HEX_COLOR: Final = re.compile(r"#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})")
 
 
-def _unwrap(value: Any) -> dict[str, Any]:
+def _unwrap(value: dict[str, Any]) -> dict[str, Any]:
     """An element as a mapping, whether or not it is wrapped in ``{"V": …}``."""
-    if not isinstance(value, dict):
-        return {}
     inner = value.get("V")
     return dict(inner) if isinstance(inner, dict) else dict(value)
 

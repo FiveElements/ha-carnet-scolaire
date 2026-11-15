@@ -241,6 +241,17 @@ def test_a_place_written_as_plain_text_is_kept(
     assert event.location == "CDI"
 
 
+def test_a_place_given_as_a_bare_element_is_read_by_its_label(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """``lieu`` without its ``{"V": …}`` wrapper is the element itself."""
+    (event,) = _decode(
+        gateway, client, protocol.school_event(place={"N": "PLACE-1", "L": "CDI"})
+    ).events
+
+    assert event.location == "CDI"
+
+
 def test_every_optional_field_may_be_absent(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:
