@@ -92,6 +92,7 @@ async def test_an_establishment_that_publishes_no_photo_is_asked_only_once(
 async def test_a_deferred_photo_may_be_asked_again_later(
     hass: HomeAssistant,
     account: PronoteAccount,
+    parent_client: FakeClient,
 ) -> None:
     """Postponed is not "no photo", and conflating the two is permanent.
 
@@ -103,6 +104,7 @@ async def test_a_deferred_photo_may_be_asked_again_later(
     ``test_ratelimit.py`` -- held at 100 % -- so the refusal is injected at the
     session seam here rather than by draining a budget of twenty thousand.
     """
+    parent_client.communication.session.response = FakeResponse(b"not-a-real-image")
     entity = _photo_entity(hass, account)
     extras = account.extras
     assert extras is not None
