@@ -2198,7 +2198,11 @@ class PronoteGateway:
             _LOGGER.debug(
                 "agenda links: entries %s; family colours %s",
                 [
-                    (_get(entry, "G"), _get(entry, "CouleurCellule"), _structure(entry, 3))
+                    (
+                        _get(entry, "G"),
+                        _get(entry, "CouleurCellule"),
+                        _structure(entry, 3),
+                    )
                     for entry in entries
                 ],
                 [_get(family, "couleur") for family in _list(section, "listeFamilles")],
