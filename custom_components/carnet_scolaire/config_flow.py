@@ -1252,6 +1252,8 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         await self.async_set_unique_id(str(outcome["account_id"]))
         self._abort_if_unique_id_configured()
+        if self._is_already_configured(outcome):
+            return self.async_abort(reason="already_configured")
 
         self._children = list(outcome["children"])
         if len(self._children) > 1:
@@ -1259,6 +1261,29 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
 
         self._data[CONF_CHILDREN] = [child_id for child_id, _ in self._children]
         return self._async_create()
+
+    def _is_already_configured(self, outcome: Mapping[str, Any]) -> bool:
+        """Whether an existing entry already follows the account just reached.
+
+        ``_abort_if_unique_id_configured`` alone compares the whole
+        ``unique_id``, whose signature after ``#`` changes at every session
+        (:func:`_account_identity`): the same account, added twice, never
+        collides there, and two entries mean every entity twice, two request
+        budgets and twice the logins from one address. So the add flow asks
+        what reconfiguration asks -- same establishment, same family
+        (:func:`_same_account_on_host`, :func:`_shares_a_followed_child`).
+
+        One difference, deliberate: an entry with no recorded name is *not*
+        taken for this account. :func:`_shares_a_followed_child` lets such an
+        entry through so its owner can repair it; here the same fallback would
+        refuse every other family of the establishment.
+        """
+        return any(
+            _followed_names(entry.data)
+            and _same_account_on_host(entry.unique_id, outcome["account_id"])
+            and _shares_a_followed_child(entry.data, outcome)
+            for entry in self._async_current_entries(include_ignore=False)
+        )
 
     def _async_reshow(self, errors: dict[str, str]) -> ConfigFlowResult:
         """Re-display the form the user came from, with its errors."""
