@@ -54,3 +54,35 @@ def url_host(raw: str | None) -> str:
     except ValueError:
         return ""
     return host or ""
+
+
+#: The query ``pronotepy.ClientBase.qrcode_login`` appends to the QR code's
+#: address -- constants of the mobile application, not session parameters.
+_MOBILE_LOGIN_QUERY = "fd=1&bydlg=A6ABB224-12DD-4E31-AD3E-8A39A1C2C335&login=true"
+
+
+def mobile_login_url(stored: str) -> str:
+    """The address a token login must open: the mobile page, with ``fd=1``.
+
+    A token login sends ``User-Agent: iPhone``, and PRONOTE answers that header
+    on a page without ``fd=1`` with "Votre navigateur est incompatible" and no
+    ``Start({...})`` block. ``qrcode_login`` builds this address for the
+    enrolment; every later login receives the stored, trimmed one, so it is
+    derived again here, at the moment of use, and never stored.
+
+    Idempotent, and returns an address it cannot parse unchanged, for the
+    reason ``public_url`` gives.
+    """
+    bare = public_url(stored)
+    try:
+        parts = urlsplit(bare)
+    except ValueError:
+        return bare
+    if not parts.scheme or not parts.netloc:
+        return bare
+    directory, _, page = parts.path.rpartition("/")
+    if not page.startswith("mobile."):
+        page = f"mobile.{page}"
+    return urlunsplit(
+        (parts.scheme, parts.netloc, f"{directory}/{page}", _MOBILE_LOGIN_QUERY, "")
+    )

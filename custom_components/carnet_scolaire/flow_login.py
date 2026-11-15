@@ -33,6 +33,7 @@ from .const import (
     LoginMode,
 )
 from .ent_providers import resolve_ent_provider
+from .urls import public_url
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -282,6 +283,10 @@ def _describe(client: HardenedClient, data: Mapping[str, Any]) -> dict[str, Any]
         ),
     }
     described.update(export_credentials(client))
+    if CONF_PRONOTE_URL in described:
+        # A token login opened the derived mobile address (`mobile_login_url`);
+        # only the trimmed form is ever stored.
+        described[CONF_PRONOTE_URL] = public_url(str(described[CONF_PRONOTE_URL]))
     return described
 
 

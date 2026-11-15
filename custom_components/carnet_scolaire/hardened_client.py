@@ -58,6 +58,8 @@ from pronotepy import dataClasses, pronoteAPI
 from pronotepy.exceptions import CryptoError, PronoteAPIError
 import requests
 
+from .urls import mobile_login_url
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
 
@@ -631,6 +633,10 @@ def build_client(
         # too. Never in token mode: the token is the server's, byte for byte.
         username = username.strip()
         password = password.strip()
+    else:
+        # The mobile User-Agent needs the mobile page and `fd=1`, which only
+        # `qrcode_login` adds; the entry stores the trimmed address.
+        pronote_url = mobile_login_url(pronote_url)
 
     with (
         _patched_communication(connect_timeout, read_timeout),

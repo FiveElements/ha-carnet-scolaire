@@ -70,6 +70,7 @@ from custom_components.carnet_scolaire.hardened_client import (
     protocol_error_code,
     release_client,
 )
+from custom_components.carnet_scolaire.urls import mobile_login_url
 
 from .conftest import CHILDREN
 
@@ -913,7 +914,11 @@ def test_every_credential_reaches_the_constructor_unchanged() -> None:
             ent=ent_marker,  # type: ignore[arg-type]
         )
 
-    assert client.args == (URL, "parent-under-test", "not-a-real-password")
+    assert client.args == (
+        mobile_login_url(URL),
+        "parent-under-test",
+        "not-a-real-password",
+    )
     assert client.kwargs == {
         "ent": ent_marker,
         "mode": "token",
@@ -957,7 +962,38 @@ def test_a_typed_username_and_password_lose_their_surrounding_whitespace(
             uuid="UUID-UNDER-TEST",
         )
 
-    assert client.args == (URL, expected_username, expected_password)
+    assert client.args[1:] == (expected_username, expected_password)
+
+
+@pytest.mark.parametrize(
+    ("login_mode", "expected_url"),
+    [
+        (str(LoginMode.QR_CODE), mobile_login_url(URL)),
+        (str(LoginMode.CREDENTIALS), URL),
+        (str(LoginMode.ENT), URL),
+    ],
+)
+def test_only_a_token_login_opens_the_mobile_page(
+    login_mode: str, expected_url: str
+) -> None:
+    """The stored address is the trimmed one; a token login needs ``fd=1``.
+
+    The entry stores ``public_url``'s form, and a token login sends the mobile
+    User-Agent, which PRONOTE 2026.2 answers without a ``Start({...})`` block
+    unless the page carries ``fd=1``: every reconnection of a QR-enrolled entry
+    failed as ``BootstrapUnavailable``. A credentials or ENT login sends the
+    desktop User-Agent to the address as stored, and must keep doing so.
+    """
+    with patch.object(hardened_client, "HardenedClient", _StubClient):
+        client = build_client(
+            login_mode=login_mode,
+            pronote_url=URL,
+            username="parent-under-test",
+            password="not-a-real-password",
+            uuid="UUID-UNDER-TEST",
+        )
+
+    assert client.args[0] == expected_url
 
 
 def test_the_timeouts_are_published_before_the_client_is_constructed() -> None:
