@@ -2192,6 +2192,21 @@ class PronoteGateway:
                 _structure(entries[:1]),
                 _structure(_get(section, "listeFamilles")),
             )
+            # How an entry points at its family is still unknown -- not by
+            # `famille`, absent from real entries. Genre codes and colours
+            # describe no one, so they are the two candidates logged.
+            _LOGGER.debug(
+                "agenda links: entries %s; family colours %s",
+                [
+                    (
+                        _get(entry, "G"),
+                        _get(entry, "CouleurCellule"),
+                        _structure(entry, 3),
+                    )
+                    for entry in entries
+                ],
+                [_get(family, "couleur") for family in _list(section, "listeFamilles")],
+            )
         families = {
             str(family.get("N")): family
             for family in _list(section, "listeFamilles")
