@@ -2182,6 +2182,16 @@ class PronoteGateway:
         entries = _required_list(
             raw, "dataSec", "data", "ListeEvenements", what="the school agenda"
         )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            # The decoder was written from the official client, never from a
+            # capture; this says what a real response holds -- keys and types
+            # only (`_structure`), first entry and response keys.
+            _LOGGER.debug(
+                "agenda response keys: %s; first entry: %s; families: %s",
+                sorted(section),
+                _structure(entries[:1]),
+                _structure(_get(section, "listeFamilles")),
+            )
         families = {
             str(family.get("N")): family
             for family in _list(section, "listeFamilles")

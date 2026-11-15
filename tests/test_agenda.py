@@ -484,3 +484,33 @@ def test_an_entry_that_leaves_the_agenda_announces_nothing(
     detector.agenda("STUDENT-1", _facts(gateway, client, "Un", "Deux"))
 
     assert detector.agenda("STUDENT-1", _facts(gateway, client, "Un")) == []
+
+
+def test_the_debug_log_describes_the_response_without_any_of_its_data(
+    gateway: PronoteGateway, client: FakeClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The family of a real agenda entry could not be found from its decoder.
+
+    The decoder was written from the official client, never from a capture,
+    and on a live instance every entry came back without a category -- so
+    holidays were not recognised. The debug line says what the response
+    really looks like: key names, value types and type codes, and nothing a
+    capture would leak -- no title, no date, no identifier.
+    """
+    caplog.set_level("DEBUG", logger="custom_components.carnet_scolaire.gateway")
+    entry = protocol.school_event(
+        title="Arret des notes - DEMO-TITLE", family="Vacances DEMO"
+    )
+    client.responses["PageAgenda"] = protocol.agenda_response(
+        [entry], families=(("FAM-1", "Famille DEMO"),)
+    )
+
+    gateway.agenda(client)
+
+    (record,) = [r for r in caplog.records if "agenda response keys" in r.getMessage()]
+    message = record.getMessage()
+    assert "ListeEvenements" in message
+    assert "'DateDebut'" in message
+    assert "'famille'" in message
+    for leaked in ("DEMO-TITLE", "DEMO", "FAM-1", "2026"):
+        assert leaked not in message
