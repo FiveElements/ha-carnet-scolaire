@@ -878,6 +878,43 @@ def test_without_any_grid_the_raw_fallback_counts_an_hour_per_place(
     assert lesson.end_inferred is True
 
 
+def test_a_class_council_is_not_a_lesson(
+    gateway: PronoteGateway, client: FakeClient
+) -> None:
+    """``avecConseilDeClasse`` brings councils into ``ListeCours``, as ``G = 1``.
+
+    The web client reads an entry's ``G`` as ``TypeStatutCours`` and draws
+    ``ConseilDeClasse`` (1) on green; ``pronotepy`` ignores the field. Decoded
+    as a lesson, an evening council moved "end of the school day" to 19:00 and
+    made a day without lessons a school day. A replacement (``G = 2``) and an
+    ordinary lesson (``G = 0``) are lessons and stay.
+    """
+    client.responses["PageEmploiDuTemps"] = protocol.timetable_response(
+        [
+            protocol.lesson(identifier="LESSON-1", place=0, genre=0),
+            protocol.lesson(
+                identifier="LESSON-2",
+                start=dt.datetime(2026, 3, 12, 10, 0),
+                place=4,
+                genre=2,
+            ),
+            protocol.lesson(
+                identifier="COUNCIL-1",
+                start=dt.datetime(2026, 3, 12, 17, 30),
+                end=dt.datetime(2026, 3, 12, 19, 0),
+                place=19,
+                subject=None,
+                classrooms=(),
+                genre=1,
+            ),
+        ]
+    )
+    facts = gateway.timetable(client).facts
+
+    assert [lesson.ref for lesson in facts.lessons] == ["LESSON-1", "LESSON-2"]
+    assert {lesson.ref for lesson in facts.all_lessons} == {"LESSON-1", "LESSON-2"}
+
+
 def test_a_lesson_with_no_identifier_or_no_start_is_dropped(
     gateway: PronoteGateway, client: FakeClient
 ) -> None:

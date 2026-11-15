@@ -174,6 +174,7 @@ def lesson(
     memo: str | None = None,
     background_color: str | None = None,
     with_contents: bool = True,
+    genre: int | None = None,
 ) -> dict[str, Any]:
     """One ``ListeCours`` entry.
 
@@ -187,6 +188,10 @@ def lesson(
     PRONOTE serves a slot with no published content -- and how a cancellation
     often arrives. Upstream raises ``ParsingError`` on it, so this switch is
     what exercises the raw fallback decoder.
+
+    ``genre`` is the entry's own ``G``, the web client's ``TypeStatutCours``
+    (0 ordinary, 1 class council, 2 replacement, 3 historical, 4 substitute
+    teacher). Absent by default, as upstream never reads it.
     """
     begins = start if start is not None else dt.datetime(2026, 3, 12, 8, 0)
     entry: dict[str, Any] = {
@@ -209,6 +214,8 @@ def lesson(
         entry["memo"] = memo
     if background_color is not None:
         entry["CouleurFond"] = background_color
+    if genre is not None:
+        entry["G"] = genre
 
     if with_contents:
         contents: list[dict[str, Any]] = []
