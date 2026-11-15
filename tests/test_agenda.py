@@ -514,3 +514,6 @@ def test_the_debug_log_describes_the_response_without_any_of_its_data(
     assert "'famille'" in message
     for leaked in ("DEMO-TITLE", "DEMO", "FAM-1", "2026"):
         assert leaked not in message
+    (links,) = [r for r in caplog.records if "agenda links" in r.getMessage()]
+    for leaked in ("DEMO-TITLE", "DEMO", "FAM-1", "2026"):
+        assert leaked not in links.getMessage()
