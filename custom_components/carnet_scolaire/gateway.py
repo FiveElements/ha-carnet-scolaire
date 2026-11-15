@@ -37,7 +37,6 @@ from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import ParseResult, parse_qs, quote, urlparse
 from zoneinfo import ZoneInfo
 
-from Crypto.Util import Padding
 from pronotepy import dataClasses
 from pronotepy.exceptions import DataError, ParsingError
 import requests
@@ -329,11 +328,18 @@ def _external_file_url(
     the paper under every ``N`` and type tried, while the web client's own
     links to both opened; their encrypted segments share their first 64 bytes,
     which with a 45-to-47 character ``N`` ends exactly after ``"G":"Devoir``.
+
+    Padded **once**, by ``aes_encrypt`` itself. Upstream pads before calling
+    it, so its segment carries a whole extra block: the server removes one
+    padding and parses the rest as JSON, ``k`` bytes of value ``k`` included.
+    Those bytes are harmless only when ``k`` is a JSON blank -- 9, 10 or 13.
+    With a 45-character ``N``, as on one live instance, the answers ended on 10 and
+    opened, and the paper, two characters shorter, ended on 12 and answered
+    404 for every test. The official app's link to the same paper is one
+    block shorter than the doubly padded one was.
     """
     plaintext = json.dumps({"N": ref, "G": genre, "Actif": True}).replace(" ", "")
-    segment = client.communication.encryption.aes_encrypt(
-        Padding.pad(plaintext.encode(), 16)
-    ).hex()
+    segment = client.communication.encryption.aes_encrypt(plaintext.encode()).hex()
     return (
         f"{client.communication.root_site}/FichiersExternes/{segment}/"
         + quote(name, safe="~()*!.'")
