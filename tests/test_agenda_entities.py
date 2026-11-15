@@ -209,7 +209,7 @@ async def test_the_next_school_event_skips_holidays_and_lists_everything_not_ove
         "end": "2026-03-24T18:30:00+01:00",
         "all_day": False,
         "category": None,
-        "color": "#999999",
+        "color": None,
         "is_class_council": True,
         "is_holiday": False,
         "location": "Salle 101",
