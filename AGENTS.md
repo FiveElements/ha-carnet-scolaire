@@ -1,9 +1,8 @@
 # AGENTS.md
 
 Loaded into every agent session, so it is kept short: each rule in one or two
-lines. The reasoning and the incidents behind them are in
-**`AGENTS-REFERENCE.md`** — read the section named in brackets before
-changing the code it covers. `CONTRIBUTING.md` is the human-facing version.
+lines. The reasoning behind them is in **`AGENTS-REFERENCE.md`** — read the
+section named in brackets before changing the code it covers. `CONTRIBUTING.md` is the human-facing version.
 
 ## Working style
 
@@ -20,11 +19,11 @@ changing the code it covers. `CONTRIBUTING.md` is the human-facing version.
 ## Project
 
 Home Assistant custom integration for PRONOTE and EcoleDirecte. Domain
-`carnet_scolaire`, repo `ha-carnet-scolaire`, name "Carnet scolaire"
-(`pronote_ng` / "Pronote NG" until 0.0.32; no domain migration exists, an old
-entry is removed and re-added). `docs/SPECIFICATION.md` and
-`docs/annexe-b-rate-limit.md` are cited by number (`§5.1`, `annexe B §2.4`)
-throughout the source — follow the reference rather than guessing.
+`carnet_scolaire`, repo `ha-carnet-scolaire`, name "Carnet scolaire". An
+entry under the old `pronote_ng` domain is not migrated: remove and re-add it.
+`docs/SPECIFICATION.md` and `docs/annexe-b-rate-limit.md` are cited by number
+(`§5.1`, `annexe B §2.4`) throughout the source — follow the reference rather
+than guessing.
 
 ## Three rules that override convenience [reference: The three rules]
 
