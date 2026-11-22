@@ -6,14 +6,11 @@ qui n'a jamais ouvert ce dépôt et qui doit pouvoir, à la fin, expliquer non
 seulement *où* les choses se trouvent mais *pourquoi* elles sont arrangées
 ainsi.
 
-La source de vérité est le code. Les documents de conception —
-[`SPECIFICATION.md`](SPECIFICATION.md),
-[`annexe-a-entites.md`](annexe-a-entites.md),
-[`annexe-b-rate-limit.md`](annexe-b-rate-limit.md) et la
-[revue contradictoire](revue-contradictoire-v1.md) — ont produit les décisions
-qui suivent, mais l'implémentation les a corrigés en plusieurs endroits. Les
-divergences relevées sont rassemblées à la fin, dans
-« [Écarts avec la spécification](#12-écarts-avec-la-spécification) ».
+La source de vérité est le code. Les exigences sont dans
+[`SPECIFICATION.md`](SPECIFICATION.md), le catalogue des entités dans
+[`annexe-a-entites.md`](annexe-a-entites.md) et l'arithmétique du limiteur dans
+[`annexe-b-rate-limit.md`](annexe-b-rate-limit.md) ; ce document dit comment
+le code les tient.
 
 Un mot de vocabulaire, parce que la confusion coûte cher : le dépôt s'appelle
 **`ha-carnet-scolaire`** et l'intégration s'affiche sous le nom **Carnet scolaire**. Le
@@ -24,10 +21,8 @@ auprès de PRONOTE **et** d'EcoleDirecte, donc aucun des deux noms d'éditeur ne
 convient, et un domaine neutre ne peut entrer en collision avec aucune
 intégration personnalisée qui occupe `pronote` ou `ecoledirecte` — deux
 composants qui réclament le même domaine ne cohabitent pas, Home Assistant en
-charge un et ignore l'autre. Jusqu'à la 0.0.32, l'intégration s'appelait
-*Pronote NG* (domaine `pronote_ng`, dépôt `ha-pronote-ng`) ; Home Assistant ne
-sait pas migrer un domaine, et une entrée créée sous l'ancien nom se supprime
-puis se rajoute.
+charge un et ignore l'autre. Home Assistant ne sait pas migrer un domaine :
+une entrée créée sous le domaine `pronote_ng` se supprime puis se rajoute.
 
 ---
 
@@ -44,7 +39,6 @@ puis se rajoute.
 9. [Le flow de configuration](#9-le-flow-de-configuration)
 10. [Sécurité et vie privée](#10-sécurité-et-vie-privée)
 11. [La qualité](#11-la-qualité)
-12. [Écarts avec la spécification](#12-écarts-avec-la-spécification)
 
 ---
 
@@ -61,7 +55,7 @@ n'est pas « afficher PRONOTE » mais **rendre les automatisations simples à
 ordinaire doit pouvoir s'écrire sans template Jinja. Cet objectif est ce qui
 explique la forme de presque tout le reste — des états numériques plutôt que
 du texte formaté, des `binary_sensor` pour les prédicats, des entités `event`
-pour les changements, des *device triggers* nommés, et huit blueprints livrés
+pour les changements, des *device triggers* nommés, et neuf blueprints livrés
 en français et en anglais dans `blueprints/automation/carnet_scolaire/{fr,en}/`.
 
 La contrainte structurante, elle, vient d'ailleurs. PRONOTE ne publie aucune
@@ -86,11 +80,10 @@ précise, et un déplacement de version demande de relire deux fichiers.
 ### 2.1 Les couches
 
 Le code se lit en quatre couches, de la plus abstraite à la plus contrainte.
-La voie vers le réseau n'est plus la passerelle Pronote : c'est un
-**connecteur** (spécification connecteurs §3.1). Auth, transport, budget et
-décodage vivent dedans. Au-dessus, l'ordonnanceur, le delta, les coordinateurs
-et les plateformes ne voient qu'une couture ; `tiers.py` ne fait plus que
-`collect` + instantané + delta.
+La voie vers le réseau est un **connecteur** : authentification, transport,
+budget et décodage vivent dedans. Au-dessus, l'ordonnanceur, le delta, les
+coordinateurs et les plateformes ne voient qu'une couture ; `tiers.py` ne fait
+que `collect` + instantané + delta.
 
 **Le cœur de domaine** ne connaît ni un protocole scolaire ni Home Assistant.
 Il contient l'ordonnanceur (`scheduler.py`), le détecteur de delta
@@ -98,8 +91,8 @@ Il contient l'ordonnanceur (`scheduler.py`), le détecteur de delta
 la lecture et l'estimation des options (`options.py`) et la normalisation
 d'URL (`urls.py`). Ces modules prennent des horloges injectables et répondent
 à des questions ; c'est ce qui les rend testables à 100 % sans réseau et sans
-instance Home Assistant. Les DTO restent ceux de Pronote — le pivot interne
-n'est pas un second modèle « école » (spécification connecteurs §3.2). Le
+instance Home Assistant. Les DTO sont ceux de Pronote — le pivot interne
+n'est pas un second modèle « école ». Le
 pivot **cartes**, lui, est le JSON d'attributs de
 [l'annexe A §2.1](annexe-a-entites.md#21-forme-des-éléments).
 
@@ -111,13 +104,12 @@ doit survivre aux objets qui l'ont ouvert. Une entry Ecoledirecte ne construit
 ni `SerialExecutor`, ni `SessionManager`, ni le `RateLimiter` Pronote.
 
 **La couture `SchoolConnector`** *est* la voie réseau. `build_connector()`
-lit `source` sur l'entrée (absente = Pronote, spécification connecteurs §3.6)
-et rend une implémentation. Un connecteur = un compte d'une source ; deux
-sources dans le foyer = deux entries. Les capacités (`tiers`, `writes`,
-`services`) commandent ce qui est collecté, exposé en entité et proposé dans
-les options (spécification connecteurs §3.4).
+lit `source` sur l'entrée (absente = Pronote) et rend une implémentation. Un
+connecteur = un compte d'une source ; deux sources dans le foyer = deux
+entries. Les capacités (`tiers`, `writes`, `services`) commandent ce qui est
+collecté, exposé en entité et proposé dans les options.
 
-* **Pronote** — `PronoteConnector` possède encore toute la pile historique :
+* **Pronote** — `PronoteConnector` possède toute la pile PRONOTE :
   `session.py`, `ratelimit.py` (annexe B : compteur chiffré, `Erreur.G`,
   5–7 requêtes par login), `gateway.py` et `hardened_client.py`. Ces deux
   derniers restent les seuls à importer des *types de données* `pronotepy`.
@@ -126,20 +118,19 @@ les options (spécification connecteurs §3.4).
   `ecoledirecte_api` 0.3.0 (`ed_client.py`) et le mapping vers les DTO
   (`ed_mapping.py`). Seul `connectors/ecoledirecte/` voit le JSON Aplim. Le
   paquet PyPI `ecoledirecte` n'est **pas** une dépendance : son `backoff`
-  relancerait un login hors admission, et son journal DEBUG fuit le jeton
-  (spécification connecteurs §7.1). La version d'API est la constante
+  relancerait un login hors admission, et son journal DEBUG fuit le jeton. La
+  version d'API est la constante
   `ECOLEDIRECTE_API_VERSION` dans `ed_client.py` ; le workflow
   `ecoledirecte-watch` la compare chaque semaine à `APIVERSION` lu dans le
   sdist ou la *wheel* PyPI, **échoue** s'ils divergent, et ouvre une *pull
-  request* qui met à jour la constante. Un 517 en production, c'est cette
-  sonde en retard, pas un « réessayer ».
+  request* qui met à jour la constante. Un 517 signale cette constante en
+  retard, pas un « réessayer ».
 
 Les deux limiteurs isolent leurs compteurs. Ils partagent la *forme* de
 décision (`admit` / `TierDeferred` / `LimiterState`), les clés d'options et
-la politique d'heures creuses, jamais les octets ni le garde-fou de flow
-(spécification connecteurs §3.3). Ecoledirecte v1 ne collecte que
-`TIMETABLE`, `HOMEWORK`, `MARKS` et `ATTENDANCE` ; `SESSION` n'est jamais
-passé à `async_collect` (spécification connecteurs §3.5).
+la politique d'heures creuses, jamais les octets ni le garde-fou de flow. Le
+connecteur EcoleDirecte ne collecte que `TIMETABLE`, `HOMEWORK`, `MARKS` et
+`ATTENDANCE` ; `SESSION` n'est jamais passé à `async_collect`.
 
 **La couche Home Assistant** : `__init__.py` (setup et teardown), les sept
 plateformes d'entités, `config_flow.py` et `flow_login.py`, `services.py`,
@@ -277,8 +268,8 @@ ordre qui n'est pas indifférent.
    `PronoteAPIError`, `TimeoutError` et `OSError` deviennent
    `ConfigEntryNotReady` **sans** réparation. La position de ce dernier bras
    au-dessus de l'attrape-tout `ConnectorError` n'est pas cosmétique : un jeton
-   de session expiré y ouvrait sinon une carte demandant un rapport de bug —
-   qu'aucun chemin de code ne referme — pour une condition réparée au réessai
+   de session expiré n'ouvre pas de carte demandant un rapport de bug — qu'aucun
+   chemin de code ne refermerait — pour une condition réparée au réessai
    suivant, le connecteur ayant déjà oublié ses jetons. La distinction compte :
    répondre « identifiants invalides » à un serveur qui répond mal envoie
    l'utilisateur ressaisir un mot de passe correct.
@@ -288,13 +279,11 @@ ordre qui n'est pas indifférent.
    la main.
 6. **Le device compte est créé ici**, avant le forwarding des plateformes
    (`async_setup_entry`, `__init__.py`). Chaque device enfant déclare
-   `via_device` sur lui,
-   et les sept plateformes sont forwardées en parallèle : au premier
-   démarrage, les devices enfants étaient créés avant l'existence de leur
-   parent, ce que Home Assistant signale par « references a non existing
-   via_device » et sanctionne en aplatissant l'arbre. Le défaut se réparait au
-   redémarrage suivant, ce qui est exactement pourquoi il avait survécu à la
-   revue.
+   `via_device` sur lui, et les sept plateformes sont forwardées en
+   parallèle : créé plus tard, le parent n'existerait pas encore quand les
+   devices enfants le référencent, ce que Home Assistant signale par
+   « references a non existing via_device » et sanctionne en aplatissant
+   l'arbre jusqu'au redémarrage suivant.
 7. Forwarding des plateformes, enregistrement des services, écoute des
    changements d'options.
 
@@ -309,11 +298,10 @@ fuit vaut mieux qu'une instance figée.
 Un changement d'options provoque un **rechargement** de l'entrée
 (`PronoteOptionsFlow`, `config_flow.py`, un `OptionsFlowWithReload`) et non une
 reconfiguration en place. L'intégration n'enregistre **aucun** écouteur de mise
-à jour : Home Assistant 2026.9 signale comme une erreur, cassante en 2026.12,
-tout `async_update_reload_and_abort` sur une entrée qui en porte un, c'est-à-dire
+à jour : Home Assistant signale comme une erreur tout
+`async_update_reload_and_abort` sur une entrée qui en porte un, c'est-à-dire
 chaque réauthentification et chaque reconfiguration d'un compte chargé. Le
-formulaire ne recharge qu'une entrée **chargée**, comme l'écouteur, qui n'existait
-qu'entre une mise en place réussie et le déchargement. C'est le comportement de
+formulaire ne recharge qu'une entrée **chargée**. C'est le comportement de
 Home Assistant, et c'est pourquoi la
 préservation des échéances passe par `export_state` / `import_state` et non
 par `FetchScheduler.reconfigure` — voir §4.4.
@@ -322,9 +310,9 @@ par `FetchScheduler.reconfigure` — voir §4.4.
 
 | Surface | Où | Contenu |
 | --- | --- | --- |
-| Plateformes | `sensor`, `binary_sensor`, `calendar`, `todo`, `event`, `image`, `button` (`PLATFORMS`, `__init__.py`) | 15 capteurs primitifs, 17 capteurs « compteur + liste », 8 séries d'historique par période close, 8 capteurs de diagnostic, 9 `binary_sensor` métier plus un `throttled`, 3 calendriers, 1 liste de devoirs, 9 entités `event`, 1 image, 2 boutons |
+| Plateformes | `sensor`, `binary_sensor`, `calendar`, `todo`, `event`, `image`, `button` (`PLATFORMS`, `__init__.py`) | capteurs primitifs, capteurs « compteur + liste », séries d'historique par période close, capteurs de diagnostic, `binary_sensor` métier plus un `throttled`, 4 calendriers, 1 liste de devoirs, 10 entités `event`, 1 image, 2 boutons — le catalogue complet est l'[annexe A](annexe-a-entites.md) |
 | Services | `services.py`, `services.yaml` | `refresh`, `get_ical_url`, `get_identity`, `mark_homework_done`, `mark_information_read`, `send_message`, `generate_timetable_pdf`, `get_rate_limit_status` |
-| Device automations | `device_trigger.py`, `device_condition.py`, `device_action.py` | 14 déclencheurs, 10 conditions, 4 actions |
+| Device automations | `device_trigger.py`, `device_condition.py`, `device_action.py` | 16 déclencheurs, 10 conditions, 4 actions |
 | Registres | `_account_device` / `_student_device`, `entity.py` | un device par compte, un device par enfant en `via_device` |
 | Diagnostics | `diagnostics.py` | téléchargement par entrée et par device |
 | Repairs | `async_open_credentials_issue` et les trois autres, `account.py` | `daily_cap_near`, `invalid_credentials`, `bootstrap_failed`, `account_unreadable`, `mfa_required` |
@@ -344,8 +332,7 @@ une adresse IP, quel que soit le nombre d'enfants suivis.
 `custom_components/carnet_scolaire/ratelimit.py` est le cœur du design. Il est
 aussi le module le plus long après `sensor.py` et `gateway.py`, et le seul dont
 le docstring d'ouverture énumère les propriétés porteuses avant le premier
-`import` — parce que chacune d'elles corrige un défaut réel trouvé en revue,
-non un risque hypothétique.
+`import` — parce que le reste du code suppose chacune d'elles.
 
 ### 3.1 Ce qui est puni, et par quoi
 
@@ -378,9 +365,9 @@ requêtes, mesurées sur une horloge monotone (`_spacing_wait`,
 `ratelimit.py`). Défauts : 20 jetons, 240 requêtes/heure. Le seau
 démarre **plein**, pour ne pas pénaliser la première salve du simple fait que
 l'intégration vient de démarrer. Et il est autorisé à devenir **négatif** : un
-découvert n'est pas écrêté à zéro, sinon chaque dépassement était pardonné, une
-salve d'appels coûteux ne coûtait rien à rembourser et le débit horaire ne
-signifiait plus rien (`_record_requests`, `ratelimit.py`).
+découvert n'est pas écrêté à zéro, sinon chaque dépassement serait pardonné,
+une salve d'appels coûteux ne coûterait rien à rembourser et le débit horaire
+ne signifierait plus rien (`_record_requests`, `ratelimit.py`).
 
 **Couche 3 — plafond journalier.** `max_requests_per_day`, réinitialisé au
 changement de date locale, et *seulement vers l'avant* (`_roll_day`,
@@ -389,7 +376,7 @@ nominale d'environ 180 par jour — un facteur onze, assumé comme filet de
 sécurité contre un défaut logiciel et non comme contrainte d'exploitation.
 Reculer la date — correction NTP, machine mal réglée au démarrage — adopte la
 nouvelle date **sans rien remettre à zéro** : réinitialiser sur tout changement
-de date re-accordait le budget entier *et* le plafond de connexions à chaque
+de date re-accorderait le budget entier *et* le plafond de connexions à chaque
 recul d'horloge. Le seau, lui, est laissé tranquille dans les deux cas : il
 lisse l'heure et n'a pas d'opinion sur la date.
 
@@ -434,26 +421,29 @@ qui ne les verrait pas décrirait une autre intégration que celle qui tourne.
 
 Deux détails de ces compteurs sont porteurs.
 
-Le premier est **la classification de l'échec**, et c'est ce qu'il y avait de
-plus important à ne pas rater dans ce module. Un mot de passe erroné ne lève
+Le premier est **la classification de l'échec**, le point le plus important à
+ne pas rater dans ce module. Un mot de passe erroné ne lève
 **pas** `PronoteAPIError` : le déchiffrement du challenge échoue et `_login`
 lève `CryptoError`, ou bien `_login` renvoie `False` parce que la clé `cle` est
 absente de la réponse `Authentification`. Branché sur la mauvaise exception, le
-compteur censé protéger l'adresse ne se serait jamais incrémenté — le garde-fou
-aurait existé dans la documentation et pas dans le code qui tourne. C'est ce
+compteur censé protéger l'adresse ne s'incrémenterait jamais — le garde-fou
+existerait dans la documentation et pas dans le code qui tourne. C'est ce
 que l'énumération `LoginOutcome` (`ratelimit.py`) nomme explicitement,
 avec six issues : `SUCCESS`, `BAD_CREDENTIALS`, `TRANSPORT`, `BOOTSTRAP`,
 `MFA_REQUIRED`, `UNDECODABLE`.
 
-Le second est que **toute tentative compte, réussie ou non**. Ne compter que
-les succès laissait un compte défaillant tenter sans borne pendant que le
-compteur censé l'arrêter restait à zéro.
+Le second est que **toute tentative compte, réussie ou non**
+(`RateLimiter.logins_today`) : ce qui doit être borné est le trafic
+d'authentification envoyé à l'établissement, et une tentative qui échoue lui
+coûte autant qu'une réussie. Ne compter que les succès laisserait un compte
+défaillant tenter sans borne pendant que le compteur censé l'arrêter reste à
+zéro.
 
 Enfin, les requêtes d'une connexion sont imputées à la clé
 `LOGIN_COST_KEY = "login"` et non à `str(Tier.SESSION)`
 (`ratelimit.py`). Le palier `session` ne coûte rien — périodes, classe
 et établissement arrivent avec la connexion — donc imputer là les cinq à sept
-requêtes faisait lire le seul palier gratuit comme la chose la plus chère que
+requêtes ferait lire le seul palier gratuit comme la chose la plus chère que
 l'intégration fasse, sur un attribut de diagnostic qu'on demande aux
 utilisateurs de consulter pour régler leur budget. Et `login` n'est pas un
 palier : il n'est donc jamais candidat au sacrifice et n'apparaît pas dans
@@ -480,10 +470,10 @@ async with self._admission:
 result = await fn()
 ```
 
-Débité **à la sortie**, le comportement était le suivant : deux appelants — un
-batch programmé et un service invoqué pendant ce batch — lisaient le même
-`_last_call`, calculaient la même attente, la dormaient ensemble et tiraient à
-la même milliseconde. Le résultat est le compteur de requêtes désynchronisé de
+Débités **à la sortie**, deux appelants — un batch programmé et un service
+invoqué pendant ce batch — liraient le même `_last_call`, calculeraient la même
+attente, la dormiraient ensemble et tireraient à la même milliseconde. Le
+résultat serait le compteur de requêtes désynchronisé de
 la première ligne du tableau du §3.1, **produit par la couche même qui existe
 pour l'empêcher**. Charger à l'admission, sous le verrou, est ce qui transforme
 la couche 1 d'une intention en une garantie.
@@ -492,9 +482,9 @@ La même logique vaut pour les connexions (`RateLimiter.login`,
 `ratelimit.py`), avec une seconde raison qui lui est propre : une
 annulation pendant la poignée de main — entrée déchargée, sauvegarde
 d'options, arrêt — lève `CancelledError` à travers tous les `except` de
-`session.py`, donc `note_login` n'était jamais atteint alors que le fil de
-travail achevait quand même la connexion. Cinq à sept requêtes atteignaient
-l'établissement et n'apparaissaient dans aucun compteur.
+`session.py`, donc un débit placé après la connexion ne serait jamais atteint
+alors que le fil de travail achève quand même la connexion : cinq à sept
+requêtes atteindraient l'établissement sans apparaître dans aucun compteur.
 
 Corollaire assumé : **rien n'est jamais remboursé**. La requête est partie au
 moment où quoi que ce soit peut échouer, et un limiteur qui ne compterait que
@@ -504,9 +494,9 @@ les succès laisserait une boucle défaillante tourner sans borne
 ### 3.5 La réconciliation `GatewayResult.calls` ↔ limiteur
 
 Le coût demandé au seau doit être le coût débité. Demander un jeton en
-prélevant six laissait le palier `history` vider quatre fois la capacité de
-salve par heure sans aucune attente, ce qui supprime exactement le lissage pour
-lequel la couche 2 existe.
+prélevant six laisserait le palier `history` vider quatre fois la capacité de
+salve par heure sans aucune attente, ce qui supprimerait exactement le lissage
+pour lequel la couche 2 existe.
 
 Mais le coût *a priori* déclaré par l'appelant n'est pas toujours le coût réel.
 Chaque fonction de la passerelle renvoie donc un `GatewayResult` qui porte
@@ -534,10 +524,10 @@ sequenceDiagram
 ```
 
 C'est ce qui rend `GatewayResult.calls` **porteur et non décoratif**. Sans
-cela, le limiteur ne voyait jamais que le coût déclaré, et un accès accidentel
+cela, le limiteur ne verrait que le coût déclaré, et un accès accidentel
 à une propriété paresseuse — `Information.content`, `Period.grades`,
-`Discussion.messages` — plaçait de vraies requêtes que l'espacement, le seau
-et le plafond journalier manquaient tous les trois, la vérité n'apparaissant
+`Discussion.messages` — placerait de vraies requêtes que l'espacement, le seau
+et le plafond journalier manqueraient tous les trois, la vérité n'apparaissant
 que dans un champ de diagnostic que personne ne compare.
 
 La réconciliation est **asymétrique** : un appel qui coûte *moins* que déclaré
@@ -565,28 +555,27 @@ inattendue et importante : la péremption doit **exclure la nuit**. Avec les
 heures creuses activées — le défaut — une pause de huit heures dépasse
 `stale_after` fois l'intervalle de tous les paliers rapides ; sans cette
 exclusion, l'emploi du temps, les devoirs, les actualités et la messagerie
-passaient `unavailable` à 06:00 **chaque matin**. Une entité indisponible
+passeraient `unavailable` à 06:00 **chaque matin**. Une entité indisponible
 déclenche des automatisations à faux, ce qui en fait la pire façon disponible
 de dire « rien ne s'est passé cette nuit ».
 
 Le calcul de durée passe par `_elapsed` (`ratelimit.py`), qui
 convertit en UTC avant de soustraire : retrancher deux `datetime` conscients
 partageant le **même** objet `tzinfo` fait sauter à CPython la recherche
-d'offset, donc « 01:30 jusqu'à 06:00 » valait quatre heures et demie le jour du
+d'offset, donc « 01:30 jusqu'à 06:00 » vaudrait quatre heures et demie le jour du
 passage à l'heure d'été là où trois heures et demie s'écoulent réellement.
 
 **Maintiens.** Un maintien (`hold`) refuse tout appel pendant une durée. Quatre
 raisons, hiérarchisées par `_HOLD_SEVERITY` (`ratelimit.py`) :
 `BACKOFF` (1) < `MFA_HOLD` (2) < `BOOTSTRAP_HOLD` (3) <
 `CREDENTIALS_HOLD` (4). Un maintien n'est **jamais remplacé** par un moins
-grave : sans cet ordre, une seule erreur de transport dégradait un maintien
-d'une heure en un repli de trente secondes, et le succès suivant l'effaçait —
-le maintien s'évaporait donc purement et simplement.
+grave : sans cet ordre, une seule erreur de transport dégraderait un maintien
+d'une heure en un repli de trente secondes, que le succès suivant effacerait.
 
 Le maintien MFA mérite un mot. Quand PRONOTE réclame le code à deux facteurs
 que cette intégration refuse délibérément de stocker, aucune quantité de
 tentatives ne peut réussir, et chacune coûte cinq à sept requêtes. Laissé sans
-borne, cela produisait des milliers de tentatives par jour — précisément le
+borne, cela produirait des milliers de tentatives par jour — précisément le
 geste qui fait suspendre une adresse. C'est donc un **maintien** et non un
 simple drapeau, et sa seule sortie est `reset_after_reauth()`, c'est-à-dire un
 humain qui fournit le code (`ratelimit.py`).
@@ -596,15 +585,15 @@ humain qui fournit le code (`ratelimit.py`).
 plafond. Le *full jitter* évite que plusieurs instances Home Assistant du même
 établissement se resynchronisent sur le même créneau après une panne. L'exposant
 est écrêté **avant** le décalage à `_MAX_BACKOFF_EXPONENT = 40`, parce que
-calculer `2**1024` d'abord lève `OverflowError` — ce qui transformait un repli
-profond en plantage.
+calculer `2**1024` d'abord lève `OverflowError` — ce qui transformerait un
+repli profond en plantage.
 
 `retry_delay()` (`ratelimit.py`) existe séparément, et sa raison est
 subtile : `backoff_delay()` vaut zéro tant qu'il n'y a pas eu d'échecs
 *consécutifs*, ce qui est exactement le cas d'une connexion refusée — mauvais
 identifiants, code réclamé, bootstrap illisible laissent tous ce compteur à
-zéro. Reporter de zéro seconde rend le palier dû au tick suivant, et dix
-paliers tentent alors dix connexions par tick : le geste de connexions
+zéro. Reporter de zéro seconde rend le palier dû au tick suivant, et onze
+paliers tentent alors onze connexions par tick : le geste de connexions
 échouées répétées qui est la seule sanction contre laquelle on ne peut pas
 ruser.
 
@@ -614,22 +603,20 @@ fonctionne. Mais il ne lève pas le drapeau `throttled` de sa propre autorité �
 `_maybe_clear_throttled` (`ratelimit.py`) vérifie qu'aucun maintien
 n'est actif, que la fraction du plafond est sous le plus bas des seuils de
 sacrifice et que le plafond de connexions n'est pas atteint. L'effacer
-inconditionnellement à chaque succès rendait le plafond journalier silencieux :
-un seul appel `HIGH` réussi remettait le drapeau à zéro pendant que les paliers
-`LOW` et `NORMAL` étaient encore abandonnés, et `binary_sensor` correspondant
-repassait à `off` tous les quarts d'heure.
+inconditionnellement à chaque succès rendrait le plafond journalier
+silencieux : un seul appel `HIGH` réussi remettrait le drapeau à zéro pendant
+que les paliers `LOW` et `NORMAL` sont encore abandonnés.
 
 ### 3.7 L'état qui doit survivre à l'objet
 
 `PronoteAccount` construit son propre `RateLimiter` dans `__init__`. Home
 Assistant répond à un `ConfigEntryNotReady` par un retry avec un repli plafonné
-à quatre-vingts secondes. Chaque tentative construisait donc un limiteur qui
-n'avait jamais entendu parler du maintien d'une heure que la tentative
-précédente venait d'ouvrir : un établissement en panne un week-end se voyait
-demander une connexion fraîche toutes les quatre-vingts secondes pendant
-soixante-et-une heures, contre un plafond configuré de vingt-quatre par jour,
-pendant que `calls_today` rapportait cinq — parce que chaque rapporteur était
-un objet différent.
+à quatre-vingts secondes. Sans transfert d'état, chaque tentative construirait
+un limiteur ignorant le maintien d'une heure que la tentative précédente vient
+d'ouvrir : un établissement en panne se verrait demander une connexion fraîche
+toutes les quatre-vingts secondes, au mépris du plafond de vingt-quatre par
+jour, pendant que `calls_today` rapporterait un chiffre minuscule — chaque
+rapporteur étant un objet différent.
 
 `export_state` / `import_state` (`ratelimit.py`) et le magasin
 `login_guard.limiter_state_store` (`login_guard.py`) sont la réponse.
@@ -730,9 +717,9 @@ bougé — le tick suivant reprendra les mêmes paliers — alors que mettre en 
 laisserait un serveur lent construire un arriéré qui arriverait ensuite sous
 la forme exacte de la salve que le battement unique existe pour empêcher.
 
-### 4.2 Les dix paliers et leur coût
+### 4.2 Les paliers et leur coût
 
-`Tier` (`const.py`) énumère onze valeurs : dix paliers de données, plus
+`Tier` (`const.py`) énumère douze valeurs : onze paliers de données, plus
 `SESSION` qui n'en est pas un. `SESSION` porte les faits qui arrivent avec la
 connexion elle-même — périodes, classe, établissement, lus dans `func_options`
 et `parametres_utilisateur`, déjà en mémoire une fois authentifié — et coûte
@@ -759,6 +746,7 @@ flowchart LR
     DISC["discussions · 60 min · 2 req en moyenne, jusqu a 4"]
     EVAL["evaluations · 720 min · 1 req"]
     MENUS["menus · 1440 min · 1.14 req"]
+    AGENDA["agenda · 1440 min · 1 req"]
     STATIC["static · 1440 min · 1 req"]
     HIST["history · 1440 min · 4 req par periode close"]
   end
@@ -793,12 +781,10 @@ non d'une déduction :
 * **`timetable` à 2.** `Client.lessons()` boucle `for week in range(...)` et
   poste `PageEmploiDuTemps` une fois **par semaine**, puis filtre côté client.
   Demander « aujourd'hui et demain » coûte donc exactement la même requête que
-  demander la semaine entière — ce qui a fait replier le palier « semaine »
-  dans celui-ci. Le palier a longtemps coûté 1,14 : une semaine, plus la
-  suivante le seul jour où *demain* la franchissait, c'est-à-dire le dimanche.
-  Le lundi restait donc inconnu pendant tout le week-end. L'horizon est
-  maintenant les deux semaines à chaque collecte, et le coût déclaré est
-  l'ordre de grandeur haut : la passerelle écarte une semaine hors année
+  demander la semaine entière, d'où un seul palier pour l'emploi du temps.
+  L'horizon est la semaine courante **et** la suivante à chaque collecte —
+  sans la seconde, le lundi resterait inconnu tout le week-end — et le coût
+  déclaré est l'ordre de grandeur haut : la passerelle écarte une semaine hors année
   scolaire (`gateway.PronoteGateway._timetable_weeks`) et dépense alors moins
   que déclaré, ce que le limiteur ne rembourse pas — délibérément.
 * **`marks` à 2, avec quatre jeux de données pour une requête.** En amont,
@@ -823,14 +809,22 @@ non d'une déduction :
   (`options.py`). Une période close ne peut pas changer, donc la relire
   toutes les trois heures dépenserait des requêtes sur un résultat constant :
   c'est pourquoi ce palier est quotidien, et pourquoi il n'émet aucun
-  événement.
+  événement. L'option `history_periods` (`OPT_HISTORY_PERIODS`, 0 = toutes
+  les périodes closes) en limite le nombre ; `account.py` la lit, mais le
+  formulaire d'options ne l'offre pas.
+
+Les onze intervalles sont bornés par `TIER_INTERVAL_RANGE` (1 à 1440 minutes,
+`const.py`), le même intervalle pour tous : aucun palier n'a de borne propre.
+`MAX_INTERVAL_FOR_EVENT_TIERS`, qui plafonnerait `timetable` à une heure, est
+déclaré dans `const.py` et n'a aucun lecteur — comme `CONFIGURABLE_TIERS`,
+`CONF_ACCOUNT_KIND`, `FUNC_TEACHING_STAFF` et `FUNC_DISCUSSIONS`.
 
 Un mécanisme fin mérite d'être signalé sur `discussions` : un fil que la
 passerelle n'a **pas** développé conserve son ancien compteur de non-lus
 (`tiers.py`). Enregistrer le nouveau compteur pour tous les fils
-signifiait qu'un fil poussé au-delà du plafond de développement ne redevenait
-jamais éligible — son compteur ne remontait plus jamais depuis la valeur
-stockée — et tous les messages qu'il recevait ensuite arrivaient avec
+signifierait qu'un fil poussé au-delà du plafond de développement ne
+redevient jamais éligible — son compteur ne remonte plus depuis la valeur
+stockée — et que tous les messages qu'il reçoit ensuite arrivent avec
 `author: null` et `created: null`.
 
 ### 4.3 L'ordre de service, et le bouton
@@ -850,10 +844,10 @@ trouve les paliers déjà demandés et le tick déjà en cours.
 
 Le détail du calcul de l'élévation vaut la peine d'être lu
 (`scheduler.py`) : un *boost* remonte le palier d'un rang, **plancher
-juste au-dessous de `CRITICAL`**. Lui donner le rang −1 le faisait surclasser
-le palier session, donc un bouton de rafraîchissement sur `history` — six
-requêtes, priorité `LOW` — était servi le premier, vidait le seau et
-l'allocation `max_wait`, et `timetable`, de priorité `HIGH`, était ensuite
+juste au-dessous de `CRITICAL`**. Lui donner le rang −1 le ferait surclasser
+le palier session, donc un bouton de rafraîchissement sur `history` — plusieurs
+requêtes, priorité `LOW` — serait servi le premier, viderait le seau et
+l'allocation `max_wait`, et `timetable`, de priorité `HIGH`, serait ensuite
 différé : l'inverse exact de l'ordre de sacrifice. Le bouton demande un
 laissez-passer de priorité, pas la suprématie.
 
@@ -865,7 +859,7 @@ offert.
 
 Une sauvegarde d'options recharge l'entrée, et un rechargement construit un
 ordonnanceur neuf dont chaque `last_collected` vaut `None` — ce qui rend les
-dix paliers immédiatement dus. `export_state` / `import_state`
+onze paliers immédiatement dus. `export_state` / `import_state`
 (`scheduler.py`) transportent les instants de dernière collecte à
 travers le rechargement, via `hass.data` sous une clé propre
 (`account._saved_schedule`, `account.py`) : c'est de l'état d'exécution
@@ -876,10 +870,8 @@ puisque les valeurs sont monotones.
 l'origine monotone a bougé — un redémarrage plutôt qu'un rechargement — donc
 la valeur ne doit pas être crue.
 
-Le docstring de `export_state` note l'histoire de cette correction :
-préserver `last_collected` dans `reconfigure` était la bonne idée visant la
-mauvaise couture, parce que rien n'appelait jamais `reconfigure` — Home
-Assistant recharge, il ne reconfigure pas.
+C'est `export_state` et non `reconfigure` qui préserve `last_collected` :
+Home Assistant recharge une entrée, il ne la reconfigure pas.
 
 ### 4.5 La péremption
 
@@ -910,7 +902,7 @@ Le protocole numérote ses requêtes avec un compteur chiffré :
 `_Communication.post` chiffre `request_number`, l'écrit aussi dans le chemin de
 l'URL, et avance de deux. **Deux appels concurrents sur une même session
 désynchronisent ce compteur et cassent la session.** Et
-`hass.async_async_add_executor_job` utilise un pool de fils partagé, donc deux
+`hass.async_add_executor_job` utilise un pool de fils partagé, donc deux
 travaux lancés ensemble *sont* concurrents.
 
 D'où : un `ThreadPoolExecutor(max_workers=1)` et un `asyncio.Lock` **par
@@ -929,11 +921,11 @@ indivisible.
 
 Un **second** verrou, `_gate` (`session.py`), est tenu à travers
 « choisir un client, attendre le budget, appeler, réessayer » comme un tout.
-Sans lui, un service invoqué pendant un tick capturait un client, attendait son
-espacement, et se réveillait pour poster sur un client qu'un retry concurrent
-sur `Erreur.G = 10` avait déjà fermé — produisant un échantillon d'expiration
-fallacieux, une troisième connexion et un palier en échec à partir d'un seul
-chevauchement.
+Sans lui, un service invoqué pendant un tick capturerait un client, attendrait
+son espacement, et se réveillerait pour poster sur un client qu'un retry
+concurrent sur une expiration a déjà fermé — produisant un échantillon
+d'expiration fallacieux, une troisième connexion et un palier en échec à partir
+d'un seul chevauchement.
 
 L'arrêt de l'exécuteur n'appelle **jamais** `shutdown(wait=True)` depuis la
 boucle d'événements. Un fil peut être au milieu d'une requête au moment du
@@ -959,10 +951,9 @@ Deux modes sont offerts en option d'entrée
 * **`LAZY`** — le défaut et la valeur recommandée : garder la session, et ne se
   reconnecter que lorsque le serveur dit qu'elle a expiré. Quels codes le
   disent est `SESSION_EXPIRED_CODES` et non un nombre unique : voir § 5.4.
-* **`PER_BATCH`** — une connexion par batch. C'est ce que la spécification v1
-  prescrivait, conservé comme échappatoire explicite pour un établissement dont
-  la politique serait inhabituelle et qu'on préfère épingler plutôt que
-  découvrir.
+* **`PER_BATCH`** — une connexion par batch, offerte comme échappatoire
+  explicite pour un établissement dont la politique serait inhabituelle et
+  qu'on préfère épingler plutôt que découvrir.
 
 La défendabilité de `LAZY` repose sur un **argument de dominance**, et il faut
 l'énoncer précisément parce qu'une version approximative est fausse.
@@ -990,9 +981,9 @@ Lever la conclusion exige une **contre-preuve** — une session qui a survécu �
 un intervalle d'inactivité au moins aussi long que le plus court de ceux qui
 avaient tué une session — et non simplement le fait que l'appel suivant une
 connexion fraîche réussisse, ce qui est toujours le cas
-(`_note_survival`, `session.py`). Sans cela, la conclusion ne survivait
-pas à un seul appel et la stratégie oscillait indéfiniment, payant une requête
-supplémentaire à chaque batch.
+(`_note_survival`, `session.py`). Sans cela, la conclusion ne survivrait
+pas à un seul appel et la stratégie oscillerait indéfiniment, payant une
+requête supplémentaire à chaque batch.
 
 La mesure elle-même est un minimum, pas une moyenne
 (`SessionLifetime.observed_minutes`, `models.py`) : une expiration
@@ -1004,13 +995,11 @@ connexion peut échouer en `Erreur.G = 10` pour des raisons étrangères à un
 délai d'inactivité, et un tel échantillon épinglerait la durée mesurée près de
 zéro pour le reste de l'exécution.
 
-Un piège de comptabilité mérite d'être mentionné, parce qu'il a coûté cher :
-`PER_BATCH` signifie une connexion par **batch**. Comparer la stratégie seule
-rendait `_reconnect_required()` vrai à chaque `run()`, et `run()` est appelé une
-fois par couple `(enfant, palier)` — donc un tick d'un compte à deux enfants
-avec trois périodes closes demandait **36 connexions complètes** contre un
-plafond de 24, et l'intégration mourait avant la fin de son premier batch. D'où
-`_session_batch_id` (`session.py`).
+Un piège de comptabilité : `PER_BATCH` signifie une connexion par **batch**,
+et `run()` est appelé une fois par couple `(enfant, palier)`. Se reconnecter à
+chaque `run()` ferait demander à un tick d'un compte à deux enfants avec trois
+périodes closes **36 connexions complètes**, contre un plafond de 24. D'où
+`_session_batch_id` (`session.py`), qui rattache la connexion au batch.
 
 ### 5.3 Le cycle de vie, en machine à états
 
@@ -1031,7 +1020,7 @@ stateDiagram-v2
     state Connectee {
         [*] --> Ouverte
         Ouverte --> Ouverte : appel reussi, note_success
-        Ouverte --> Expiree : Erreur G egal 10
+        Ouverte --> Expiree : Erreur G egal 8 ou 10
         Expiree --> Ouverte : reconnexion immediate et rejeu de l appel
         Ouverte --> Degradee : trois expirations consecutives
         Degradee --> Ouverte : contre preuve, gap superieur au minimum mesure
@@ -1081,33 +1070,31 @@ la stratégie paresseuse est mesurable. Le module enregistre l'échantillon de
 durée de vie, ferme le client, en construit un neuf et rejoue l'appel — à
 travers le limiteur, donc en payant le coût.
 
-Les deux codes, et non le seul que documente la spécification : un
-établissement réel a répondu `8`, avec pour `Erreur.Titre` « La page a
-expiré ! », c'est-à-dire le même énoncé en d'autres mots. `pronotepy` n'a pas
-de libellé pour `8` et le rend en « Unknown error from pronote: 8 » — une
-chaîne, pas une classification ; le code, lui, est bien porté par l'exception.
-N'avoir reconnu que `10` a coûté sept heures de données figées, et la forme de
-cette panne est ce qui justifie le reste de ce paragraphe : la session était
-morte côté serveur alors que `is_open` répondait encore vrai, aucune branche
-n'atteignait donc `_reopen`, chaque tentative échouait, chaque échec creusait
-le repli exponentiel, et aucun appel ne pouvait réussir pour le remettre à
-zéro. Ce n'est pas une pause qui se résorbe : c'est un puits, dont seul un
-redémarrage sort l'instance.
+Les deux codes : un établissement peut répondre `8`, avec pour
+`Erreur.Titre` « La page a expiré ! », c'est-à-dire le même énoncé en d'autres
+mots. `pronotepy` n'a pas de libellé pour `8` et le rend en « Unknown error
+from pronote: 8 » — une chaîne, pas une classification ; le code, lui, est bien
+porté par l'exception. Un code d'expiration non reconnu est un puits, et c'est
+ce qui justifie le reste de ce paragraphe : la session est morte côté serveur
+alors que `is_open` répond encore vrai, aucune branche n'atteint donc
+`_reopen`, chaque tentative échoue, chaque échec creuse le repli exponentiel,
+et aucun appel ne peut réussir pour le remettre à zéro. Seul un redémarrage en
+sortirait l'instance.
 
 Le rejeu est **borné à un** (`_replay_on_a_fresh_session`), et cette borne est
 ce qui rend l'élargissement de l'ensemble prudent plutôt que téméraire. Chaque
 code de l'ensemble est une affirmation sur ce que le serveur voulait dire, et
 une affirmation peut être fausse ailleurs. Réessayé sans plafond, un code mal
 classé ne coûte pas un capteur périmé : il coûte une connexion par palier et
-par tick — dix paliers contre un plafond de vingt-quatre épuisent la journée
+par tick — onze paliers contre un plafond de vingt-quatre épuisent la journée
 en trois ticks puis continuent — c'est-à-dire exactement le geste des
 connexions échouées répétées, la seule sanction que l'annexe B § 1 déclare
 incontournable. Un second refus sur une session ouverte à l'instant part donc
 au repli.
 
 **Une session sans succès depuis une heure est abandonnée**
-(`PRESUMED_DEAD_AFTER_SECONDS`). C'est la forme générale du correctif
-précédent, pour le prochain code que personne n'a encore vu. `is_open` répond
+(`PRESUMED_DEAD_AFTER_SECONDS`). C'est la forme générale de la règle
+précédente, pour le prochain code que personne n'a encore vu. `is_open` répond
 « est-ce que je détiens un client », un fait sur ce processus qui n'énonce rien
 sur le serveur. Un code inconnu, un serveur qui cesse de répondre sans le dire,
 un établissement qui invalide les sessions selon son propre calendrier : tout
@@ -1122,10 +1109,10 @@ connexion supplémentaire à 06:00, pas une par heure.
 **`G = 22`, objet d'une session précédente.** Reconnue **par type et non par
 code**. `_Communication.post` lève `ExpiredObject` sur sa propre branche,
 *avant* celle qui attache `pronote_error_code`, donc cette erreur arrive sans
-code du tout. Ne tester que le code rendait toute cette branche morte, et un
-`G = 22` tombait dans le repli générique — immobilisant un serveur parfaitement
-sain parce que *nous* avions laissé fuir un objet à travers la frontière de
-session. Ce cas est journalisé comme un bug de cette intégration, et il est
+code du tout. Ne tester que le code rendrait toute cette branche morte, et un
+`G = 22` tomberait dans le repli générique — immobilisant un serveur
+parfaitement sain parce que *nous* aurions laissé fuir un objet à travers la
+frontière de session. Ce cas est journalisé comme un bug de cette intégration, et il est
 relevé : la frontière DTO l'exclut par construction, donc son apparition est un
 défaut à signaler et jamais un incident réseau.
 
@@ -1155,14 +1142,14 @@ Deux pièges sont documentés dans le code et valent d'être répétés.
 `_TRANSPORT_ERRORS` vaut `(OSError,)` et non `(TimeoutError, ...)` : aucune des
 défaillances que `requests` lève n'est un `PronoteAPIError`, et — le piège —
 aucune n'est un `TimeoutError`, parce que `requests.Timeout` hérite de
-`OSError`. Donc `except TimeoutError` n'attrapait **rien**, et une école en
-panne un week-end produisait un GET de bootstrap non compté toutes les cinq
-minutes, sans aucun repli, pendant que `calls_today` rapportait zéro.
+`OSError`. Donc `except TimeoutError` n'attraperait **rien**, et une école en
+panne produirait un GET de bootstrap non compté toutes les cinq minutes, sans
+aucun repli, pendant que `calls_today` rapporterait zéro.
 
 `ChildNotFound` est un `PronoteAPIError` en amont, donc sans traitement séparé
-il ouvrait un maintien de repli sur un serveur parfaitement sain parce que
-*cette* intégration avait demandé un identifiant d'enfant qui n'est plus sur le
-compte.
+il ouvrirait un maintien de repli sur un serveur parfaitement sain parce que
+*cette* intégration aurait demandé un identifiant d'enfant qui n'est plus sur
+le compte.
 
 ### 5.5 La rotation des identifiants
 
@@ -1173,7 +1160,7 @@ pas le re-persister signifie perdre l'accès au démarrage suivant.
 puis appelle le rappel de persistance, et `PronoteAccount._async_persist_credentials`
 (`account.py`) écrit dans l'entrée de configuration.
 
-Un échec d'écriture est **bruyant**. L'avaler silencieusement laissait le
+Un échec d'écriture est **bruyant**. L'avaler silencieusement laisserait le
 serveur avec le nouveau jeton, la mémoire avec le nouveau jeton, et le stockage
 avec un jeton mort — avec pour seul symptôme, au redémarrage suivant, un QR
 code à rescanner.
@@ -1181,17 +1168,14 @@ code à rescanner.
 C'est aussi une raison pour laquelle la stratégie paresseuse compte au-delà de
 l'arithmétique : à une connexion par jour, il y a **une** fenêtre par jour dans
 laquelle un arrêt brutal entre la rotation côté serveur et l'écriture locale
-laisse un jeton mort. À soixante-quatre connexions par jour, il y en avait
-soixante-quatre.
+laisse un jeton mort. Une connexion par batch en ouvrirait des dizaines.
 
 ### 5.6 L'arrivée d'un enfant, sans rechargement
 
-Un élève inscrit sur un compte parent en cours d'année n'était visible
-qu'après un rechargement de l'entrée : la liste des enfants est lue une fois,
-par `PronoteAccount._async_load_session_facts`, et le palier `SESSION` est
-exclu des paliers collectés — aucun tick ne revenait donc la lire. Recharger
-n'est pas un correctif : cela jette tous les instantanés que le compte
-détient.
+La liste des enfants est lue par `PronoteAccount._async_load_session_facts`,
+et le palier `SESSION` est exclu des paliers collectés : aucun tick ne revient
+la lire. Recharger l'entrée pour voir un élève inscrit en cours d'année n'est
+pas une solution : cela jette tous les instantanés que le compte détient.
 
 La liste est relue **au moment où une connexion a lieu**, jamais par une sonde
 à elle. (`SessionManager._announce_children`, `session.py`) prévient le
@@ -1209,10 +1193,9 @@ pas encore vu relance l'appairage de
 choix méritent d'être énoncés :
 
 * **La sélection est rangée en clés frappées**, jamais en identifiants de
-  ressource. Rangée en identifiants, elle suivait la valeur même que PRONOTE
-  renouvelle : chaque connexion qui renommait l'enfant en faisait un « nouveau
-  venu », son identifiant était ajouté, et un compte à un enfant en a compté
-  onze, dont aucun ne correspondait plus. La table des clés garde maintenant
+  ressource. Rangée en identifiants, elle suivrait la valeur même que PRONOTE
+  renouvelle : chaque connexion qui renomme l'enfant en ferait un « nouveau
+  venu » et ajouterait un identifiant. La table des clés garde
   *chaque* enfant annoncé, suivi ou non : un enfant décoché dans le flow y a
   sa fiche et reste hors de la sélection, si bien qu'une rotation, reconnue
   par la fiche, ne le fait jamais revenir. Une sélection encore en
@@ -1221,12 +1204,10 @@ choix méritent d'être énoncés :
   jamais été décliné — la sélection a été choisie parmi les enfants qui
   existaient *alors*. Il reçoit une clé, est suivi, et sa clé rejoint la
   sélection, réécrite dans l'entrée.
-* **Une écriture de donnée ne recharge plus.** Seul le formulaire d'options
+* **Une écriture de donnée ne recharge pas.** Seul le formulaire d'options
   recharge (`PronoteOptionsFlow`, `config_flow.py`), et il ne voit que les
-  options : une écriture dans `entry.data` ne réveille plus rien. Du temps de
-  l'écouteur de mise à jour, qui se déclenchait à toute écriture, il fallait une
-  garde ; sans elle, appairer l'enfant rechargeait l'entrée — exactement ce que
-  la manœuvre cherche à éviter.
+  options : appairer l'enfant écrit dans `entry.data` sans recharger l'entrée
+  — ce que la manœuvre cherche justement à éviter.
 
 Côté entités, (`async_add_per_student`, `entity.py`) garde le rappel
 `async_add_entities` vivant et rejoue la différence à chaque publication du
@@ -1244,10 +1225,10 @@ connexion, qui peut survenir au milieu de n'importe quel appel. Chaque requête
 bornée à une période (notes, bulletin, présences, évaluations, périodes closes)
 repasse donc par (`PronoteGateway.in_this_session`, `gateway.py`), dans l'appel
 et sur le client qui le place : la période y est retrouvée **par sa position**,
-et le `N` posté est celui de la session en cours. Sans cela, le lot qui se
-reconnectait postait le `N` de la session précédente sur un compte parent, et
-un compte élève — dont la liste d'enfants ne change jamais, donc dont les faits
-n'étaient jamais relus — le faisait à chaque collecte jusqu'au redémarrage.
+et le `N` posté est celui de la session en cours. Sans cela, un lot qui se
+reconnecte posterait le `N` de la session précédente — et sur un compte élève,
+dont la liste d'enfants ne change jamais et dont les faits de session ne sont
+donc jamais relus, à chaque collecte jusqu'au redémarrage.
 Aucune requête de plus : `ListePeriodes` est déjà en mémoire depuis la
 connexion. Une position que la session ne liste plus fait échouer le palier
 (`PeriodNotInSession`, `gateway.py`) plutôt que de poster l'ancien `N` ou de
@@ -1265,14 +1246,18 @@ manuelle d'un appareil périmé.
 publique par **appel protocolaire**, des DTO gelés en sortie. Avec
 `hardened_client.py`, c'est le seul module à importer les types de données
 `pronotepy`, donc le seul à relire lors d'un changement de version et le seul
-point à doubler dans les tests.
+point à doubler dans les tests. Les **classes d'exception** de `pronotepy`,
+elles, traversent : `session.py`, `__init__.py`, `service_errors.py`,
+`flow_login.py` et `ent_providers.py` les importent pour classer un échec —
+`session.py` doit distinguer `CryptoError` de `PronoteAPIError` pour que le
+garde-fou IP fonctionne (§5.4) — sans jamais manipuler un objet de données.
+Une montée de version se relit donc dans ces deux fichiers pour les données,
+et se vérifie dans ces cinq-là pour les exceptions.
 
 ### 6.1 Deux règles de décodage
 
-**Dédupliquer sans réimplémenter.** La spécification v1 concluait qu'il fallait
-décoder les réponses brutes à la main, ce qui contredisait son propre refus de
-reprendre la dette de décodage amont — puis la reprenait. Or les classes de
-données de `pronotepy` acceptent le dictionnaire nu : `Average(json)`,
+**Dédupliquer sans réimplémenter.** Les classes de données de `pronotepy`
+acceptent le dictionnaire nu : `Average(json)`,
 `Absence(json)`, `Delay(json)`, `Evaluation(json)`, `Report(data)`, et
 `Lesson(client, json)` / `Punishment(client, json)` avec un client. La forme est
 donc : **un `post()` brut par onglet, les sous-listes confiées aux classes
@@ -1307,9 +1292,9 @@ illisible coûte cette entrée, jamais le palier entier.**
 
 Elle est nécessaire parce que `pronotepy` construit ses listes dans des
 compréhensions avec des résolveurs *stricts* : un seul élément servi sans un
-champ optionnel levait `ParsingError` depuis l'intérieur de la compréhension et
-faisait échouer **tout** le palier — emportant avec lui la liste de devoirs, le
-calendrier et les deux capteurs correspondants.
+champ optionnel lève `ParsingError` depuis l'intérieur de la compréhension et,
+sans garde, ferait échouer **tout** le palier — emportant avec lui la liste de
+devoirs, le calendrier et les deux capteurs correspondants.
 
 Le mécanisme est un tuple partagé, `_ENTRY_ERRORS` (`gateway.py`), et
 chaque membre y est pour une raison nommée :
@@ -1324,8 +1309,7 @@ chaque membre y est pour une raison nommée :
 | `TypeError` | un segment de chemin valant `null` plutôt qu'absent, que la garde `KeyError` amont ne couvre pas |
 | `ZeroDivisionError` | `Lesson.__init__` calcule `place % (len(end_times) - 1)`, donc un établissement publiant une seule entrée `ListeHeuresFin` divise par zéro |
 
-Le tuple est partagé parce que `IndexError` était présent sur deux décodeurs et
-absent de cinq.
+Le tuple est partagé pour qu'aucun décodeur n'en oublie un membre.
 
 Sept décodeurs l'utilisent,
 et l'un d'eux va plus loin. Pour l'emploi du temps, quand `pronotepy` refuse
@@ -1334,8 +1318,8 @@ abandonné (`_lesson_raw`, `gateway.py`). La cause la plus fréquente est
 la plus fâcheuse : `Lesson.__init__` résout `ListeContenus` sans
 `strict=False`, et un créneau sans contenu publié — ce qui est précisément la
 façon dont une **annulation** arrive souvent — n'a pas de `ListeContenus` du
-tout. Abandonner ces entrées signifiait que l'événement pour lequel cette
-intégration existe, `lesson_canceled`, ne pouvait pas se déclencher pour elles.
+tout. Abandonner ces entrées signifierait que l'événement pour lequel cette
+intégration existe, `lesson_canceled`, ne pourrait pas se déclencher pour elles.
 Sans `DateDuCoursFin`, ce décodeur déduit la fin de la grille comme le client
 officiel (`_grid_end`) : `duree` compte des **places**, pas des heures — une
 place vaut `DureeSequence / PlacesParHeure`, une demi-heure sur la grille de
@@ -1350,11 +1334,11 @@ vide » et **refuse** la première.
 
 C'est le pire mode de défaillance possible d'une passerelle, et le raisonnement
 mérite d'être cité : si PRONOTE renommait `ListeCours`, alors
-`_get(...) or []` renvoyait un emploi du temps vide, le palier rapportait un
-**succès**, l'instantané était remplacé, le `binary_sensor` « jour de classe »
-passait à `off` et l'automatisation de réveil cessait simplement de se
+`_get(...) or []` renverrait un emploi du temps vide, le palier rapporterait un
+**succès**, l'instantané serait remplacé, le `binary_sensor` « jour de classe »
+passerait à `off` et l'automatisation de réveil cesserait simplement de se
 déclencher — sans rien au journal, et sans que la péremption ne se déclenche
-jamais, puisque la collecte avait réussi.
+jamais, puisque la collecte aurait réussi.
 
 Lever à la place fait échouer le palier, ce qui conserve l'instantané
 précédent, le marque comme daté et finit par ouvrir une réparation. « Je sais,
@@ -1432,9 +1416,10 @@ maintient vivant son `_client`, donc un client mort, une `requests.Session`
 morte et son pool de sockets. Le retrait se fait **par différence**, jamais par
 vidage, et sous un verrou **de processus** qui ne garde que l'arithmétique
 d'ensembles — quelques microsecondes. Le tenir à travers tout
-`ClientBase.__init__`, c'est-à-dire à travers une connexion, transformait chaque
-`release_client` en attente bloquante sur l'aller-retour réseau d'une autre
-entrée ; appelé depuis la boucle d'événements, cela figeait Home Assistant.
+`ClientBase.__init__`, c'est-à-dire à travers une connexion, transformerait
+chaque `release_client` en attente bloquante sur l'aller-retour réseau d'une
+autre entrée ; appelé depuis la boucle d'événements, cela figerait Home
+Assistant.
 
 ### 6.5 Les lectures à la demande
 
@@ -1452,8 +1437,8 @@ Le cas `identity` est le plus instructif : la lecture passe par
 `client.communication.post` avec une `ressource` explicite, et non par
 `client.post`, qui estampille le **titulaire du compte** comme `membre`. Sur un
 compte parent, `membre` renvoie la date de naissance, l'adresse e-mail, le
-numéro de téléphone et le numéro INE **du parent** — que le service rendait
-ensuite attribués à l'enfant. C'est une divulgation par mauvaise attribution
+numéro de téléphone et le numéro INE **du parent** — que le service rendrait
+attribués à l'enfant. C'est une divulgation par mauvaise attribution
 portant précisément sur les champs que §10 tient hors de la machine à états.
 
 ---
@@ -1483,9 +1468,10 @@ Deux DTO portent des champs qui demandent une justification, et l'ont.
 `Lesson.num` est le champ `P` du protocole, et il porte la déduplication :
 `PageEmploiDuTemps` renvoie plusieurs entrées pour le même créneau — l'original
 et ses remplacements — et le docstring amont dit que *pour une même heure de
-cours, le plus grand `num` est celui affiché sur PRONOTE*. La spécification v1
-déclarait `num` sans dire à quoi il servait, ce qui équivalait à ne pas
-l'utiliser.
+cours, le plus grand `num` est celui affiché sur PRONOTE*. La clé de créneau
+est `(date, place)` (`Lesson.slot_key`), sans la matière : une substitution —
+le cas pour lequel la règle existe — est précisément deux entrées de matières
+différentes sur un même créneau.
 
 `Lesson.end_inferred` existe parce que `end` n'est pas toujours transmis :
 quand `DateDuCoursFin` est absent, `pronotepy` le calcule via `Util.place2time`,
@@ -1499,7 +1485,7 @@ douteuse.
 `__post_init__` lève si les deux sont présents — sauf pour
 `GradeStatus.CONGRATULATIONS`, une note assortie d'une mention qui garde sa
 valeur (§4.3). C'est une promesse que le
-système de types ne peut pas faire et qu'aucun appelant ne vérifiait. La
+système de types ne peut pas faire et qu'aucun appelant ne vérifie. La
 passerelle est le seul producteur, donc cela ne peut se déclencher que sur un
 bug de la passerelle — c'est-à-dire précisément quand il vaut la peine
 d'échouer bruyamment, puisque le contrat de l'entité « dernière note » avec tous
@@ -1578,19 +1564,18 @@ Les attributs communs sont `fetched_at` et `stale`. Et toutes les listes sont
 listes PRONOTE dépassent la limite de 16 Kio d'attributs du recorder et que
 l'historique qui vaut la peine d'être gardé est le compteur, pas la charge
 utile. `PronoteAccountEntity` est un **frère** et non une sous-classe, donc
-cette déclaration y est répétée — l'oubli faisait enregistrer `by_tier` et
+cette déclaration y est répétée — l'oublier ferait enregistrer `by_tier` et
 `tiers_due` à chaque écriture d'état.
 
-Le corollaire est plus contre-intuitif et a coûté une version : une
+Le corollaire est plus contre-intuitif : une
 sous-classe, elle, ne redéclare **jamais**. Home Assistant ne réunit pas ces
 ensembles le long d'une hiérarchie —
 `Entity.__init_subclass__` calcule
 `_entity_component_unrecorded_attributes | cls._unrecorded_attributes` et le
 terme de droite est résolu par recherche d'attribut ordinaire, donc une
-déclaration sur une sous-classe *remplace* celle du parent. `PronoteSensor` a
-déclaré un unique nom en v0.0.22, en croyant l'ajouter : les dix-huit attributs
-de liste de tous les capteurs sont retournés à l'enregistreur, et les adresses
-signées des pièces jointes ont été mesurées dans l'historique. Un nom nouveau
+déclaration sur une sous-classe *remplace* celle du parent et renvoie à
+l'enregistreur tous les attributs de liste — adresses signées des pièces
+jointes comprises. Un nom nouveau
 s'ajoute donc à `UNRECORDED_LIST_ATTRIBUTES`, et un test refuse toute
 déclaration de sous-classe qui ne couvre pas cette constante.
 
@@ -1606,8 +1591,8 @@ retard, ce qui sur un capteur de réveil supprime tout l'intérêt du capteur.
 `delta.py` implémente **deux** règles, parce qu'une seule ne peut pas faire le
 travail.
 
-La spécification v1 en avait une : « delta sur l'identifiant `N`, jamais sur le
-contenu ». Elle est juste pour la plupart des collections et **incapable
+Une règle unique — « delta sur l'identifiant, jamais sur le contenu » — est
+juste pour la plupart des collections et **incapable
 d'implémenter l'événement le plus utile de l'ensemble**, le cours modifié, pour
 deux raisons vérifiées : un changement de salle garde le même `N` et ne produit
 donc aucun delta d'identifiant ; et un remplacement arrive avec un `N` neuf
@@ -1621,27 +1606,36 @@ La règle se dédouble donc :
 punitions, messages, évaluations — gardent la règle de l'identifiant telle
 quelle. Un libellé qu'un professeur corrige ne doit pas réveiller la maison.
 
-**L'emploi du temps** compare un **tuple de champs sur liste blanche**, par
-identifiant de cours, sur la semaine **non dédupliquée**.
+**L'emploi du temps** compare un **tuple de champs sur liste blanche** sur la
+semaine **non dédupliquée**.
 `Lesson.change_signature` (`models.py`) contient `canceled`, `status`,
 `frozenset(classrooms)`, `frozenset(teachers)`, `start`, `end` — et exclut
 `memo`, `background_color` et le contenu du cours, si bien qu'un mémo corrigé
 ne déclenche rien, ce que la règle unique cherchait en réalité à acheter.
 
-Les deux moitiés de cette phrase étaient fausses dans la première
-implémentation, et fausses d'une façon qui ne produisait **aucune erreur** :
+Deux choix tiennent cette règle, et se tromper sur l'un ou l'autre ne
+produirait **aucune erreur** visible :
 
-* elle indexait sur le **créneau** (jour plus position dans la journée). Comme
-  le jour fait partie de la clé, un cours déplacé ne pouvait jamais être vu
-  comme déplacé — `lesson_moved` était structurellement inatteignable — tandis
-  qu'un changement de la **grille horaire** de l'établissement, les sonneries
-  décalées de cinq minutes, déplaçait `start` pour tous les cours de tous les
-  créneaux d'un coup et déclenchait un `lesson_moved` pour la semaine entière ;
-* elle tournait sur la semaine **dédupliquée**. Or lors d'un remplacement,
-  PRONOTE sert l'entrée originale avec `estAnnule` **plus** un remplacement au
-  `num` supérieur, et la déduplication garde le remplacement — donc l'entrée
-  qui portait l'annulation avait été écartée une couche plus bas, et
-  l'annulation était inobservable.
+* **l'appariement.** Chaque entrée est rapprochée de son état précédent par sa
+  clé frappée — matière, début, fin (`_lesson_key`, `gateway.py`) — qui
+  survit à une reconnexion, là où le `N` est rechiffré à chaque connexion. Un
+  cours déplacé change de clé : c'est alors le `N`, quand l'instantané
+  précédent vient de la même session, qui le retrouve dans le créneau qu'il a
+  quitté (`_previous_key`, `delta.py`). Le `N` nomme le **cours** et non la
+  séance — un cours hebdomadaire porte le même dans les deux semaines
+  collectées — donc il ne départage qu'entre des entrées dont le créneau s'est
+  vidé ; une table `N` → clé unique comparerait chaque cours à son jumeau sept
+  jours plus tard, et une clé de créneau seule rendrait `lesson_moved`
+  structurellement inatteignable ;
+* **la couche.** Le détecteur tourne sur la semaine **non dédupliquée** : lors
+  d'un remplacement, PRONOTE sert l'entrée originale avec `estAnnule` **plus**
+  un remplacement au `num` supérieur, et la déduplication garde le
+  remplacement — l'annulation serait inobservable une couche plus bas. Un
+  créneau ainsi **couvert** par une autre entrée non annulée émet
+  `lesson_replaced` et non `lesson_canceled` (`_replacement`, `delta.py`) :
+  c'est aussi la forme de « Changement de salle » et de « Cours maintenu »,
+  et l'enfant a cours. Un créneau vidé deux fois — le remplaçant annulé à son
+  tour — ne produit qu'un `lesson_canceled`, celui du remplaçant.
 
 C'est pour cela que `TimetableFacts` porte **deux** collections : `lessons`
 dédupliquée pour l'affichage, et `all_lessons` triée mais non dédupliquée pour
@@ -1650,20 +1644,24 @@ le détecteur.
 Les comparaisons de salles et de professeurs se font sur des **ensembles** et
 non des séquences : rien dans le protocole n'ordonne `ListeSalles` ni
 `ListeProfesseurs`, et PRONOTE les réordonne effectivement entre deux réponses.
-En tuples, un cours co-enseigné émettait `lesson_changed` sur un sous-ensemble
-arbitraire de collections, chaque nuit, pour le reste de l'année.
+En tuples, un cours co-enseigné émettrait `lesson_changed` sur un
+sous-ensemble arbitraire de collections, chaque nuit, pour le reste de l'année.
 
 Un changement peut légitimement être plusieurs choses à la fois — un cours
 déplacé *et* mis dans une autre salle — donc `_lesson_events`
 (`delta.py`) émet un événement par aspect réellement modifié plutôt que
-d'en élire un. Et il n'y a **plus** de repli « si rien n'a correspondu,
-appelons ça une annulation » : chaque branche de la signature a maintenant son
-propre nom, donc ce repli ne pouvait se déclencher que pour une transition sur
-laquelle il avait tort — et la transition pour laquelle il se déclenchait
-réellement était une annulation **levée**, qu'il rapportait comme
-`lesson_canceled`. C'est ce que l'existence de `EVENT_LESSON_RESTORED`
-(`const.py`) corrige : une automatisation qui notifie « pas de cours en
-première heure, dors » se déclenchait le matin où le cours était rétabli.
+d'en élire un. Et il n'y a **pas** de repli « si rien n'a correspondu,
+appelons ça une annulation » : chaque branche de la signature a son propre
+nom, donc un tel repli ne se déclencherait que pour une transition sur laquelle
+il a tort — une annulation **levée**, qui a son propre type,
+`EVENT_LESSON_RESTORED`. Une automatisation qui notifie « pas de cours en
+première heure, dors » ne se déclenche donc pas le matin où le cours est
+rétabli. `LESSON_EVENT_TYPES` (`const.py`) en compte sept : `lesson_canceled`,
+`lesson_restored`, `lesson_replaced`, `lesson_moved`, `room_changed`,
+`teacher_changed` et `lesson_status_changed` — ce dernier quand seul le libellé
+`Statut` bouge (« Prof. absent », « Cours dépl. ») sans drapeau d'annulation.
+La même liste figure au § 4 de l'annexe A : un type ajouté au code se reporte
+dans l'annexe.
 
 Deux garanties générales complètent le dispositif. Le **premier** instantané
 d'un palier après un démarrage ou un rechargement n'émet **rien** — d'où le
@@ -1679,12 +1677,12 @@ qu'un fil peut émettre à sa **première** apparition : un fil devient visible
 pour la première fois pour d'autres raisons qu'un message qui arrive — une
 étiquette déplacée, une restauration depuis la corbeille, un établissement qui
 désarchive — et traiter tout son compteur de non-lus comme des arrivées
-rejouait le fil.
+rejouerait le fil.
 
 Les événements sont diffusés sur le bus Home Assistant sous le signal
 `SIGNAL_DELTA`, défini **et** émis par `account.py` — `device_trigger.py` et
 `event.py` l'importent de là, et non de `const.py`, ce qui est l'exception à la
-règle « une constante partagée vit dans `const.py` ». Les neuf entités `event`
+règle « une constante partagée vit dans `const.py` ». Les entités `event`
 s'y abonnent en filtrant sur `entry_id`, `student_id` et `entity_key`. Le détecteur
 ne conserve que le matériel d'identité dont il a besoin, jamais les instantanés
 eux-mêmes, pour qu'un trimestre de notes ne siège pas deux fois en mémoire.
@@ -1841,14 +1839,14 @@ ce qui est la raison d'être du flow de ré-authentification.
 
 **Toute connexion du flow passe par le limiteur.** C'est
 `_async_probe` (`config_flow.py`) qui l'assure, via
-`login_guard(hass).login(...)`. L'omission comptait plus qu'il n'y paraît :
+`login_guard(hass).login(...)`. Ce passage compte plus qu'il n'y paraît :
 c'est le seul chemin de connexion qu'un humain peut répéter à volonté, puisque
-le formulaire de ré-authentification se réaffiche à chaque échec. Un parent
-convaincu que le mot de passe est bon pouvait le soumettre vingt fois en une
-minute ; aucune de ces tentatives n'atteignait `may_login`, aucune n'était
-comptée par `note_login`, et le garde-fou de trois tentatives — la défense
+le formulaire de ré-authentification se réaffiche à chaque échec. Hors
+limiteur, un parent convaincu que le mot de passe est bon pourrait le soumettre
+vingt fois en une minute sans qu'aucune tentative n'atteigne `may_login` ni ne
+soit comptée par `note_login`, et le garde-fou de trois tentatives — la défense
 contre la seule sanction que PRONOTE applique à une adresse et non à un compte
-— ne les voyait jamais.
+— ne les verrait jamais.
 
 Le coût déclaré tient compte du **doublement structurel** de l'enrôlement QR :
 `qrcode_login` construit un client — dont le constructeur se connecte — poste
@@ -1862,10 +1860,6 @@ tiers d'un budget de trois tentatives (`ratelimit.py`).
 humain délibéré, avec la correction en main, n'est pas un retry automatique et
 mérite une ardoise vierge. Et c'est la seule sortie du maintien MFA, ce qui est
 correct puisque ce maintien existe précisément parce qu'une personne doit agir.
-Le commentaire du code note que cela ne se produisait pas du tout :
-`reset_after_reauth` n'avait aucun appelant hors des tests du limiteur, si bien
-que le maintien MFA, dont la seule sortie est un humain fournissant le PIN, ne
-pouvait pas être quitté par un humain fournissant le PIN.
 
 **L'`unique_id` de l'entrée est l'URL de l'établissement plus l'identifiant
 PRONOTE du compte** (`flow_login.py`). Pas l'identifiant de connexion :
@@ -1873,14 +1867,14 @@ une connexion ENT et une connexion directe pour le même compte utilisent des
 identifiants différents. Pas le jeton non plus, puisqu'il tourne à chaque
 connexion.
 
-Un dernier détail, parce qu'il illustre la classe de bugs que ce dépôt
-poursuit : `children` est délibérément **exclu** de la fusion du résultat de
+Un dernier détail : `children` est délibérément **exclu** de la fusion du résultat de
 sonde, et délibérément **inclus** dans l'entrée créée. Le probe renvoie
 `children` sous forme de paires `(id, nom)`, et `CONF_CHILDREN` — la même
 chaîne — est où la *sélection* de l'utilisateur est stockée quelques lignes plus
-bas. Fusionner les paires puis retirer la clé à la sortie jetait la sélection
-avec elles : un parent qui suivait délibérément un enfant sur deux en obtenait
-deux quand même, silencieusement, avec le budget de requêtes du second.
+bas. Fusionner les paires puis retirer la clé à la sortie jetterait la
+sélection avec elles : un parent qui suit délibérément un enfant sur deux en
+obtiendrait deux quand même, silencieusement, avec le budget de requêtes du
+second.
 
 `flow_login.py` existe séparément de `config_flow.py` pour une raison qui n'est
 pas cosmétique : le flow ne doit **pas** importer `pronotepy` au niveau du
@@ -1895,7 +1889,7 @@ décoration : un réglage dont on ne peut pas voir la conséquence se règle au
 hasard. L'estimation utilise la même fonction que celle qui a produit les
 chiffres de l'annexe, elle plafonne le nombre de connexions par
 `max_logins_per_day` — sinon le cas dégénéré d'un délai serveur de cinq minutes
-annonçait 64 connexions par jour contre un maximum configuré de 24, une
+annoncerait 64 connexions par jour contre un maximum configuré de 24, une
 estimation que l'intégration ne pourrait pas produire même en essayant — et
 elle compte une connexion à `REQUESTS_PER_LOGIN_WORST_CASE = 7` et non à 5,
 parce qu'une estimation dont on peut être déçu est pire que pas d'estimation.
@@ -1931,7 +1925,7 @@ atterrirait dans la base du recorder, donc dans chaque sauvegarde, dans les
 captures d'écran et dans les rapports de bug. Comme réponse de service, elle
 existe le temps d'une exécution de script.
 
-C'est pour cela que le palier `static` ne la collecte **plus** :
+C'est pour cela que le palier `static` ne la collecte **pas** :
 `tiers.py` et `gateway.py` le disent tous deux. La collecter
 sur un rythme mettrait un porteur d'authentification autonome dans le magasin
 d'instantanés — une structure de longue durée dont la finalité est d'être
@@ -1984,8 +1978,8 @@ que les parents collent n'est très souvent pas une URL de page nue. Les
 établissements envoient des liens profonds, les portails ENT renvoient à travers
 une authentification unique avec un ticket dans l'URL, et un parent qui copie
 depuis la barre d'adresse après s'être connecté copie le paramètre de session
-qui s'y trouve. Garder cette chaîne signifiait qu'un paramètre de session
-pouvait voyager dans l'entrée de configuration, de là dans les substitutions
+qui s'y trouve. Garder cette chaîne signifierait qu'un paramètre de session
+pourrait voyager dans l'entrée de configuration, de là dans les substitutions
 d'un *repair issue* — écrites dans `.storage` et rendues dans le panneau
 Réparations — et de là dans le téléchargement de diagnostic, le fichier qu'on
 demande explicitement aux utilisateurs de joindre à un ticket public.
@@ -1999,7 +1993,7 @@ Avec des valeurs manifestement fictives, la transformation ressemble à ceci :
 | `https://demo.example.invalid:8443/pronote/eleve.html#page=1` | `https://demo.example.invalid:8443/pronote/eleve.html` |
 
 Une connexion par jeton (mode QR code) n'ouvre pas cette adresse telle quelle :
-`pronotepy` y envoie l'en-tête `User-Agent: iPhone`, et PRONOTE 2026.2 répond à
+`pronotepy` y envoie l'en-tête `User-Agent: iPhone`, et PRONOTE répond à
 cet en-tête, sur une page sans `fd=1`, par « Votre navigateur est incompatible »
 sans bloc `Start({...})`. `urls.mobile_login_url`, appelé par
 `hardened_client.build_client` à chaque connexion par jeton, reconstruit donc la
@@ -2019,9 +2013,9 @@ nôtre.
 L'adresse est donc retaillée à la frontière, une fois
 (`config_flow.py`), et seule la forme retaillée est stockée, affichée ou
 rapportée. `diagnostics.py` la retaille **une seconde fois** plutôt que de
-lui faire confiance : une entrée créée avant que le flow ne fasse cela — ou
-restaurée depuis une sauvegarde, ou éditée à la main dans `.storage` — peut
-encore porter le lien profond qu'une école a envoyé. `url_host` réduit encore
+lui faire confiance : une entrée restaurée depuis une sauvegarde ou éditée à
+la main dans `.storage` peut encore porter le lien profond qu'une école a
+envoyé. `url_host` réduit encore
 davantage pour les cas qui n'ont besoin de dire que *quel* établissement.
 
 ### 10.4 Le journal
@@ -2048,9 +2042,10 @@ opérations d'écriture sont coupées (`OPT_WRITE_OPERATIONS_ENABLED`), et refus
 Une nouvelle entrée PRONOTE naît avec l'option vraie, inscrite dans ses options
 par `_async_create` (`config_flow.py`). Le repli, lui, reste faux
 (`LEGACY_WRITE_OPERATIONS_ENABLED`) dans `write_enabled` comme dans le
-formulaire : une entrée sans la clé date d'avant ce défaut, et la lire avec le
-nouveau aurait ouvert l'écriture chez quelqu'un qui ne l'a jamais choisie — au
-premier démarrage, ou au premier enregistrement de la page « Général ».
+formulaire : personne n'a choisi d'écrire sur une entrée qui ne porte pas la
+clé, et la lire avec le défaut d'une entrée neuve ouvrirait l'écriture chez
+quelqu'un qui ne l'a jamais choisie — au premier démarrage, ou au premier
+enregistrement de la page « Général ».
 
 La liste de devoirs suit la même règle jusque dans son interface :
 `todo.py` n'annonce `UPDATE_TODO_ITEM` que si les écritures sont activées,
@@ -2094,7 +2089,7 @@ sa propre CI n'applique pas `no_implicit_reexport` contre eux.
 **`pytest`** avec `asyncio_mode = "auto"`, `--strict-markers`,
 `--strict-config`, et `filterwarnings = ["error::DeprecationWarning:custom_components.carnet_scolaire.*"]`
 — une dépréciation dans notre propre code est une erreur, une dépréciation
-ailleurs ne l'est pas. Plus de 1200 tests, répartis sur trente-huit fichiers.
+ailleurs ne l'est pas.
 
 **La couverture**, appliquée par `scripts/check_coverage.py`, qui sort en code
 non nul :
@@ -2122,7 +2117,7 @@ changement — rien de tout cela ne lève, rien n'apparaît au journal, et le se
 signe est une donnée fausse ou absente que personne ne compare. Un seuil qui
 n'échoue pas n'est pas un seuil.
 
-Deux portails supplémentaires vivent hors de `validate.yml` :
+Trois workflows supplémentaires vivent hors de `validate.yml` :
 `.github/workflows/hassfest.yml` (validation officielle Home Assistant),
 `.github/workflows/hacs.yml` (validation HACS, y compris une exécution
 hebdomadaire pour qu'un changement de règle amont apparaisse sans push), et
@@ -2137,8 +2132,8 @@ Un dernier, qui ne garde rien mais surveille :
 request* qui relève l'épingle dans ses deux déclarations, avec la date de
 publication et les sujets de commit entre les deux étiquettes amont
 (spécification §11.1.1). Il existe parce qu'une version épinglée sans veille est
-une dette dont l'échéance a été une panne totale de connexion : le correctif
-amont était public depuis six jours et son sujet de commit nommait la cause.
+une dette dont l'échéance est une panne totale de connexion, alors que le
+correctif amont est souvent déjà publié.
 Rien n'y fusionne automatiquement — relever l'épingle oblige à relire chaque
 divergence documentée dans `hardened_client.py`, et c'est le travail que la
 proposition demande.
@@ -2162,7 +2157,7 @@ home-assistant/core — importe **`fcntl`**, qui n'existe pas sous
 Windows. Le module ne peut donc pas être chargé du tout sur cette plateforme,
 et pas seulement par ce que ce projet en fait.
 
-la fixture `account` de `tests/conftest.py` traite cela de la seule façon honnête : le plugin se charge seul par son *entry
+`tests/conftest.py` traite cela de la seule façon honnête : le plugin se charge seul par son *entry
 point*, et tout ce qui s'en sert est **conditionnel** (`HAS_HASS_HARNESS = sys.platform != "win32"`),
 avec un message d'erreur qui nomme la cause et la solution — « exécutez-les sous
 Linux, WSL ou Docker, comme le fait la CI ». Un contributeur sous Windows peut
@@ -2172,9 +2167,14 @@ l'estimateur de budget.
 
 Ce découpage n'affaiblit aucun portail, et c'est la propriété qui le rend
 acceptable : **cette moitié est exactement celle qui porte le portail à 100 %.**
-Les quatre modules critiques ne dépendent ni de Home Assistant ni du réseau,
-par construction — ils prennent des horloges injectables et répondent à des
-questions. La CI, elle, tourne sur Linux et charge tout.
+Les sept modules tenus à 100 % ne dépendent pas de Home Assistant, par
+construction — ils prennent des horloges injectables et répondent à des
+questions. La CI, elle, tourne directement sur `ubuntu-latest` et charge tout.
+
+Le dépôt ne livre ni `Dockerfile`, ni `docker-compose.yml`, ni
+`devcontainer` : Docker est une façon, pour un contributeur sous Windows,
+d'exécuter la suite complète dans une image Linux, pas un dispositif du dépôt
+ni le mécanisme de la CI.
 
 ### 11.3 Les coutures de test
 
@@ -2210,7 +2210,12 @@ d'exécution que personne ne lit. Ajouter un champ à la signature sans ajouter 
 branche fait échouer la CI, ce qui est le moment où cela peut encore être
 corrigé à bon compte.
 
-`tests/fixtures/protocol.py` fournit des charges utiles écrites à la main, et le
+`tests/fixtures/protocol.py` fournit des charges utiles écrites à la main —
+aucune ne vient d'un serveur réel, donc aucune donnée d'élève n'est à
+anonymiser, mais elles reflètent la compréhension du protocole et non ce
+qu'un établissement envoie : une forme de réponse que personne n'a imaginée
+n'a pas de test, et c'est là que le 100 % sur `gateway.py` est le plus
+fragile. Le
 `pyproject.toml` explique pourquoi elles sont des datetimes **naïfs** : PRONOTE
 transmet des heures locales sans offset, donc y attacher un fuseau testerait une
 forme que le serveur n'envoie jamais. La passerelle est le seul endroit où un
@@ -2227,458 +2232,3 @@ présente dans une langue existe dans les autres avec les mêmes substitutions, 
 maintenir trois fichiers à la main garde ce test durablement rouge pour des
 raisons sans intérêt. Le générer depuis une table fait du test un vrai contrôle
 **sur la table**.
-
----
-
-## 12. Écarts avec la spécification
-
-La source de vérité est le code. Ce qui suit relève les endroits où le dépôt
-tel qu'il est diverge de ce que les documents de conception annoncent, ou bien
-où une exigence est écrite mais pas appliquée. Les écarts sont classés par
-nature, parce qu'ils ne demandent pas la même chose au lecteur : certains sont
-des corrections délibérées que le code documente, d'autres des exigences
-écrites que rien n'applique, d'autres encore de simples documents périmés.
-
-### 12.0 Ce que ce chapitre ne contient pas
-
-Sur l'essentiel, code et spécification concordent, et il vaut la peine de le
-dire pour que la liste qui suit garde ses proportions. Concordent exactement :
-les treize réglages du limiteur et leurs bornes, les trois seuils de sacrifice
-(100 / 80 / 60 %) et le seuil d'avertissement à 80 %, la formule de repli et sa
-gigue pleine, les dix paliers et leurs intervalles, les onze identifiants
-d'onglet protocolaire, les trois codes `Erreur.G` traités, `stale_after = 6`,
-les timeouts 30 s / 60 s et le facteur trois de détection d'interblocage, les
-quinze capteurs primitifs et dix-sept capteurs de liste, les huit séries
-d'historique indexées par période, les dix capteurs binaires — y compris le
-retrait des trois « jumeaux » — les neuf entités de diagnostic, les huit
-services et leurs quatre réponses `SupportsResponse.ONLY`, l'arithmétique de
-budget à environ 180 requêtes de données par jour, et les portails de qualité
-(95 % par module, 100 % sur sept, 80 % global).
-
-### 12.1 Le domaine annoncé est `pronote`, le domaine réel est `carnet_scolaire`
-
-`SPECIFICATION.md` déclare en en-tête le domaine **`pronote`** et présente le
-renommage comme « une décision de fin de parcours, pas de début », puisqu'il
-changerait tous les `entity_id`. L'annexe A nommait d'ailleurs les services
-`pronote.refresh`, `pronote.get_ical_url`, etc., jusqu'à ce que son tableau soit
-corrigé — un lecteur qui en recopiait une ligne appelait le domaine d'une autre
-intégration. Le §1.3 de la spécification est
-par ailleurs autocontradictoire sur ce point — « domaine `pronote` et non
-`pronote` » — ce qui a tout l'air d'un artefact de recherche-remplacement.
-
-Le code a tranché dans l'autre sens et l'a motivé
-(`DOMAIN`, `const.py`) : le domaine est **`carnet_scolaire`**, les services sont
-`carnet_scolaire.*`, et les blueprints vivent sous
-`blueprints/automation/carnet_scolaire/` et non `blueprints/automation/pronote/`.
-Le domaine `pronote` n'a jamais été pris, délibérément : une autre intégration
-PRONOTE déjà installée peut l'occuper, et deux composants personnalisés
-réclamant le même domaine ne cohabitent pas. Un domaine distinct permet
-d'essayer cette intégration sans d'abord désinstaller celle dont on dépend — ce
-qui est précisément l'objectif de cohabitation que la spécification énonçait,
-atteint par le moyen inverse de celui qu'elle prescrivait. Le domaine a été
-`pronote_ng` jusqu'à la 0.0.32, puis `carnet_scolaire` quand EcoleDirecte a
-rejoint PRONOTE comme seconde source.
-
-Le dépôt, lui, s'appelle `ha-carnet-scolaire`, et c'est sous le nom **Carnet scolaire**
-que `hacs.json` et le champ `name` du manifest présentent l'intégration. Le
-domaine est le seul endroit où la forme soulignée apparaît.
-
-### 12.2 Le confinement de `pronotepy` n'est pas total
-
-L'affirmation « `gateway.py` est le seul module à importer `pronotepy` »
-(`gateway.py`) est vraie pour les **types de données**, et fausse pour les
-**exceptions**. L'inventaire réel :
-
-| Module | Ce qu'il importe |
-| --- | --- |
-| `gateway.py` | `dataClasses`, `DataError`, `ParsingError` |
-| `hardened_client.py` | `pronotepy`, `dataClasses`, `pronoteAPI`, `PronoteAPIError` |
-| `session.py` | `ChildNotFound`, `CryptoError`, `DataError`, `ExpiredObject`, `MFAError`, `PronoteAPIError` ; et `pronotepy.ent` à la ligne 870 |
-| `__init__.py` | `PronoteAPIError` |
-| `config_flow.py` | `pronotepy.ent` — import local, pour la liste des fournisseurs |
-| `flow_login.py` | `CryptoError`, `ENTLoginError`, `MFAError`, `PronoteAPIError`, `QRCodeDecryptError` ; et `pronotepy.ent` |
-
-La formulation exacte que le code soutient est donc : **aucun objet de données
-`pronotepy` ne franchit la frontière**, et seuls `gateway.py` et
-`hardened_client.py` en construisent ou en lisent. Les **classes
-d'exception** et la résolution du fournisseur ENT traversent, et c'est
-inévitable : `session.py` doit classer `CryptoError` contre `PronoteAPIError`
-pour que le garde-fou IP fonctionne du tout (§5.4), et un module qui ne
-connaîtrait pas ces types ne pourrait pas le faire. Cette traversée est bornée,
-sans état, et sans risque de `Erreur.G = 22` — mais elle mérite d'être décrite
-exactement, parce que « un seul fichier à relire lors d'un changement de
-version » est faux : il y en a deux à relire pour les données, et quatre à
-vérifier pour les exceptions.
-
-### 12.3 La règle de détection de changement de l'emploi du temps est inversée
-
-C'est l'écart le plus substantiel, et il est **assumé et documenté** par le
-code (`delta.py`).
-
-La spécification (§2.2.1) prescrit deux étapes obligatoires dans cet ordre :
-dédoublonner par créneau en gardant le `num` maximal, puis comparer une liste
-blanche `(canceled, status, classroom, teachers, start, end)` sur la **clé de
-créneau `(date, place, subject_id)`** prise dans le JSON brut, et
-**explicitement pas sur `N`**.
-
-Le code fait exactement l'inverse sur les deux points, pour des raisons
-vérifiées :
-
-* il **indexe sur `N`** (`delta.py`) et non sur une clé de créneau,
-  parce qu'une clé contenant le jour rend `lesson_moved` structurellement
-  inatteignable — un cours déplacé change de clé et se lit comme deux entrées
-  distinctes — tandis qu'un décalage de la grille horaire de l'établissement
-  déplaçait `start` pour tous les cours de tous les créneaux et déclenchait un
-  `lesson_moved` pour la semaine entière. Le `N` nomme toutefois le **cours**,
-  pas une séance : un cours hebdomadaire porte le même `N` dans les deux
-  semaines collectées. Il ne sert donc qu'à retrouver une séance dont le
-  créneau s'est vidé (`_previous_key`) ; une entrée dont la clé figure parmi
-  celles du `N` est appariée à elle-même. Une table `N` → clé unique gardait la
-  séance de la semaine suivante, et chaque collecte comparait un cours à son
-  jumeau sept jours plus tard : un `lesson_moved` par cours, et un
-  `lesson_canceled` réannoncé toutes les vingt minutes pour un cours annulé
-  cette semaine et pas la suivante ;
-* il tourne sur la semaine **non dédoublonnée** (`facts.all_lessons`), parce
-  que sur un remplacement PRONOTE sert l'entrée originale avec `estAnnule`
-  *plus* un remplacement au `num` supérieur, et le dédoublonnage garde le
-  remplacement — donc l'entrée portant l'annulation avait été écartée une
-  couche plus bas et l'annulation était **inobservable**. Un créneau
-  **couvert** — une autre entrée non annulée y est enseignée — n'émet
-  pourtant pas `lesson_canceled` mais `lesson_replaced` (`_replacement`,
-  §12.4) : c'est ainsi que PRONOTE sert aussi « Changement de salle » et
-  « Cours maintenu », l'enfant a cours, et l'annonce d'une annulation y
-  faisait lire un professeur absent ;
-* `subject_id` est retiré de la clé de dédoublonnage, qui vaut
-  `(date, place)` (`models.py`) : l'inclure défaisait le dédoublonnage
-  qu'il sert, puisqu'une substitution — le cas pour lequel la règle est écrite —
-  est justement deux entrées sur un créneau avec des matières différentes ;
-* la liste blanche compare `frozenset(classrooms)` et `frozenset(teachers)` et
-  non un `classroom` unique et une séquence de professeurs, parce que rien dans
-  le protocole n'ordonne `ListeSalles` ni `ListeProfesseurs` et que PRONOTE les
-  réordonne : en tuples, un cours co-enseigné émettait `lesson_changed` chaque
-  nuit pour le reste de l'année.
-
-Le dédoublonnage lui-même reste bien dans la passerelle
-(`gateway.deduplicate_lessons`), comme la spécification l'exige. C'est
-uniquement la **couche sur laquelle le détecteur travaille** qui change : la
-passerelle expose les deux vues, `lessons` dédoublonnée pour l'affichage et
-`all_lessons` pour le delta.
-
-### 12.4 Les types d'événement du cours modifié sont sept et non quatre — divergence close
-
-Cette divergence est **résolue** dans le même sens que la §12.9 : c'est
-l'annexe qui a bougé, parce que c'est le code qui avait raison.
-
-L'annexe A §4 ne déclarait que quatre `event_types` sur
-`event.<élève>_cours_modifie` : `lesson_canceled`, `lesson_moved`,
-`room_changed`, `teacher_changed`. Le code en déclare **sept**
-(`LESSON_EVENT_TYPES`, `const.py`), et le tableau de l'annexe les porte
-désormais tous — avec, au passage, les douze attributs de contexte réellement
-émis par `_lesson_context` au lieu de sept. Les trois qui manquaient :
-
-* **`lesson_restored`** — une annulation **levée**, le cours est rétabli. Son
-  absence est ce qui faisait déclencher `lesson_canceled` pour l'événement
-  exactement opposé par le repli « si rien d'autre n'a correspondu, appelons ça
-  une annulation » : une automatisation qui notifie « pas de cours en première
-  heure, dors » se déclenchait le matin où le cours revenait
-  (`const.py`) ;
-* **`lesson_status_changed`** — seul le libellé `Statut` a bougé, sans drapeau,
-  sans horaire, sans salle et sans professeur. PRONOTE utilise ce champ pour
-  des situations où il ne pose pas `estAnnule` — « Prof. absent », « Cours
-  dépl. » — donc le changement est réel et vaut d'être rapporté ; il n'est
-  simplement pas une annulation, ce qu'il était rapporté comme étant
-  (`const.py`).
-
-* **`lesson_replaced`** — le cours est annulé, mais une autre entrée est
-  enseignée sur son créneau : remplacement, « Changement de salle », « Cours
-  maintenu », que PRONOTE sert tous comme l'original marqué `estAnnule`
-  plus l'entrée qui le remplace (`_replacement`, `delta.py`). L'enfant a
-  cours ; le rapporter en `lesson_canceled` annonçait un professeur absent
-  un matin d'évaluation dans une autre salle. L'évènement ajoute quatre
-  attributs `replacement_*` (`_replacement_context`). Un créneau vidé deux
-  fois — le remplaçant annulé à son tour — ne produit qu'un `lesson_canceled`,
-  celui du remplaçant.
-
-Corollaire côté automatisations : `TRIGGER_TYPES` (`device_trigger.py`) expose **quinze**
-types de déclencheur, dont ces trois-là. Chacun n'est proposé — et accepté à la
-validation — que si la source collecte le palier qui le produit : `TRIGGER_TIER`
-lit ce palier sur les entités `event` (`EVENTS`, `event.py`) plutôt que de le
-redire, si bien qu'une entrée EcoleDirecte, sans actualités, messagerie ni
-évaluations, en reçoit douze.
-
-Ce qui reste à surveiller n'est plus l'annexe mais la **duplication** : la même
-liste vit maintenant dans `const.py`, dans le tableau du § 4.10 du guide et dans
-celui du § 4 de l'annexe A. Un septième type ajouté au code sans toucher aux
-deux documents recrée exactement l'écart qu'on vient de fermer.
-
-### 12.5 Le plafond de connexions compte les tentatives, pas les succès
-
-La spécification et l'annexe B §3 décrivent `max_logins_per_day` comme un
-plafond sur les connexions **réussies**. Le code compte les **tentatives**
-(`RateLimiter.logins_today`, `ratelimit.py`), et le dit :
-
-> Attempts, not successes. The cap bounds how much authentication traffic this
-> integration generates, and a failed attempt costs the server exactly as much
-> as a successful one.
-
-L'argument est solide et va dans le sens de l'objectif du plafond : ce qui doit
-être borné est le trafic d'authentification envoyé à l'établissement, et une
-tentative qui échoue coûte au serveur exactement ce qu'une réussie coûte. Mais
-c'est bien un écart, et il déplace la sémantique du réglage : le plafond de 24
-est un plafond de 24 *tentatives*, donc plus strict que celui que la
-spécification décrit.
-
-### 12.6 Le `README.md` décrit un état dépassé
-
-`README.md` annonce en encadré : « **État : spécification.** Aucun code n'est
-encore écrit. Ce dépôt contient pour l'instant la conception détaillée de
-l'intégration. » Le dépôt contient environ 14 000 lignes de code de production
-sur trente modules, plus de 400 tests, quatre workflows CI et quatorze
-blueprints — les
-jalons M1 à M7 de la spécification §12 sont donc tous atteints ou en cours,
-alors que le document d'entrée du dépôt affirme qu'aucun ne l'est.
-
-Le même fichier annonce « MIT (à créer avant la première publication) » alors
-que `LICENSE` existe et que la spécification §11.1 faisait de son existence un
-prérequis de publication : l'exigence est satisfaite, la note ne l'a pas suivi.
-
-### 12.7 `MAX_INTERVAL_FOR_EVENT_TIERS` est déclaré mais jamais appliqué
-
-La spécification §5.2 exige que « l'interface d'options refuse `timetable`
-au-delà d'une heure et le signale », avec un argument juste : un cours annulé
-annoncé quatre heures plus tard ne sert plus. `const.py` déclare la
-table correspondante — `MAX_INTERVAL_FOR_EVENT_TIERS = {Tier.TIMETABLE: 60}` —
-et reprend l'argument.
-
-Cette constante n'a **aucun lecteur**. Le flow d'options borne les dix
-intervalles par `TIER_INTERVAL_RANGE = (1.0, 1440.0)`
-(`config_flow.py`) et `options.tier_intervals` les écrête contre la même
-table globale. Rien n'empêche donc de régler `timetable` à 1440 minutes, ce qui
-rend `event.<élève>_cours_modifie` structurellement inutile et supprime en
-silence l'événement pour lequel l'intégration existe. L'exigence est écrite en
-prose, déclarée en constante, et appliquée nulle part.
-
-Quatre autres constantes sont déclarées sans lecteur, avec des conséquences
-moindres : `CONFIGURABLE_TIERS`, `CONF_ACCOUNT_KIND`, `FUNC_TEACHING_STAFF` et
-`FUNC_DISCUSSIONS` (les deux derniers parce que la passerelle passe par
-`client.get_teaching_staff()` et `client.discussions()` plutôt que par un `post`
-brut).
-
-### 12.8 L'option `history_periods` n'est offerte nulle part
-
-`const.py` déclare `OPT_HISTORY_PERIODS = "history_periods"` et
-`DEFAULT_HISTORY_PERIODS = 0` (« 0 signifie toutes les périodes closes »).
-`tiers.py` la lit — mais par une **chaîne littérale**, `"history_periods"`,
-et non par la constante :
-
-```python
-limit = int(account.entry.options.get("history_periods", 0) or 0)
-```
-
-Et `config_flow.py` ne l'expose dans aucune de ses trois sections d'options,
-alors que la spécification §7.3 la range explicitement dans la section
-« Contenu » aux côtés de `establishment_timezone`, `homework_horizon`,
-`wake_margin` et `write_operations_enabled` — les quatre autres, elles, sont
-bien offertes. L'option est donc fonctionnelle mais inatteignable depuis
-l'interface : seul un utilisateur qui édite `.storage` à la main peut la régler.
-C'est aussi le seul endroit du dépôt où une clé d'option est écrite en dur au
-lieu de passer par sa constante, ce qui prive le couple d'une vérification de
-cohérence.
-
-Sa sémantique diverge par ailleurs entre les deux documents et le code. Le code
-pose `DEFAULT_HISTORY_PERIODS = 0` avec le commentaire « 0 signifie toutes les
-périodes closes », et `tiers.py` traite bien 0 comme « aucune limite »
-en ne tronquant la liste que si `limit` est vrai. La table de sensibilité de
-l'annexe B §5.6, elle, attribue à `history_periods = 0` un effet de **−8
-requêtes**, c'est-à-dire la suppression complète du palier — l'interprétation
-opposée. Comme l'option n'est de toute façon pas atteignable, l'ambiguïté n'a
-aucune conséquence observable aujourd'hui, mais il faudra la trancher avant de
-l'exposer.
-
-### 12.9 Le client durci n'hérite pas de `ParentClient` — divergence close
-
-Cette divergence est **résolue**, et elle a été résolue dans le sens inverse de
-celui qu'on attend d'ordinaire : c'est la spécification qui a bougé, parce que
-c'est le code qui avait raison.
-
-La spécification §3.6 nommait une sous-classe
-`_NoRefreshParentClient(pronotepy.ParentClient)` surchargeant `post()`. Le code
-implémente `HardenedClient(pronotepy.Client)` — une classe unique qui gère
-l'élève **et** le parent — et l'écart n'était pas une commodité : `ParentClient`
-est précisément la sous-classe qui porte le bug de récursion non bornée et celui
-de l'enfant perdu. En hériter puis les neutraliser par surcharge laisse une
-méthode d'amont ajoutée plus tard les réintroduire sans que rien ne le signale ;
-réimplémenter la surface parent — liste d'enfants, `set_child()`, signature
-`membre` — sur `Client` les rend **structurellement inatteignables** plutôt que
-corrigés. Le §3.6 énonce désormais cette exigence, avec l'argument, et interdit
-explicitement la forme par héritage.
-
-Le confinement de `Period.instances`, que la spécification plaçait dans cette
-même sous-classe, vit dans un objet et un gestionnaire de contexte séparés
-(`_ConfinedRegistry` / `_period_registry_confined`) — ce qui permet de le poser
-aussi sur le chemin d'enrôlement QR du flux de configuration, où il n'y a pas de
-sous-classe du tout.
-
-### 12.10 La stratégie de session est devenue une option, avec une dégradation mesurée
-
-La spécification §6.5 décrit **une** stratégie, la reconnexion paresseuse,
-accompagnée d'un argument de dominance : si le délai mesuré est inférieur à
-l'intervalle du palier le plus rapide, la stratégie « dégénère exactement en la
-conception v1 ».
-
-Le code transforme cet argument en **deux mécanismes distincts**. D'une part,
-`SessionStrategy` est une option d'entrée à deux valeurs — `LAZY` par défaut,
-`PER_BATCH` conservé comme échappatoire explicite pour un établissement dont on
-préfère épingler la politique plutôt que la découvrir (`const.py`).
-D'autre part, la dégénérescence n'est plus seulement un argument : c'est
-`effective_strategy`, une machine réelle déclenchée par trois expirations
-consécutives et rendue falsifiable par une sonde quotidienne
-(`session.py`), dont la lévée exige une contre-preuve. C'est une
-extension de la spécification plutôt qu'une contradiction, mais elle ajoute une
-option de configuration que le document ne prévoyait pas.
-
-### 12.11 Les fixtures de test sont écrites à la main, pas enregistrées
-
-La spécification §11 exige des « fixtures protocolaires **enregistrées et
-anonymisées** », versionnées dans `tests/fixtures/`, et en fait la première
-tâche du jalon M1.
-
-Le dépôt contient bien `tests/fixtures/protocol.py` et `tests/fixtures/client.py`,
-mais les charges utiles y sont **écrites à la main** : `tests/test_gateway.py`
-le dit en toutes lettres — « the fake client answers from hand-written payloads.
-See `tests/fixtures/` for why none of them came off a real server. »
-
-L'objectif de la spécification — aucun test ne touche le réseau, aucune donnée
-réelle d'élève dans le dépôt — est donc atteint, et même plus strictement,
-puisqu'il n'y a jamais eu de réponse réelle à anonymiser. Mais le moyen prescrit
-n'est pas celui employé, et la conséquence mérite d'être connue : les fixtures
-reflètent la compréhension du protocole qu'a l'auteur, pas ce qu'un
-établissement envoie réellement. C'est le point où le portail de couverture à
-100 % sur `gateway.py` est le plus fragile, parce qu'une forme de réponse que
-personne n'a imaginée n'a pas de test qui la couvre.
-
-### 12.12 « Docker » n'existe pas dans le dépôt
-
-Le dépôt ne contient ni `Dockerfile`, ni `docker-compose.yml`, ni `devcontainer`.
-La seule mention de Docker est un message d'erreur dans `tests/conftest.py`
-qui suggère « Linux, WSL ou Docker, comme le fait la CI » — et la CI, elle,
-tourne directement sur `ubuntu-latest` avec `actions/setup-python`, pas dans un
-conteneur.
-
-La contrainte technique est réelle et correctement documentée : le harnais
-importe `fcntl`, donc la suite complète ne peut pas tourner sous Windows. Mais
-l'exécution « dans Docker » est une **façon possible** de contourner cela pour
-un contributeur sous Windows, pas un dispositif présent dans le dépôt ni le
-mécanisme employé par la CI. La formulation exacte est celle du §11.2.
-
-La spécification, de son côté, ne mentionne Docker nulle part : ni image de
-test, ni `devcontainer`, ni `docker-compose`. Elle exige seulement qu'aucun test
-ne touche le réseau, ce que le dépôt respecte.
-
-### 12.13 La version visée et la version testée coïncident désormais
-
-Cette divergence est **résolue**, et la façon dont elle l'a été vaut d'être
-notée : c'est un cas où l'écart documentaire cachait deux vrais défauts.
-
-`SPECIFICATION.md` déclare en en-tête viser **Home Assistant 2026.11 ou
-supérieur**. Le dépôt déclare le même plancher — **2026.11.0** dans
-`hacs.json` — et la matrice l'exécute : `requirements_test.txt` épingle
-`pytest-homeassistant`, dont la version est celle de Home Assistant, et la
-ligne plancher de `validate.yml` vérifie que `homeassistant.const.__version__`
-vaut exactement ce que `hacs.json` annonce. La ligne flottante `latest` couvre
-l'autre bout de l'intervalle.
-
-**Pourquoi 2026.11, honnêtement.** Aucune API de 2026.11 n'est requise par le
-code : la montée de 2026.10 à 2026.11 n'a touché que les tests. Elle vient du
-harnais. `pytest-homeassistant-custom-component` est abandonné et s'arrête à
-2026.10 ; il ne démarre pas 2026.11, qui crée à l'import un alias de `httpx`
-vers `httpx2` et refuse de s'exécuter si `httpx` est déjà chargé. Son
-remplaçant officiel, `pytest-homeassistant`, ne publie rien d'antérieur à
-2026.11. Garder 2026.10 aurait donc voulu dire tester le plancher avec un
-harnais mort, et ne plus pouvoir tester les versions suivantes avec le même
-— un plancher qu'on ne lance pas n'est pas un plancher. Le prix est réel : une
-instance en 2026.10, sur laquelle l'intégration fonctionnerait sans doute
-encore, se voit refuser la mise à jour par HACS.
-
-Tant que `pytest-homeassistant==2026.11.0` n'est pas publié, l'épingle est la
-bêta `2026.11.0b6`, et `validate.yml` installe `homeassistant==2026.11.0`
-par-dessus : c'est la version publiée qui est exercée, pas la bêta.
-
-Le plancher était auparavant à 2026.2, puis à 2026.8, puis à 2026.9, puis à 2026.10. Chaque montée a été faite
-en **exécutant** le socle visé, pas en modifiant le chiffre — et les deux fois
-la seule exécution a trouvé un défaut produit qu'aucun portail ne voyait :
-`DeviceInfo.via_device` (le tuple, retiré au profit de `via_device_id`), qui
-faisait échouer l'ajout de six plateformes sur sept, et l'amplification par dix
-des demandes de rafraîchissement du planificateur. C'est la leçon du §11 sous sa
-forme la plus courte : **un plancher qu'on ne lance pas est une affirmation, pas
-un plancher.**
-
-Un effet de bord du plancher mérite d'être retenu : à partir de **2026.3**, le
-dossier `brand/` local est servi par le *frontend* (voir le commentaire de
-`BRAND_LOGO_URL` dans `const.py`), donc toute instance supportée affiche la
-marque nativement. C'est ce qui rend envisageable le retrait de l'image
-markdown de la description de la première étape du flux, sous réserve d'une
-vérification visuelle.
-
-### 12.14 Neuf blueprints, pas six
-
-La spécification §2.3 énumère **six** blueprints. Le dépôt en livre **neuf** par
-langue, soit dix-huit fichiers dans `blueprints/automation/carnet_scolaire/{fr,en}/` :
-`wake_up_alarm`, `lesson_canceled`, `homework_reminder`, `new_grade`,
-`absence_alert`, `canteen_menu` — les six prévus — plus trois :
-
-- **`new_message`** couvre l'arrivée d'un message de la messagerie ou d'une
-  actualité publiée par l'établissement ;
-- **`end_of_day`** agit à la fin des cours, sur le capteur « Fin des cours » ;
-- **`midday_return`** agit à la fin de la matinée, sur le capteur « Fin de
-  matinée », avec une option qui dit si un cours annulé avance le retour ou si
-  l'élève reste en permanence jusqu'à l'heure prévue (`scheduled_end`).
-
-Ce sont des ajouts, pas des divergences de conception : ils exploitent des
-déclencheurs et des capteurs qui existaient déjà au catalogue, et la
-spécification exige un test par blueprint, ce qui vaut pour eux comme pour les
-six autres — `tests/test_blueprint_midday_return.py` exécute le dernier dans
-Home Assistant.
-
-### 12.15 Divergences que le code a déjà consignées
-
-Ces écarts-là ne sont pas des défauts : le code a corrigé la spécification et
-l'a dit. Ils sont listés ici parce qu'un lecteur qui part des documents de
-conception les rencontrera.
-
-* **La stratégie de session est inversée.** La spécification v1 fermait la
-  session entre les batches, sur un modèle de coût faux trois fois de suite.
-  Le défaut est maintenant `LAZY`, avec l'argument de dominance et sa
-  dégradation bornée (§5.2). `PER_BATCH` reste offert comme échappatoire.
-* **La règle de détection de changement est dédoublée.** La règle unique
-  « delta sur `N` » de la v1 ne pouvait pas implémenter le cours modifié
-  (§7.4).
-* **Le client durci est un prérequis**, pas une amélioration (§6.4).
-* **Les paliers sont passés de treize à dix**, en repliant la semaine d'emploi
-  du temps dans le palier `timetable` — puisque `Client.lessons()` facture par
-  semaine — et en fusionnant les trois jeux de données de `PagePresence`.
-* **Deux identifiants d'onglet de la v1 étaient faux** et sont corrigés avec un
-  avertissement pour qu'un futur lecteur ne les « répare » pas en arrière
-  (`FUNC_NEWS`, `const.py`) : la lecture du fil d'actualités est `PageActualites` et
-  non `SaisieActualites`, qui est l'écriture ; la liste des discussions est
-  `ListeMessagerie`.
-* **Le budget par défaut est passé d'environ 423 à environ 180 requêtes par
-  jour**, et le plafond journalier est fixé à 2000 comme filet de sécurité
-  contre un défaut logiciel, soit un facteur onze.
-* **Le palier `history` coûte 8 requêtes et non 6.** L'annexe déduisait trois
-  requêtes par période close ; il en faut quatre, parce que
-  `DernieresEvaluations` 201 y manquait (`REQUESTS_PER_BATCH`, `options.py`). Compter depuis le
-  code bat compter depuis la prose. À noter que l'annexe a **depuis** été
-  corrigée et affiche bien 8, avec les quatre onglets nommés : le commentaire
-  du code qui reproche à l'annexe d'avoir déduit 6 est donc lui-même périmé, et
-  c'est la seule contradiction interne encore ouverte entre les deux documents.
-* **Le plafond de connexions journalières est 24 et non 120** : le design
-  attend une à trois connexions par jour, et 120 ne pourrait pas attraper le
-  défaut pour lequel le plafond existe (`const.py`).
-* **`LimiterState` ne contient pas d'`ip_suspended`**, et la réparation de
-  bootstrap ne nomme aucune cause, parce que `if "IP" in html` ne peut pas en
-  établir une (§6.4).
-* **Le palier `discussions` était budgété à une requête** ; la spécification
-  n'avait pas anticipé que `Discussion.messages` poste à chaque lecture. Le
-  développement sélectif plafonné à trois fils est la réponse (§4.2).
-* **Le palier `static` ne collecte plus l'URL iCal**, pour la raison de §10.2.

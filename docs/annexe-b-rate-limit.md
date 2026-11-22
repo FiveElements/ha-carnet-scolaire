@@ -4,12 +4,6 @@ Référence du §6 de [`SPECIFICATION.md`](SPECIFICATION.md). Ce document décri
 module `ratelimit.py` : ce qu'il compte, comment il refuse, comment il se remet,
 et pourquoi les valeurs par défaut sont celles-là.
 
-> **Version 2.** L'arithmétique du §5 a été entièrement refaite : le modèle de
-> coût de la v1 était faux sur trois points (coût du maintien de session, coût
-> d'une connexion, unité de facturation de l'emploi du temps). Le budget par
-> défaut passe de ≈ 423 à **≈ 180 appels par jour**, et la stratégie de session
-> est inversée. Détail des arbitrages au §14 de la spécification.
-
 ---
 
 ## 1. Le problème posé
@@ -34,15 +28,14 @@ pour l'authentification.
 
 ### 1.1 `G = 25` compte peut-être les connexions, pas les appels
 
-Le libellé de cette erreur parle de « demandes d'**autorisation** ». La v1 la
-nommait correctement puis budgétait contre le volume d'*appels* — deux grandeurs
-différentes. Si la grandeur réellement mesurée par le serveur est celle des
+Le libellé de cette erreur parle de « demandes d'**autorisation** », pas
+d'*appels* — deux grandeurs différentes. Si la grandeur réellement mesurée par le serveur est celle des
 autorisations, alors le risque se pilote par le **nombre de connexions par
 jour**, et une conception qui reconnecte à chaque lot multiplie par soixante la
 seule variable dangereuse pour économiser celle qui ne l'est probablement pas.
 
-C'est le raisonnement qui a inversé la stratégie de session (§6.5 de la
-spécification). Il repose sur une lecture du libellé, pas sur une mesure : d'où
+C'est le raisonnement qui fonde la stratégie de session paresseuse (§6.5 de
+la spécification). Il repose sur une lecture du libellé, pas sur une mesure : d'où
 l'exigence de **mesurer** la durée de vie de session au lieu de parier.
 
 **Exigence.** Le limiteur compte les deux grandeurs séparément et expose les
@@ -54,7 +47,7 @@ celle dont la sanction est documentée.
 **Exigence.** Le limiteur compte les **requêtes HTTP**, pas les appels
 protocolaires. Une connexion vaut 1 GET (l'amorçage, qui rapporte les attributs
 `Start({…})`) + 4 POST, plus 1 à 2 `SecurisationCompteDoubleAuth` en mode jeton :
-**5 à 7 requêtes**. La v1 comptait 4 et sous-estimait donc son propre budget.
+**5 à 7 requêtes**. Compter 4 sous-estimerait le budget de chaque connexion.
 
 ---
 
@@ -67,12 +60,15 @@ Les trois couches s'appliquent dans l'ordre. Un appel doit franchir les trois.
 **But** : interdire toute rafale, quelle que soit la logique en amont.
 
 ```python
-async def _space(self) -> None:
+def _spacing_wait(self) -> float:
     elapsed = self._clock() - self._last_call
-    if elapsed < self.min_request_interval:
-        await asyncio.sleep(self.min_request_interval - elapsed)
-    self._last_call = self._clock()
+    return max(0.0, self._config.min_request_interval - elapsed)
 ```
+
+L'attente est calculée, dormie et débitée sous un même verrou d'admission
+(`RateLimiter.call`) : deux appelants simultanés — un lot planifié et un service
+invoqué pendant ce lot — ne peuvent pas lire le même `_last_call` et partir
+dans la même milliseconde.
 
 Défaut : **1,0 s**. Un lot de treize requêtes — le pire cas calculé au §5 —
 s'étale donc sur treize secondes, ce qui est indolore pour l'utilisateur et
@@ -125,10 +121,16 @@ Quand le budget se resserre, l'ordre de sacrifice est déterminé, pas arbitrair
 
 | Priorité | Paliers | Comportement en budget contraint |
 | --- | --- | --- |
-| `critique` | `session` | toujours servi |
+| `critique` | `session`, et la première collecte d'un palier (§6) | toujours servi |
+| `geste` (`gesture`) | une collecte demandée par une personne : service, bouton, case cochée | servi jusqu'au plafond du jour, et traverse les heures creuses |
 | `haute` | `timetable`, `homework` | servi jusqu'au plafond du jour |
 | `normale` | `news`, `marks`, `attendance` | reporté dès 80 % du plafond |
-| `basse` | `discussions`, `evaluations`, `menus`, `static`, `history` | reporté dès 60 % du plafond |
+| `basse` | `discussions`, `evaluations`, `menus`, `agenda`, `static`, `history` | reporté dès 60 % du plafond |
+
+Le seuil de `critique` est infini, pas un grand nombre : `calls_today` n'a pas
+de plafond, donc tout seuil fini serait atteignable, et l'atteindre refuserait
+la connexion dont dépendent tous les autres paliers. Les heures creuses ne
+laissent passer que `critique` et `geste` (`QUIET_HOURS_EXEMPT`).
 
 **Exigence.** Un palier reporté n'est jamais abandonné : son échéance est
 repoussée, jamais annulée. Et il conserve son instantané précédent, donc ses
@@ -143,7 +145,7 @@ lourde.
 
 | Option | Défaut | Rôle |
 | --- | --- | --- |
-| `max_logins_per_day` | **24** | garde-fou sur les connexions **réussies** |
+| `max_logins_per_day` | **24** | garde-fou sur les tentatives de connexion, **réussies ou non** |
 | `max_failed_logins_per_hour` | 3 | garde-fou sur les connexions **échouées** |
 | `credentials_hold` | 3 600 s | attente après épuisement des tentatives |
 | `bootstrap_hold` | 3 600 s | attente après un amorçage impossible |
@@ -152,14 +154,19 @@ Le déséquilibre entre 24 et 3 est voulu et c'est le cœur du dispositif. Une
 connexion réussie est un geste normal et bon marché ; une connexion échouée est
 le symptôme d'un identifiant faux, et **rien de bon ne sort de la réessayer**.
 
-**Exigence.** `max_logins_per_day` vaut **24**, et non 120 comme en v1. La
-conception attend une à trois connexions par jour (§6.5 de la spécification) :
-un plafond à 120 ne pourrait pas attraper le défaut pour lequel il existe.
+**Exigence.** `max_logins_per_day` vaut **24**. La conception attend une à
+trois connexions par jour (§6.5 de la spécification) : un plafond beaucoup plus
+haut ne pourrait pas attraper le défaut pour lequel il existe.
+
+Une connexion à laquelle PRONOTE répond en exigeant le PIN de double
+authentification ouvre elle aussi une attente (`mfa_hold`, de la durée de
+`credentials_hold`) : le PIN n'est pas conservé (§8.1 de la spécification),
+donc aucun réessai automatique ne peut réussir. Seule la ré-authentification la
+lève.
 
 ### 3.1 Classer l'échec sur la bonne exception
 
-C'est le point le plus important de ce module, et la v1 ne nommait pas
-l'exception.
+C'est le point le plus important de ce module.
 
 Un mot de passe faux **ne lève pas** de `PronoteAPIError` : le déchiffrement du
 défi échoue et `_login` lève **`CryptoError`**, ou bien `_login` renvoie
@@ -203,10 +210,8 @@ majuscules, n'importe où dans la page. « Espace IP » dans un pied de page,
 « SKIP », « ZIP », « EQUIPE », une classe CSS, une bannière ENT — tout déclenche
 la détection.
 
-La v1 bâtissait là-dessus une attente d'une heure, l'arrêt complet des appels et
-une réparation « au texte explicite ». Elle aurait donc annoncé à des parents
-que leur adresse est bannie à cause d'un pied de page, tout en s'arrêtant
-réellement.
+Bâtir là-dessus une réparation « adresse suspendue » annoncerait à des parents
+que leur adresse est bannie à cause d'un pied de page.
 
 **Exigence.** Un amorçage impossible est traité comme tel : attente
 `bootstrap_hold`, `etat_limiteur` = `bootstrap_failed`, et une réparation dont le
@@ -215,7 +220,7 @@ possibles sans en choisir une.
 
 **Exigence.** Le seul test d'amorçage retenu est l'**absence du bloc
 d'attributs `Start({…})`**. Même dans ce cas, la réparation ne nomme pas la
-cause. L'état `ip_suspended` de la v1 est supprimé : un état que l'intégration ne
+cause. Il n'existe pas d'état `ip_suspended` : un état que l'intégration ne
 peut pas établir de façon fiable ne doit pas exister dans son vocabulaire.
 
 **Pourquoi cette exigence, plutôt qu'une détection simplement plus fine.** Le
@@ -228,8 +233,7 @@ installation qui fonctionnait. C'est pourquoi la règle n'est pas « détecter
 mieux » mais « nommer le symptôme et énumérer les causes », et elle se généralise
 bien au-delà du cas de l'adresse IP.
 
-**Et cette exigence est tenue par deux tests, pas seulement écrite.** La
-divergence dans `hardened_client.py` est une **suppression**, ce qui est
+**Cette exigence est tenue par deux tests.** La divergence dans `hardened_client.py` est une **suppression**, ce qui est
 invisible à la lecture : quelqu'un comparant le code à celui d'amont verra un
 contrôle manquant et sera tenté de le rétablir.
 `test_a_page_without_a_start_block_is_a_bootstrap_condition`
@@ -290,56 +294,53 @@ absorbée comme un aléa réseau.
 Fenêtre active de 06:00 à 22:00, soit **16 heures**. Battement maître de 5 min.
 Le palier le plus rapide, `timetable`, est à 15 min, soit **64 lots par jour**.
 
-### 5.1 Le modèle de coût de la v1 était faux sur trois points
+### 5.1 Trois faits de coût lus dans la source
 
-La v1 concluait qu'il fallait fermer la session entre les lots. La conclusion
-était fausse, et les trois erreurs valent d'être nommées : ce sont des erreurs
-de *modèle*, invisibles à la relecture du document et visibles en relisant la
-source.
+Comparer « fermer la session entre les lots » et « la garder ouverte » repose
+sur trois coûts. Ce sont des faits de *modèle*, invisibles à la lecture d'un
+document et visibles en lisant la source de `pronotepy`.
 
-| Ce que disait la v1 | Ce que dit la source | Effet |
+| Grandeur | Ce que dit la source | Effet |
 | --- | --- | --- |
-| Maintien = 523 appels sur 16 h | `_KeepAlive.alive()` ne ping que si la session est inactive depuis 110 s, et `last_ping` est remis à jour par **chaque** POST : le trafic de données déplace les pings, soit ≈ 523 − 167 ≈ **356** | l'écart tombe de ×2 à ×1,4 |
-| Connexion = 4 appels | 1 GET d'amorçage + 4 POST, plus 1 à 2 `SecurisationCompteDoubleAuth` en mode jeton : **5 à 7 requêtes** | 64 × 5 = 320, pas 256 |
-| Emploi du temps facturé au jour | `Client.lessons()` boucle **par semaine** et filtre côté client | « aujourd'hui + demain » coûte le même appel que la semaine |
+| Maintien de session | `_KeepAlive.alive()` ne ping que si la session est inactive depuis 110 s, et `last_ping` est remis à jour par **chaque** POST : le trafic de données déplace les pings, soit ≈ 523 − 167 ≈ **356** requêtes sur 16 h | garder la session coûte ≈ 356 |
+| Connexion | 1 GET d'amorçage + 4 POST, plus 1 à 2 `SecurisationCompteDoubleAuth` en mode jeton : **5 à 7 requêtes** | reconnecter à chaque lot coûte 64 × 5 = 320 à 64 × 7 = 448 |
+| Emploi du temps | `Client.lessons()` boucle **par semaine** et filtre côté client | « aujourd'hui + demain » coûte le même appel que la semaine |
 
-La comparaison honnête devient donc **356 contre 320 à 448** : un match nul, pas
-un facteur deux.
+En requêtes seules, les deux stratégies font donc match nul : **356 contre 320
+à 448**. Ce sont les coûts du §5.2 qui tranchent.
 
-### 5.2 Trois coûts que la v1 ne chiffrait pas
-
-Ils sont ce qui a réellement inversé la décision.
+### 5.2 Trois coûts que les requêtes ne montrent pas
 
 **Il n'existe aucune déconnexion dans `pronotepy`.** « Fermer la session » se
 réduit à `communication.session.close()`, qui jette le pool TCP côté client. La
-session serveur vit jusqu'à son propre délai d'inactivité. La v1 ne créait donc
-pas 64 sessions successives mais **64 sessions qui se chevauchent**, et
-64 `derniereConnexion` par jour dans le journal que PRONOTE présente à
-l'établissement — exactement la signature que cette annexe cherche à ne pas
-dessiner.
+session serveur vit jusqu'à son propre délai d'inactivité. Reconnecter à chaque
+lot ne crée donc pas 64 sessions successives mais **64 sessions qui se
+chevauchent**, et 64 `derniereConnexion` par jour dans le journal que PRONOTE
+présente à l'établissement — exactement la signature que cette annexe cherche à
+ne pas dessiner.
 
 **La rotation du jeton.** En mode jeton, chaque `Authentification` renvoie un
 nouveau `jetonConnexionAppliMobile` que le §7.2 de la spécification exige de
-réenregistrer. Soit 64 réécritures de `.storage` par jour, et surtout **64
-fenêtres par jour** pendant lesquelles un arrêt brutal entre la rotation serveur
-et la persistance locale laisse un jeton mort et une intégration verrouillée,
+réenregistrer. Chaque connexion est une réécriture de `.storage`, et surtout
+une **fenêtre** pendant laquelle un arrêt brutal entre la rotation serveur et la
+persistance locale laisse un jeton mort et une intégration verrouillée,
 récupérable seulement en rescannant un QR code.
 
 **La double authentification.** PRONOTE décide seul quand redemander le PIN, et
-le §8.1 interdit de le conserver. 64 connexions par jour, c'est 64 occasions
-quotidiennes d'être interrogé sans PIN sous la main.
+le §8.1 interdit de le conserver. Chaque connexion est une occasion d'être
+interrogé sans PIN sous la main.
 
 ### 5.3 La stratégie retenue et son coût
 
 Reconnexion **paresseuse** sur les codes d'expiration
 (`SESSION_EXPIRED_CODES` : `Erreur.G = 8` et `10`), durée de vie de session
 **mesurée** (§6.5 de la spécification). Et, indépendamment de tout code, une
-session sans un seul appel réussi depuis `PRESUMED_DEAD_AFTER_SECONDS` est
-abandonnée plutôt que réutilisée : détenir un client prouve qu'une connexion a
-réussi un jour, pas que le serveur la reconnaît encore. Si le délai d'inactivité de
-l'établissement dépasse l'intervalle de `timetable` — le réglage courant est
-30 min pour un `timetable` à 15 min — le trafic de données maintient la session
-seul, et les connexions tombent à **une à trois par jour**.
+session sans un seul appel réussi depuis `PRESUMED_DEAD_AFTER_SECONDS` (une
+heure) est abandonnée plutôt que réutilisée : détenir un client prouve qu'une
+connexion a réussi un jour, pas que le serveur la reconnaît encore. Si le délai
+d'inactivité de l'établissement dépasse l'intervalle de `timetable` — le cas
+courant est 30 min pour un `timetable` à 15 min — le trafic de données maintient
+la session seul, et les connexions tombent à **une à trois par jour**.
 
 | Palier | Intervalle | Lots / jour | Requêtes par lot | Total |
 | --- | --- | --- | --- | --- |
@@ -358,42 +359,38 @@ seul, et les connexions tombent à **une à trois par jour**.
 | Connexions | paresseuses | 1 à 3 | 5 à 7 | **5 à 21** |
 | | | | **Total** | **≈ 254** |
 
-Contre ≈ 423 annoncés en v1 — et ≈ 487 réels avec le modèle corrigé. La
-conception v2 coûte donc **un peu plus de la moitié** de la v1, pour une
-fraîcheur *supérieure* sur la semaine d'emploi du temps.
+Reconnecter à chaque lot coûterait les mêmes 236 requêtes de données plus 64
+connexions, que le plafond `max_logins_per_day` ramène à 24 : la stratégie
+paresseuse coûte nettement moins, pour la même fraîcheur.
 
-`timetable` a coûté 1,14 jusqu'à ce que l'horizon soit corrigé, et les deux
-chiffres méritent d'être comparés parce que l'écart est la mesure du défaut.
-Le 0,14 était le jour sur sept où *demain* tombait dans la semaine suivante :
-autrement dit, la semaine suivante n'était demandée que le dimanche, et l'état
-du lundi restait inconnu du samedi 00:00 jusqu'à la première collecte du lundi.
-Les 55 requêtes par jour que coûte la correction se lisent contre le plafond de
-2 000 et contre les ≈ 253 dépensées, soit un quart de requête par minute de
-plus. Hors année scolaire le palier ne coûte rien du tout, l'été effaçant à lui
-seul plus que ce que la correction ajoute sur l'année.
+`menus` vaut 1,14 parce que `Client.menus()` parcourt des semaines entières :
+une requête, deux le jour sur sept où *demain* tombe dans la semaine suivante.
+`timetable` demande toujours la semaine courante **et** la suivante, sans quoi
+l'état du lundi resterait inconnu du samedi à la première collecte du lundi.
 
-**Deux lignes de ce tableau ont été corrigées en relisant le code plutôt que
-la prose, et il vaut la peine de dire lesquelles.**
+`history` coûte **quatre** requêtes par période close : `DernieresNotes` 198,
+`PageBulletins` 13, `PagePresence` 19 et `DernieresEvaluations` 201 — le palier
+`evaluations` interroge ce même onglet pour la période courante.
 
-`history` coûte **huit** requêtes, non six : quatre par période close, pas
-trois. `DernieresNotes` 198, `PageBulletins` 13, `PagePresence` 19 — et
-`DernieresEvaluations` **201**, qui n'apparaît ni dans la spécification ni dans
-la première version de cette annexe. L'onglet existe pourtant, le palier
-`evaluations` l'interroge pour la période courante, et rien ne justifiait de
-l'omettre pour les périodes closes.
+`discussions` coûte **deux** requêtes en moyenne. La liste des fils en vaut
+une ; `pronotepy.Discussion.messages` republie `ListeMessages` à **chaque
+lecture**, et la passerelle déplie les fils dont le compteur de non-lus a
+monté, plafonnés à `MAX_DISCUSSION_EXPANSIONS` = 3 par cycle. Un compte qui
+reçoit un message par cycle paie donc deux requêtes ; un compte inactif en paie
+une, un compte très actif jusqu'à quatre.
 
-`discussions` coûte **deux** requêtes en moyenne, non une. La liste des fils
-en vaut une ; `pronotepy.Discussion.messages` republie `ListeMessages` à
-**chaque lecture**, et la passerelle déplie les fils dont le compteur de
-non-lus a monté, plafonnés à `MAX_DISCUSSION_EXPANSIONS` = 3 par cycle. Un
-compte qui reçoit un message par cycle paie donc deux requêtes ; un compte
-inactif en paie une, un compte très actif jusqu'à quatre.
-
-Ces deux chiffres ne sont plus critiques pour la sûreté du limiteur, et c'est
+Ces chiffres ne sont pas critiques pour la sûreté du limiteur, et c'est
 délibéré : `GatewayResult.calls` remonte le **coût réel** de chaque appel, et
 `RateLimiter.reconcile()` en débite la différence. Une déclaration trop basse
 se rattrape à l'arrivée ; seule une déclaration trop *haute* gaspillerait du
 budget, ce qu'aucune de ces valeurs ne fait.
+
+**L'estimateur, lui, est en retard d'une ligne.** `options.estimate_daily_requests()`,
+la fonction dont le flux d'options affiche le résultat, prend `timetable` à
+1,14 requête par lot (`REQUESTS_PER_BATCH`) et non à 2. Pour le réglage par
+défaut il affiche **200** requêtes par jour, soit ≈ 55 de moins que le coût
+réel ci-dessus. Les chiffres des §5.5 et §5.6 qui sortent de l'estimateur sont
+signalés comme tels.
 
 ### 5.4 La stratégie paresseuse ne peut pas être pire
 
@@ -401,8 +398,8 @@ C'est l'argument décisif, et il ne dépend d'aucune mesure.
 
 Si le délai d'inactivité mesuré se révèle **inférieur** à l'intervalle de
 `timetable`, chaque lot trouve la session morte et ouvre une connexion : la
-stratégie paresseuse **dégénère exactement en la conception v1**. Elle n'est
-donc jamais pire, pour toute valeur du paramètre inconnu, et strictement
+stratégie paresseuse **dégénère exactement en la reconnexion par lot**. Elle
+n'est donc jamais pire, pour toute valeur du paramètre inconnu, et strictement
 meilleure dès que le délai est généreux.
 
 **Exigence.** Avant la première mesure, le comportement par défaut est le
@@ -416,66 +413,72 @@ d'intérêt que pour un intervalle inférieur à 110 s, et aucun palier n'y desc
 
 | Grandeur | Consommation | Plafond par défaut | Marge |
 | --- | --- | --- | --- |
-| Requêtes par jour | ≈ 198 | 2 000 | ×10 |
+| Requêtes par jour | ≈ 254 (§5.3) | 2 000 | ×8 |
 | Requêtes dans l'heure la plus chargée | ≈ 25 | 240 | ×9,5 |
-| Requêtes dans le lot le plus chargé | ≈ 20 | 20 (capacité) | ×1,0 |
+| Requêtes dans le lot le plus chargé | ≈ 21 | 20 (capacité) | ×0,95 |
 | Connexions par jour | 1 à 3 | 24 | ×8 |
 
 **Conclusion.** Les plafonds ne contraignent pas le fonctionnement normal ; ils
 attrapent une anomalie. C'est la posture voulue : un limiteur qui bride en usage
 courant serait réglé trop bas, et l'utilisateur le désactiverait.
 
-Le seul rapport serré reste la capacité du seau face au lot maximal, et il
-s'est **resserré** avec la correction de `history` (×1,05 contre ×1,5
-annoncé), puis avec le palier `agenda` (×1,0). Le lot maximal — les onze
-paliers échus au même instant, ce qui arrive au démarrage et une fois par jour — vaut ≈ 20 requêtes pour une capacité de 20.
+Le seul rapport serré est la capacité du seau face au lot maximal : les onze
+paliers échus au même instant, ce qui arrive au démarrage et une fois par jour,
+valent ≈ 21 requêtes pour une capacité de 20.
 
-Ce n'est pas un défaut, mais il faut dire pourquoi.
+Ce n'est pas un défaut, pour trois raisons.
 
 D'abord, le seau se **remplit pendant** que le lot se déroule : 240 requêtes
 par heure, soit 4 par minute, et l'espacement minimal de 1 s étale déjà un lot
-de 20 requêtes sur au moins 20 s. Le seau n'est jamais vidé d'un coup.
+de 21 requêtes sur au moins 21 s. Le seau n'est jamais vidé d'un coup.
 
 Ensuite, si la capacité venait quand même à manquer, la dégradation est celle
-que §2.4 prescrit et non une panne : les quatre paliers qui font le lot
-maximal — `history`, `static`, `menus`, `evaluations` — sont tous de priorité
-**basse**, donc les premiers reportés, et `timetable` (haute) passe avant eux.
-Le lot maximal se contente d'être le lot qui exerce le mécanisme de sacrifice.
+que §2.4 prescrit et non une panne : `FetchScheduler.due()` sert les paliers par
+ordre de priorité, et les paliers quotidiens qui font le lot maximal —
+`history`, `static`, `agenda`, `menus`, ainsi qu'`evaluations` — sont tous de
+priorité **basse**, donc servis en dernier et les premiers reportés, tandis que
+`timetable` (haute) passe avant eux. Le lot maximal se contente d'être le lot
+qui exerce le mécanisme de sacrifice.
 
 Enfin, agrandir la capacité serait le mauvais remède : un seau beaucoup plus
 grand resterait plein en permanence et annulerait le lissage qui est sa raison
 d'être. Le bon réglage, si un établissement se montrait tatillon, est
 d'échelonner les paliers quotidiens.
 
-**Une réserve sur ce remède, à lever avant de s'en servir.** `history_periods`
-est le levier naturel — borner le nombre de périodes closes suivies borne le
-palier le plus lourd — et il est **inatteignable depuis l'interface** :
-`config_flow.py` ne l'expose dans aucune de ses trois sections d'options, si
-bien que seul un utilisateur qui édite `.storage` à la main peut le régler
-(ARCHITECTURE § 12.8, où sa sémantique est également ambiguë). Tant que ce
-n'est pas corrigé, ce paragraphe décrit un réglage que personne ne peut
-appliquer, et il faut le lire ainsi.
+**Une réserve sur ce remède.** `history_periods` est le levier naturel —
+borner le nombre de périodes closes suivies borne le palier le plus lourd — et
+il est **inatteignable depuis l'interface** : le flux d'options ne l'expose
+dans aucune de ses sections, si bien que seul un utilisateur qui édite
+`.storage` à la main peut le régler. Sa valeur par défaut, 0, signifie « toutes
+les périodes closes » (`DEFAULT_HISTORY_PERIODS`) ; une valeur N garde les N
+dernières.
 
 ### 5.6 Sensibilité
 
+Chiffres de l'estimateur (`options.estimate_daily_requests()`, donc avec
+`timetable` à 1,14, cf. §5.3), délai d'inactivité serveur de 30 min sauf
+mention contraire.
+
 | Changement | Effet sur le total |
 | --- | --- |
-| Délai d'inactivité serveur < 15 min | 198 → **≈ 347** (dégénérescence en v1, cf. §5.4) |
-| `timetable` porté à 30 min | 198 → **≈ 160** |
-| Heures creuses désactivées | 198 → **≈ 284** |
+| Délai d'inactivité serveur < 15 min | 200 → **347** (dégénérescence, cf. §5.4, connexions plafonnées à 24) |
+| `timetable` porté à 30 min, délai serveur > 30 min | 200 → **≈ 163** |
+| Heures creuses désactivées | 200 → **284** |
 | `master_tick` porté à 1 min | aucun effet : les échéances, pas le battement, fixent le coût |
-| Un second enfant sur le même compte | +180 environ (données seulement ; la session est partagée) |
-| `history_periods` = 0 | −8 |
+| Un second enfant sur le même compte | +179 environ (données seulement ; la session est partagée) |
+| Palier `history` désactivé | −8 |
 
 La première ligne est la borne haute du risque : même dans le pire cas du
-paramètre inconnu, on reste sous les 487 requêtes du modèle v1 corrigé.
+paramètre inconnu, l'estimation reste sous 500 requêtes.
 
-**La dernière ligne, elle, est la seule du tableau qui se périme toute seule, et
-dans le sens qui sous-estime.** `REQUESTS_PER_BATCH[Tier.HISTORY]` vaut **8**,
-et son commentaire dit d'où sortent ces huit : **quatre requêtes par période
-close** — `DernieresNotes` 198, `PageBulletins`, `PagePresence` 19 et
-`DernieresEvaluations` 201 — pour **deux** périodes closes. Ce facteur deux est
-une constante : l'estimateur ne compte les périodes de personne, et
+`timetable` porté à 30 min alors que le délai serveur vaut exactement 30 min
+retombe dans la dégénérescence : à égalité, l'estimateur se range du côté
+pessimiste, et la ligne vaudrait alors ≈ 310.
+
+**L'estimation de `history` se périme toute seule, et dans le sens qui
+sous-estime.** `REQUESTS_PER_BATCH[Tier.HISTORY]` vaut **8** : quatre requêtes
+par période close pour **deux** périodes closes. Ce facteur deux est une
+constante : l'estimateur ne compte les périodes de personne, et
 `periods_for(Tier.HISTORY)` n'y apparaît pas.
 
 Or `periods_for` suit **toutes** les périodes closes, sans plafond. Un
@@ -483,21 +486,17 @@ Or `periods_for` suit **toutes** les périodes closes, sans plafond. Un
 semestres — en annonce jusqu'à huit, donc sept closes en fin d'année, donc
 **vingt-huit requêtes par jour là où l'estimation en compte huit**. Le total
 affiché à l'utilisateur est juste en début d'année scolaire et le sous-estime
-d'une vingtaine de requêtes en fin d'année. La marge de ×10 encaisse l'écart
-sans difficulté — ce n'est pas un risque de sanction, c'est une estimation qui
-cesse d'être vraie sans que rien ne le signale, et c'est précisément ce que la
-phrase ci-dessous s'engage à éviter.
+d'une vingtaine de requêtes en fin d'année. La marge encaisse l'écart sans
+difficulté — ce n'est pas un risque de sanction, c'est une estimation qui cesse
+d'être vraie sans que rien ne le signale.
 
 Conséquence pour qui lit les capteurs de diagnostic : `calls_today` monte
 lentement de mois en mois à réglages constants, et **c'est normal**. Chaque
 trimestre qui se ferme ajoute quatre requêtes quotidiennes définitives.
 
-Les chiffres de cette section ne sont pas recalculés à la main : ils sortent de
-`options.estimate_daily_requests()`, la fonction que l'interface de
-configuration affiche à l'utilisateur, et un test les fige. Une annexe qui
-diverge du code est pire qu'une annexe absente, puisqu'on la croit. La
-troisième mesure ce que les heures creuses font gagner ; la quatrième dit que le
-battement maître peut être réglé finement sans coût.
+Les chiffres de l'estimateur ne sont pas recalculés à la main : un test
+(`tests/test_options.py`) fige ceux de cette section. Une annexe qui diverge du
+code est pire qu'une annexe absente, puisqu'on la croit.
 
 ## 6. Interaction avec l'ordonnanceur
 
@@ -505,13 +504,28 @@ battement maître peut être réglé finement sans coût.
 unique :
 
 ```python
-async def call(self, tier: str, priority: Priority, fn: Callable[[], T]) -> T
+async def call(
+    self,
+    tier: str,
+    priority: Priority,
+    fn: Callable[[], Awaitable[T]],
+    *,
+    cost: int = 1,
+    sleep: Callable[[float], Awaitable[None]] | None = None,
+) -> T
 ```
 
 Il n'existe aucune fonction publique de la passerelle qui ne passe pas par là.
-Un bouton de rafraîchissement obtient une priorité relevée pour le prochain
-battement — il n'obtient pas de dérogation, et il ne court-circuite pas
-l'espacement.
+`cost` est le nombre de requêtes que l'appel va réellement émettre : il est
+demandé au seau et débité à l'admission, sous le verrou, avant la requête, et
+jamais remboursé.
+
+Un bouton de rafraîchissement arme un **coup de pouce** pour le prochain
+battement : le palier remonte d'un rang dans l'ordre de service et il est
+collecté en priorité `geste`, qui traverse les heures creuses parce qu'une
+personne attend. Il ne court-circuite ni l'espacement, ni le seau, ni le
+plafond du jour, ni une attente en cours, et un palier n'obtient au plus qu'un
+coup de pouce servi par intervalle.
 
 **Exigence.** Un palier qui n'a **rien produit** n'est pas réessayé plus de
 quatre fois dans son propre intervalle.
@@ -519,17 +533,17 @@ quatre fois dans son propre intervalle.
 Le repli du §4 ne peut pas porter cette règle : il compte les échecs
 *consécutifs du compte* et revient à zéro dès qu'un autre palier réussit. Il ne
 dit donc rien d'un palier qui échoue pour une raison qui n'appartient qu'à lui —
-un établissement qui ne publie pas d'équipe pédagogique, par exemple. Un tel
-palier était reporté d'une seule base de repli, environ trente secondes, ce qui
-est **inférieur au battement maître** : un palier déclarant une collecte par
-jour était tenté à chaque battement, 288 fois par jour, et le budget que lui
-donne le §5.3 était faux du même facteur, sans que rien n'échoue pour le dire.
+un établissement qui ne publie pas d'équipe pédagogique, par exemple. Reporté
+d'une seule base de repli, environ trente secondes, soit moins que le battement
+maître, un palier quotidien serait tenté à chaque battement, 288 fois par jour,
+et le budget du §5.3 serait faux du même facteur sans que rien n'échoue pour le
+dire.
 
-Le plancher vaut donc `intervalle / 4`. C'est un minimum et non un
-remplacement : une attente plus longue demandée par le limiteur est respectée,
-et le plafond de l'intervalle exigé au §2.4 continue de s'appliquer par-dessus.
-Quatre plutôt qu'une parce qu'un échec passager mérite un nouvel essai avant
-demain.
+Le plancher vaut donc `intervalle / 4` (`FetchScheduler.mark_failed`). C'est un
+minimum et non un remplacement : une attente plus longue demandée par le
+limiteur est respectée, dans la limite d'un intervalle (`FetchScheduler.defer`)
+— l'échéance est repoussée, jamais annulée (§2.4). Quatre plutôt qu'une parce
+qu'un échec passager mérite un nouvel essai avant demain.
 
 **Exigence.** Un palier simplement **reporté** n'est pas concerné par ce
 plancher. Reporter et échouer sont deux situations distinctes et ne doivent pas
@@ -539,31 +553,35 @@ rafraîchissement pour une collecte qui n'a pas eu lieu, puis garderait le
 silence pendant les trois quarts de l'intervalle.
 
 **Exigence.** Un palier qui n'a **jamais** produit d'instantané pour un enfant
-collecte en priorité `critical`, et passe donc devant les heures creuses. C'est
-la seule dispense, et elle est celle que le §2.4 accorde déjà à la connexion
-elle-même.
+collecte en priorité `critical`, et passe donc devant les heures creuses. Avec
+la priorité `geste` d'une demande humaine, c'est la seule dispense des heures
+creuses (`QUIET_HOURS_EXEMPT`), et elle est celle que le §2.4 accorde déjà à la
+connexion elle-même. Aucune des deux n'échappe au plafond du jour.
 
 La raison est le §2.5 de la spécification : une entité `unavailable` casse les
 automatisations, elle ne se contente pas d'être vide. Sans cette dispense, une
-instance redémarrée à 23h00 — ou installée à 23h00 — ne publiait **rien** avant
-06h00 et donnait toutes les apparences d'une intégration cassée, au moment
-précis où quelqu'un la regarde.
+instance redémarrée — ou installée — à 23h00 ne publierait **rien** avant 06h00
+et donnerait toutes les apparences d'une intégration cassée, au moment précis
+où quelqu'un la regarde.
 
-Elle s'auto-limite, et c'est ce qui la rend acceptable : dès que le palier
-détient un instantané, la dispense cesse de s'appliquer. C'est donc un lot par
-palier et par enfant, jamais une exemption permanente. Un palier qui **échoue**
-reste sans donnée mais ne s'emballe pas : le plancher `intervalle / 4` ci-dessus
-borne ses reprises, et le maintien de repli est évalué **avant** la branche des
-heures creuses, donc il s'applique aussi à lui.
+Elle se borne de deux façons, et c'est ce qui la rend acceptable. Dès que le
+palier détient un instantané, elle cesse de s'appliquer. Et après trois échecs
+consécutifs (`_FIRST_COLLECTION_ATTEMPTS`, dans `tiers.py`), le palier retombe
+à sa priorité déclarée et attend 06h00 comme les autres : l'argument vaut pour
+une première collecte qui fonctionne, pas pour un onglet qui ne fonctionne pas.
+Sans cette sortie, un palier toujours en échec serait le seul éveillé de la
+nuit, accumulant des échecs qu'aucun succès d'un autre palier ne viendrait
+remettre à zéro, et un seul onglet cassé mettrait tout le compte en `backoff`.
+Le premier succès remet le compteur à zéro. Le plancher `intervalle / 4`
+ci-dessus borne les reprises, et le maintien de repli est évalué **avant** la
+branche des heures creuses, donc il s'applique aussi à ce palier.
 
 **Exigence.** L'horaire et la donnée traversent un rechargement **ensemble**, ou
 ni l'un ni l'autre. Transmettre l'échéance d'un palier dont l'instantané n'a pas
-survécu est le défaut qui a vidé un tableau de bord réel : le nouvel
-ordonnanceur croyait les paliers frais, `due()` ne rendait rien, et les entités
-sont restées `unavailable` pendant tout un intervalle — vingt-quatre heures pour
-`menus`, `static` et `history`, et jusqu'à 06h00 pendant les heures creuses,
-où le limiteur ne pouvait pas les regarnir. Un palier sans donnée est donc dû
-immédiatement, quelle que soit l'échéance héritée.
+survécu ferait croire le palier frais au nouvel ordonnanceur : `due()` ne le
+rendrait pas, et ses entités resteraient `unavailable` pendant tout un
+intervalle — vingt-quatre heures pour `menus`, `static` et `history`. Un palier
+sans donnée est donc dû immédiatement, quelle que soit l'échéance héritée.
 
 Les instantanés voyagent dans `hass.data` et **jamais** sur disque. Un
 instantané relu depuis le disque après un redémarrage serait une donnée d'âge
@@ -572,13 +590,21 @@ existent précisément pour éviter. Dans un même processus l'appariement est s
 après un vrai redémarrage le magasin est vide, tous les paliers sont donc dus, et
 la première collecte a lieu — ce qu'un redémarrage doit faire.
 
-**Exigence.** Le limiteur ne connaît ni PRONOTE ni Home Assistant. Il prend une
-horloge injectable et rend des décisions. C'est ce qui le rend testable à 100 %
-sans réseau ni instance, comme l'exige le §11 de la spécification.
+**Exigence.** Le limiteur ne connaît ni PRONOTE ni Home Assistant. Il prend des
+horloges injectables et rend des décisions. C'est ce qui le rend testable à
+100 % sans réseau ni instance, comme l'exige le §11 de la spécification.
 
 ```python
 class RateLimiter:
-    def __init__(self, config: RateLimitConfig, clock: Callable[[], float]) -> None
+    def __init__(
+        self,
+        config: RateLimitConfig,
+        clock: Callable[[], float],
+        now: Callable[[], datetime],
+        *,
+        rng: random.Random | None = None,
+        sleep: Callable[[float], Awaitable[None]] | None = None,
+    ) -> None
 ```
 
 ---
@@ -592,7 +618,7 @@ class RateLimiter:
 | `burst_size` | 20 | 5 – 100 | taille du lot autorisé d'un coup |
 | `max_requests_per_day` | 2 000 | 100 – 20 000 | plafond du jour |
 | `max_wait` | 60 s | 5 – 300 | au-delà, le palier est reporté |
-| `max_logins_per_day` | 24 | 5 – 500 | connexions réussies |
+| `max_logins_per_day` | 24 | 5 – 500 | tentatives de connexion, réussies ou non |
 | `max_failed_logins_per_hour` | 3 | 1 – 10 | connexions échouées |
 | `credentials_hold` | 3 600 s | 300 – 86 400 | attente après échecs |
 | `bootstrap_hold` | 3 600 s | 600 – 86 400 | attente après un amorçage impossible |
@@ -615,7 +641,7 @@ que le §5. Un réglage dont on ne voit pas la conséquence se règle au hasard.
 ## 8. Exigences de test
 
 `ratelimit.py` est à 100 % de couverture. Les cas qui doivent être couverts
-nommément, parce qu'ils sont ceux qui échouent en production :
+nommément, parce que ce sont eux qui cassent silencieusement :
 
 | Cas | Attendu |
 | --- | --- |
@@ -645,7 +671,8 @@ nommément, parce qu'ils sont ceux qui échouent en production :
 | `Erreur.G = 22` | **n'entre pas** dans le repli, journalisé comme bug |
 | Succès après cinq échecs | compteur d'échecs à zéro immédiatement |
 | Entrée en heures creuses pendant un lot | le lot en cours se termine, le suivant est reporté |
-| Palier sans instantané en heures creuses | collecte en `critical`, la dispense cesse dès qu'il en a un |
+| Palier sans instantané en heures creuses | collecte en `critical`, la dispense cesse dès qu'il en a un ou après trois échecs |
+| Coup de pouce en heures creuses | collecte en `gesture`, un seul servi par intervalle |
 | Rechargement, instantané retiré de la transmission | palier redemandé malgré l'échéance héritée |
 | Rechargement, instantané conservé | palier **non** redemandé, §7.3 tenu |
 | Deux comptes simultanés | compteurs indépendants, exécuteurs indépendants |
@@ -661,9 +688,9 @@ nommément, parce qu'ils sont ceux qui échouent en production :
   propriété du §5.4 : la stratégie paresseuse ne peut pas être pire que la
   reconnexion par lot.
 
-La borne de la v1 (« entre 380 et 460 appels ») était calibrée sur un modèle de
-coût faux et aurait échoué pour la mauvaise raison. Une borne est utile ; une
-borne dérivée d'un modèle non vérifié donne surtout de la confiance mal placée.
+Une borne n'est utile que si elle dérive d'un modèle de coût vérifié contre la
+source ; sinon elle échoue pour la mauvaise raison, ou donne une confiance mal
+placée.
 
 **Exigence.** Le compteur porte sur les **requêtes HTTP**, GET d'amorçage
 compris (§1.2). Un test vérifie qu'une connexion en incrémente de 5 au moins.

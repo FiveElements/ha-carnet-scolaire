@@ -49,16 +49,16 @@ surprenants :
 
 - **Tout est débité à l'admission, sous un verrou, avant que la requête parte.**
   Jamais au retour. Une connexion coûte cinq à sept requêtes et la poignée de
-  main PRONOTE est lente : facturée au retour, elle laisse plusieurs secondes
-  pendant lesquelles un second appelant lit un budget intact — c'est ainsi qu'un
-  plafond de cinq connexions en laisse passer dix.
+  main PRONOTE est lente : facturée au retour, elle laisserait plusieurs
+  secondes pendant lesquelles un second appelant lit un budget intact, et un
+  plafond de cinq connexions en laisserait passer dix.
 - **Il n'y a pas de remboursement.** Une exception levée avant même le fil est
   quand même facturée, et un appel qui coûte *moins* que déclaré ne rend rien.
   Un limiteur qui rembourse transforme une déclaration optimiste en autorisation
   de rafale.
 - **Le seau peut passer en négatif.** La dette est remboursée par le
-  réapprovisionnement continu. La borner à zéro pardonnait chaque découvert, et
-  le débit horaire cessait alors de vouloir dire quoi que ce soit.
+  réapprovisionnement continu. La borner à zéro pardonnerait chaque découvert, et
+  le débit horaire cesserait alors de vouloir dire quoi que ce soit.
 
 ### 1.2 Deux compteurs pour les connexions
 
@@ -73,8 +73,8 @@ le plafond journalier. Refuser de se connecter laisserait toutes les entités
 périmées sans aucun retour possible.
 
 Et **chaque tentative compte, réussie ou non**. Ne compter que les succès
-laissait un compte en échec réessayer sans borne, pendant que le compteur censé
-l'arrêter restait à zéro.
+laisserait un compte en échec réessayer sans borne, pendant que le compteur
+censé l'arrêter resterait à zéro.
 
 ### 1.3 La décision, dans l'ordre
 
@@ -153,11 +153,11 @@ seul `reason` les distingue :
     reste au-dessus de **60 %** du plafond journalier — même si, à cet instant
     précis, rien n'est effectivement reporté.
 
-    Ce n'est pas un défaut. L'effacer à chaque succès rendait le plafond
-    silencieux : un seul appel `HIGH` réussi remettait le drapeau à zéro pendant
-    que les catégories `NORMAL` et `LOW` continuaient d'être sacrifiées, et
-    `binary_sensor.<compte>_collectes_bridees` repassait à `off` tous les quarts
-    d'heure. Des données qui vieillissent sans une ligne d'erreur dans le journal
+    Ce n'est pas un défaut. L'effacer à chaque succès rendrait le plafond
+    silencieux : un seul appel `HIGH` réussi remettrait le drapeau à zéro pendant
+    que les catégories `NORMAL` et `LOW` continuent d'être sacrifiées, et
+    `binary_sensor.<compte>_collectes_bridees` repasserait à `off` tous les
+    quarts d'heure. Des données qui vieillissent sans une ligne d'erreur dans le journal
     sont le symptôme le plus difficile à diagnostiquer qui soit.
 
 !!! danger "Le binaire n'est pas l'état, et il ne dit pas la même chose"
@@ -233,36 +233,31 @@ Quatre choses valent d'être sues :
 - **La toute première collecte d'une catégorie passe aussi.** Une catégorie qui
   n'a **jamais** produit d'instantané pour un enfant collecte en `CRITICAL` et
   franchit donc les heures calmes. Sans cette dispense, une instance installée —
-  ou redémarrée — à 23 h ne publiait rien avant 6 h et donnait toutes les
+  ou redémarrée — à 23 h ne publierait rien avant 6 h et donnerait toutes les
   apparences d'une intégration cassée, précisément au moment où quelqu'un la
   regarde. Elle cesse dès que la catégorie détient un instantané — un lot par
   catégorie et par enfant.
 
-    **Elle cesse aussi au bout de trois échecs**, et ce second garde-fou a été
-    ajouté parce qu'il manquait. « Elle s'auto-limite » était vrai du succès
-    seulement : une catégorie qui ne peut **jamais** réussir reste sans donnée
-    pour toujours, donc l'exemption devenait permanente. Mesuré sur une
-    instance : l'onglet « équipe pédagogique » de l'établissement renvoyait une
-    section vide, la catégorie `static` était donc la seule éveillée entre 22 h
-    et 6 h, donc la seule à pouvoir accumuler des échecs — et le repli du
-    limiteur, qui est global au compte, n'avait le succès d'aucune autre
-    catégorie pour se remettre à zéro. Un onglet inutilisable produisait un
-    `backoff` de tout le compte, et les entités qui ne lui appartenaient pas
-    vieillissaient derrière lui. Trois échecs, soit trois quarts de son propre
-    intervalle : assez pour qu'une panne passagère ne coûte pas sa dispense à
-    une installation neuve, assez peu pour qu'un onglet qui ne marche pas cesse
-    d'être seul éveillé à quatre heures du matin. Le premier succès rétablit la
+    **Elle cesse aussi au bout de trois échecs.** Une catégorie qui ne peut
+    **jamais** réussir — un onglet que l'établissement publie vide, par
+    exemple — resterait sans donnée pour toujours, donc exemptée pour toujours :
+    seule éveillée entre 22 h et 6 h, elle serait la seule à accumuler des
+    échecs, et le repli du limiteur, global au compte, n'aurait le succès
+    d'aucune autre catégorie pour se remettre à zéro. Un onglet inutilisable
+    mettrait tout le compte en `backoff`. Trois échecs, soit trois quarts de son
+    propre intervalle : assez pour qu'une panne passagère ne coûte pas sa
+    dispense à une installation neuve, assez peu pour qu'un onglet qui ne marche
+    pas cesse d'être seul éveillé à quatre heures du matin. La catégorie reprend
+    alors sa priorité déclarée et attend 6 h ; le premier succès rétablit la
     dispense.
-- **Un rechargement ne peut plus vous piéger la nuit.** L'horaire d'une
-  catégorie et sa donnée traversent désormais un rechargement *ensemble, ou pas
-  du tout* : une catégorie revenue sans instantané est due immédiatement, quelle
-  que soit l'échéance héritée. Sans cela, un rechargement à 22 h 10 vidait le
-  tableau de bord jusqu'à 6 h — le nouvel ordonnanceur croyait les catégories
-  fraîches, et le limiteur ne pouvait pas les regarnir.
+- **Un rechargement ne vide pas le tableau de bord la nuit.** L'horaire d'une
+  catégorie et sa donnée traversent un rechargement *ensemble, ou pas du tout* :
+  une catégorie revenue sans instantané est due immédiatement, quelle que soit
+  l'échéance héritée, et collecte donc en `CRITICAL` comme une première
+  collecte.
 - **Un lot commencé avant 22 h a le droit de finir.** Une tolérance de cinq
-  minutes couvre le franchissement, sinon les derniers paliers d'un lot à cheval
-  sur 22 h étaient refusés à mi-course — ce qui n'est aucun des deux
-  comportements documentés.
+  minutes couvre le franchissement : les derniers paliers d'un lot à cheval sur
+  22 h ne sont pas refusés à mi-course.
 - **La nuit est exclue du calcul de péremption.** Vos entités ne se déclarent
   donc pas « périmées » à 6 h du matin sous prétexte que rien n'a été collecté
   depuis 22 h.
@@ -286,7 +281,7 @@ d'essayer et nous avons besoin de vous » :
 Le second est une **pause**, pas un simple drapeau, et c'est important : aucune
 quantité de tentatives ne peut aboutir tant qu'un humain n'a pas fourni le PIN,
 et chaque tentative coûte cinq à sept requêtes. Laissé sans borne, ce cas
-produisait des milliers de tentatives par jour — exactement le geste qui fait
+produirait des milliers de tentatives par jour — exactement le geste qui fait
 suspendre une adresse.
 
 **Comment on en sort** : une **reconnexion manuelle** (*Paramètres → Appareils et
@@ -371,10 +366,10 @@ plus sévère — elle peut seulement l'allonger :
 | `bootstrap_hold` | 3 |
 | `credentials_hold` | 4 |
 
-Sans cet ordre, une simple erreur de transport rétrogradait une pause d'une heure
-en temporisation de trente secondes, et le succès suivant l'effaçait — la pause
-qui existe pour arrêter la boucle s'évaporait donc exactement quand la boucle
-tournait.
+Sans cet ordre, une simple erreur de transport rétrograderait une pause d'une
+heure en temporisation de trente secondes, et le succès suivant l'effacerait —
+la pause qui existe pour arrêter la boucle s'évaporerait exactement quand la
+boucle tourne.
 
 C'est aussi pourquoi un appel réussi ne lève **que** la temporisation : il remet
 le compteur d'échecs consécutifs à zéro et annule une pause `backoff`, mais il ne
@@ -389,9 +384,9 @@ arbitraire**. Chaque priorité cesse d'être servie à une fraction du plafond :
 
 | Priorité | Seuil | Avec le plafond par défaut | Catégories concernées |
 | --- | --- | --- | --- |
-| `LOW` | 60 % | 1200 appels | Discussions, Évaluations, Menus, Données stables, Périodes closes |
+| `LOW` | 60 % | 1200 appels | Discussions, Évaluations, Menus, Agenda, Données stables, Périodes closes |
 | `NORMAL` | 80 % | 1600 appels | Actualités, Notes, Vie scolaire |
-| `HIGH` | 100 % | 2000 appels | Emploi du temps, Devoirs |
+| `HIGH` et `GESTURE` | 100 % | 2000 appels | Emploi du temps, Devoirs ; et toute collecte demandée par une personne |
 | `CRITICAL` | ∞ | jamais | La session elle-même |
 
 Deux remarques :
@@ -408,8 +403,9 @@ Deux remarques :
 
 La priorité d'une catégorie n'est pas tout à fait figée : tant qu'elle n'a
 produit **aucun** instantané pour un enfant, elle collecte en `CRITICAL` et
-échappe donc aussi à ce tableau, le temps d'un seul lot
-(§ [3.4](#34-quiet_hours--heures-calmes)).
+échappe donc aussi à ce tableau, jusqu'à son premier succès ou son troisième
+échec (§ [3.4](#34-quiet_hours--heures-calmes)). Et une collecte armée par un
+bouton d'actualisation passe en `GESTURE` le temps de ce seul passage.
 
 Rappel du § [1.2](#12-deux-compteurs-pour-les-connexions) : une connexion n'est
 jamais sacrifiée par ce mécanisme, mais elle reste espacée, tirée du seau et
@@ -428,11 +424,11 @@ comptée.
 | **Un redémarrage de Home Assistant** | Tout, y compris les pauses. | — |
 
 Les deux dernières lignes méritent une phrase. L'état punitif est conservé hors
-de l'objet du compte, parce qu'une reprise de configuration reconstruisait sinon
-un limiteur neuf toutes les quatre-vingts secondes : un établissement
-indisponible un week-end produisait ainsi des milliers de connexions contre un
-plafond de vingt-quatre, pendant que le compteur affiché disait cinq — chaque
-rapporteur étant un objet différent.
+de l'objet du compte (dans `hass.data`), parce que chaque nouvelle tentative de
+configuration reconstruit le compte : sans cela, chaque reprise repartirait
+d'un limiteur neuf, et un établissement indisponible un week-end produirait des
+milliers de connexions contre un plafond de vingt-quatre, pendant que le
+compteur affiché resterait bas.
 
 Rien n'est écrit sur disque en revanche : une pause qui survivrait à un
 redémarrage serait une pause que personne ne pourrait expliquer.

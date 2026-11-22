@@ -80,8 +80,8 @@ Un creux qui commence plus tôt compte quand même s'il **contient la pause
 prévue** : un creux de la grille telle que planifiée, cours annulés compris,
 qui satisfait lui-même la règle. C'est le jour où un professeur absent avance
 la fin de matinée — 8h30 à 10h30, le cours de 10h30 annulé, reprise à 14h00 :
-l'état vaut 10h30, alors que le creux réel, commençant avant 11h00, était
-écarté et que l'annonce du midi ne partait pas. La grille planifiée le
+l'état vaut 10h30, alors que le creux réel commence avant 11h00 et serait
+écarté par la seule règle d'horaire, sans annonce du midi. La grille planifiée le
 distingue d'« un cours le matin puis une fin d'après-midi », dont le creux
 prévu commence lui aussi trop tôt. L'attribut `scheduled_end` donne l'heure
 prévue de fin de matinée, annulations ignorées — ce qu'attend un élève qui
@@ -150,9 +150,8 @@ parent que la classe est supprimée.
 
 **Exigence.** Les trois dernières lignes marquées `session` ne coûtent **aucun
 appel** : `class_name`, `establishment`, `name` et `periods` se lisent dans
-`func_options` et `parametres_utilisateur`, déjà en main après la connexion. La
-v1 les rangeait sous `static` et leur budgétait des appels ; le palier `static`
-ne vaut en réalité qu'un seul appel, celui de l'équipe pédagogique.
+`func_options` et `parametres_utilisateur`, déjà en main après la connexion. Le
+palier `static` ne vaut qu'un seul appel, celui de l'équipe pédagogique.
 
 **Exigence.** Les éléments de `sensor.<é>_moyennes_par_matiere` sont clés par
 `Subject.id` : `Average` n'a **pas** de champ `id`, et la règle de stabilité
@@ -180,12 +179,10 @@ HTML reste à côté, car il porte l'emphase et les liens.
 
 ### 2.1 Forme des éléments
 
-Les tableaux ci-dessus nomment l'attribut ; ils ne disaient pas ce qu'un élément
-contient, et c'est un manque qui a coûté. Une carte a lu `grade` au lieu de
-`value` : **toutes** les notes s'affichaient « — », matière et coefficient
-corrects, note absente, sans un signe d'erreur — et ses propres tests ne l'ont
-pas vu, parce que leurs fixtures reprenaient le nom inventé. Un nom de champ
-deviné se vérifie contre lui-même. Il est donc écrit ici.
+Les tableaux ci-dessus nomment l'attribut ; cette section dit ce qu'un élément
+contient. Une carte qui devine un nom de champ — `grade` au lieu de `value` —
+affiche « — » sans un signe d'erreur, et ses propres tests ne le voient pas
+s'ils reprennent le nom deviné. Les noms sont donc écrits ici.
 
 Ces noms sont ceux des DTO de `models.py` et **ils sont stables** : un champ
 peut s'ajouter, aucun ne sera renommé sans annonce.
@@ -223,26 +220,25 @@ désigne un document sans rien ouvrir. `key` est la sortie de
 `attachment.fingerprint` — seize caractères hexadécimaux **en minuscules**, et
 une carte qui filtre sur cette forme exacte est dans son droit.
 
-`attachment_links[]` est **déprécié** et disparaît à la version suivante. Il ne
-porte plus que les liens, sous leur ancienne forme `{ name, url }` : une carte
-qui n'a pas encore été mise à jour continue d'ouvrir les liens et perd les
-fichiers. L'inverse aurait été plus confortable et c'est un choix : ce champ
-donnait à chaque fichier une adresse signée, et le conserver « le temps d'une
-version » aurait gardé ouverte exactement la faille que cette version ferme.
+`attachment_links[]` est **déprécié** et appelé à disparaître. Il ne porte que
+les liens, sous la forme `{ name, url }` : une carte qui le lit encore ouvre les
+liens et pas les fichiers. C'est un choix : y mettre les fichiers exigerait de
+leur donner une adresse signée dans un attribut, ce que l'exigence ci-dessous
+interdit.
 
 **Le discriminant est déclaré, pas déduit.** `kind` est décidé une fois, là où
 la charge utile est lue (`gateway._attachment`), et non inféré par le
-consommateur de la présence d'une adresse. Cette inférence était fausse sur le
+consommateur de la présence d'une adresse. Cette inférence serait fausse sur le
 seul cas qui compte : un lien dont l'adresse est inutilisable n'a pas
-d'adresse non plus, et il a été pris pour un fichier — une adresse signée lui
-était frappée, et le relais allait le chercher avec la session de
+d'adresse non plus, et serait pris pour un fichier — une adresse signée lui
+serait frappée, et le relais irait le chercher avec la session de
 l'établissement comme s'il s'agissait d'un document. C'est la doctrine que ce
 projet applique déjà aux coûts : déclarés, jamais inférés.
 
 Le rapprochement entre `attachments[]` et `attachment_refs[]` se fait par le
 nom, et c'est `key` qui désigne un fichier sans ambiguïté — y compris quand
-deux pièces d'un même devoir portent le même nom, cas où l'ancien
-rapprochement par le nom rendait les deux ouvrables.
+deux pièces d'un même devoir portent le même nom, cas où le nom seul rendrait
+les deux ouvrables.
 
 **Pourquoi PRONOTE impose deux sortes.** PRONOTE range deux choses différentes
 sous une même clé, et la différence décide de ce qui peut sortir de ce
@@ -273,18 +269,13 @@ est la surface la plus largement lisible de Home Assistant. Tout compte,
 administrateur ou non, lit `/api/states` en entier ; une trace d'automatisation
 conserve l'état déclencheur avec ses attributs dans `.storage`, donc dans les
 sauvegardes ; la boîte de dialogue « plus d'infos » les affiche, donc une
-capture d'écran publie un jeton vivant. Jusqu'à la version 0.0.25 l'adresse
-signée était publiée dans l'attribut, et sa protection reposait sur son
-exclusion de l'enregistreur : il a fallu trois versions pour que cette
-exclusion porte réellement — § 9 de la spécification en garde les deux pièges
-— et même juste, elle ne retirait que le vecteur *durable*.
+capture d'écran publie un jeton vivant. Exclure l'attribut de l'enregistreur ne
+suffirait pas : c'est fragile — § 9 de la spécification en garde les deux
+pièges — et même juste, cela ne retire que le vecteur *durable*.
 
-**Exigence.** L'adresse frappée expire en **cinq minutes**. Elle a expiré en
-douze heures, et ce chiffre était dérivé d'une contrainte qui n'existe plus :
-publiée dans un attribut, elle devait survivre à l'intervalle du palier des
-devoirs sans quoi un parent rencontrait un 401 sur un lien que la page affichait
-encore. Frappée au clic et ouverte aussitôt, elle n'a qu'à survivre à
-l'aller-retour et à la seconde plage d'octets qu'une visionneuse PDF réclame —
+**Exigence.** L'adresse frappée expire en **cinq minutes**
+(`attachment.SIGNATURE_LIFETIME`). Frappée au clic et ouverte aussitôt, elle
+n'a qu'à survivre à l'aller-retour et à la seconde plage d'octets qu'une visionneuse PDF réclame —
 et chaque minute de plus est une minute pendant laquelle une adresse recopiée
 ouvre encore le document d'un enfant.
 
@@ -346,9 +337,8 @@ Home Assistant un mandataire ouvert pour tout ce qu'un professeur colle.
 authentifierait. Trois signatures suffisent chacune à le refuser : l'hôte de
 l'établissement, lu sur `communication.root_site` sans requête ; un paramètre
 `Session`, quelle que soit sa casse ; un segment `FichiersExternes`, route de
-PRONOTE pour un fichier quel que soit l'hôte qu'un mandataire met devant. Sur
-une instance réelle, onze liens mesurés, tous chez des tiers — ce qui est un
-fait sur une quinzaine de devoirs, pas une garantie. La carte ne peut pas faire
+PRONOTE pour un fichier quel que soit l'hôte qu'un mandataire met devant. La
+carte ne peut pas faire
 ce contrôle elle-même : elle ne connaît pas l'hôte du serveur, et elle ne doit
 pas le connaître.
 
@@ -435,16 +425,14 @@ signe la `key` au clic, puis le relais relit les notes de la période et
 télécharge le document — deux requêtes en général, trois au plus, imputées au
 palier des notes et déclarées au pire cas. Un document que PRONOTE refuse
 fait répondre 502 au relais, et la carte le présente comme indisponible.
-Jusqu'à la 0.1.24, c'était le cas du sujet sur au moins un établissement : le
-segment chiffré de l'adresse était rempli deux fois, et le serveur, qui n'en
-retire qu'un remplissage, refusait le sujet tandis que le corrigé, plus long
-de deux caractères, passait. Corrigé en 0.1.25. Chaque document est demandé par
-**son propre** `N`, celui que PRONOTE range dans `elmSujet` et `elmCorrige`,
-sous le type `DevoirSujet` ou `DevoirCorrige` ; s'il est refusé (404), le
-relais le redemande par le `N` de la note et journalise un avertissement, sans
-adresse ni nom de fichier. Le segment chiffré reprend l'ordre des clés du
-client web de PRONOTE — `N`, `G`, `Actif` : avec `Actif` avant `G`, une
-instance réelle servait le corrigé et refusait toujours le sujet.
+Chaque document est demandé par **son propre** `N`, celui que PRONOTE range
+dans `elmSujet` et `elmCorrige`, sous le type `DevoirSujet` ou
+`DevoirCorrige` ; s'il est refusé (404), le relais le redemande par le `N` de
+la note et journalise un avertissement, sans adresse ni nom de fichier. Le
+segment chiffré est rempli une seule fois — le serveur ne retire qu'un
+remplissage et lit le reste comme du JSON — et reprend l'ordre des clés du client
+web de PRONOTE — `N`, `G`, `Actif` : le serveur refuse le sujet si `Actif`
+précède `G`.
 Aucune adresse de PRONOTE n'est publiée. La `key` dépend aussi du nom du fichier : un
 corrigé remplacé par le professeur reçoit une nouvelle clé, et l'ancienne ne
 désigne plus rien. Deux frères et sœurs qui ont le **même** contrôle — même
@@ -479,9 +467,9 @@ sur l'autre.
 `reasons[]`. Il n'y a **pas** de `minutes` ici.
 
 **`delays[]`** — `id`, `date`, **`minutes`** (un entier), `justified`,
-`justification`, `reasons[]`. `minutes` vit ici et nulle part ailleurs : la
-spécification v1 le listait sur les deux, ce qui est la raison pour laquelle les
-deux ont aujourd'hui des entités `event` distinctes (§4).
+`justification`, `reasons[]`. `minutes` vit ici et nulle part ailleurs : une
+absence se compte en heures et en jours, un retard en minutes, et c'est aussi
+pourquoi les deux ont des entités `event` distinctes (§4).
 
 **`punishments[]`** — `id`, `nature`, `reasons[]`, `giver`, `exclusion`,
 `schedule[]`. Chaque créneau de `schedule[]` porte `start` et
@@ -599,14 +587,14 @@ d'appareil ni aucune carte ne les lit. Trois précisions :
 | `binary_sensor.<é>_vacances` | aucun cours dans les 7 jours **ou** aucun cours de toute la semaine courante | — | `timetable` | — |
 | `binary_sensor.<compte>_collectes_bridees` | le limiteur retarde des collectes | `problem` | — | — |
 
-### 3.1 Trois jumeaux retirés en v2
+### 3.1 Pas de jumeau binaire des décomptes
 
-`binary_sensor.devoirs_a_faire`, `_actualites_non_lues` et `_messages_non_lus`
-existaient en v1 à côté des capteurs de décompte du §1. Ils tombent sous le test
-du jumeau (§2.1 de la spécification) : chacun n'était qu'un
+Il n'existe pas de capteur binaire « devoirs à faire », « actualités non lues »
+ou « messages non lus » à côté des capteurs de décompte du §1. Chacun tomberait
+sous le test du jumeau (§2.1 de la spécification) : il ne serait qu'un
 `numeric_state above: 0` sur un nombre déjà exposé, donc une ligne de YAML sans
 template — le niveau que fixe l'objectif du projet. Trois entités par enfant qui
-ne faisaient disparaître aucun template.
+ne feraient disparaître aucun template.
 
 Les capteurs binaires conservés encodent tous un prédicat qu'il faudrait sinon
 écrire à la main : une intersection de créneaux, une comparaison d'échéance, une
@@ -659,7 +647,7 @@ spécification) :
   le `num` maximal, puis comparaison du tuple
   `(canceled, status, classroom, teachers, start, end)` sur la clé
   `(date, place, subject_id)`. Les quatre attributs `previous_*` viennent de ce
-  tuple précédent — ils n'avaient aucune source dans la v1.
+  tuple précédent.
 
 **Exigence.** Aucun évènement n'est émis lors du premier instantané d'un palier
 après démarrage ou rechargement, sinon chaque redémarrage rejouerait le
@@ -761,7 +749,7 @@ Rend le réglage du §6 observable. Toutes ces entités portent
 | `sensor.<compte>_prochaine_collecte` | horodatage (`timestamp`) | `tiers_due`, `overdue_by`, `failing`, `boosted`, `boost_served_at` |
 | `sensor.<compte>_age_de_la_session` | âge de la session en secondes | `session_id_hash`, `opened_at` |
 | `sensor.<compte>_duree_de_vie_de_la_session` | durée de vie **mesurée** de la session, en minutes | `samples`, `last_expiry`, `strategy` |
-| `sensor.<compte>_connexions_du_jour` | nombre de connexions réussies | `failed`, `cap` |
+| `sensor.<compte>_connexions_du_jour` | nombre de tentatives de connexion depuis minuit, réussies ou non | `failed`, `cap` |
 | `sensor.<compte>_etat_du_limiteur` | `nominal`, `throttled`, `backoff`, `quiet_hours`, `credentials_hold`, `bootstrap_failed` | `until`, `reason`, `consecutive_failures` |
 | `binary_sensor.<compte>_collectes_bridees` | `on` si des collectes sont retardées | `since` |
 
@@ -774,12 +762,12 @@ session. Un diagnostic ne doit pas donner de quoi rejouer une session.
 **Exigence.** Ces neuf entités se **rafraîchissent d'elles-mêmes**, toutes les
 trente secondes, sans placer aucune requête : leurs valeurs se lisent dans le
 limiteur, l'ordonnanceur et la session, déjà en mémoire. Ce n'est pas un détail
-d'implémentation. Rafraîchies seulement par une collecte — ce qu'elles étaient,
-`_attr_should_poll` étant inopérant sur une entité de coordinateur —, elles se
-taisaient précisément dans la circonstance où on les consulte : un palier dû et
-en échec laissait « prochaine collecte » figée quarante minutes dans le passé,
-et le témoin « bridé », dont tout le rôle est d'expliquer une intégration
-silencieuse (§6.6), pouvait rester allumé après le retour à la normale. La
+d'implémentation. Rafraîchies seulement par une collecte — `_attr_should_poll`
+est inopérant sur une entité de coordinateur —, elles se tairaient précisément
+dans la circonstance où on les consulte : un palier dû et en échec laisserait
+« prochaine collecte » figée dans le passé, et le témoin « bridé », dont tout le
+rôle est d'expliquer une intégration silencieuse (§6.6), pourrait rester allumé
+après le retour à la normale. La
 contrepartie est explicite dans `LocallyPolledMixin` : le scrutin ne doit
 **jamais** appeler `async_request_refresh`, sans quoi une lecture gratuite
 deviendrait une requête toutes les trente secondes.
@@ -808,9 +796,7 @@ sur une catégorie que le limiteur maintient fait monter les reports sans placer
 une seule requête. La distinction est ici parce que la confondre a un coût
 concret : un bouton qui ne peut dire que « la demande est partie » est un bouton
 qu'on presse deux fois, et un second appui n'est pas gratuit sur une catégorie
-en échec. L'ordonnanceur connaissait déjà les deux faits ; ils n'atteignaient
-que le vidage de diagnostics et un service à réponse seule, donc aucun tableau
-de bord.
+en échec.
 
 **Exigence.** `prochaine_collecte` porte une **échéance**, et non un décompte
 converti à l'instant de la lecture. Un horodatage passé y est une lecture
@@ -833,14 +819,13 @@ deviennent pas des entités.
 | Numéro INE | `Identity.ine_number` | identifiant national ; jamais exposé |
 | URL iCal | `Client.export_ical()` | porteur d'authentification (§8.2) |
 | Jeton mobile | `export_credentials()` | secret de connexion |
-| Pièces jointes | `Attachment.data` | téléchargement à la demande, pas un état ; URL en attribut |
-| Contenu de cours | `Lesson.content` | attribut paresseux coûteux ; résolu seulement pour la semaine courante |
+| Pièces jointes | `Attachment.data` | téléchargement à la demande par le relais, pas un état ; aucune adresse de fichier en attribut (§2.1) |
+| Contenu de cours | `Lesson.content` | attribut paresseux coûteux, jamais lu ; seul le mémo (`memo`) est publié |
 | Destinataires possibles | `Recipient` | utile au seul service `send_message`, pas un état |
 | Élèves de la classe | `StudentClass.students()` | données d'autres élèves |
 | Corbeille et brouillons | `Discussion.labels` | filtrés à l'entrée |
-| Pièces jointes de l'agenda | `PageAgenda` → `PiecesJointes` | hors périmètre de la première version du palier `agenda` |
+| Pièces jointes de l'agenda | `PageAgenda` → `PiecesJointes` | hors périmètre du palier `agenda` |
 
 **Exigence.** Cette table est maintenue. Toute donnée `pronotepy` non exposée y
 figure avec sa raison — sans quoi l'écart entre ce que le protocole rend et ce
-que l'intégration montre redevient invisible, ce qui est précisément le défaut
-qu'on corrige.
+que l'intégration montre redevient invisible.

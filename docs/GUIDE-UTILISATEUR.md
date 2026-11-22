@@ -31,7 +31,7 @@ section de ce guide, lisez celle-là.
 7. [Écrire dans PRONOTE](#7-écrire-dans-pronote)
 8. [Réglages et cadence](#8-réglages-et-cadence)
 9. [Automatisations](#9-automatisations)
-    - **[Les huit blueprints, en détail](BLUEPRINTS.md)** — chaque réglage, et le piège que chacun évite
+    - **[Les neuf blueprints, en détail](BLUEPRINTS.md)** — chaque réglage, et le piège que chacun évite
 10. [Dépannage](#10-dépannage)
 11. [Vie privée](#11-vie-privée)
 12. [Désinstaller](#12-désinstaller)
@@ -544,7 +544,7 @@ générale » et sur « Moyenne de la classe », c'est une valeur **écrite en d
 dans l'intégration : elle vaut 20 quel que soit l'établissement. Dans un
 établissement qui note sur 10, un message ou une carte qui écrit « 5,2/20 » en
 lisant cet attribut affirme quelque chose de faux, et rien du côté affichage ne
-permet de s'en apercevoir. Tant que ce n'est pas corrigé, **affichez ces deux
+permet de s'en apercevoir. **Affichez donc ces deux
 états sans barème** — c'est le seul endroit de l'intégration où la bonne
 conduite est de montrer *moins* que ce qui est publié.
 
@@ -595,7 +595,7 @@ en activer une : *Paramètres → Appareils et services → Carnet scolaire*, ou
 l'appareil de l'enfant, dépliez les entités masquées, choisissez l'entité, puis
 dans ses paramètres (roue dentée) cochez **Activé** ; Home Assistant recharge
 l'intégration une trentaine de secondes plus tard et l'entité reçoit sa valeur.
-Une entité qui existait déjà avant cette version garde son état. Désactivée,
+Une entité déjà inscrite au registre garde l'état que vous lui avez donné. Désactivée,
 une entité reste collectée : pour économiser les requêtes, c'est le palier
 « Périodes closes » qu'il faut couper dans les options.
 
@@ -990,7 +990,7 @@ aucun appel lui-même. L'appeler cinq fois de suite coûte une collecte, pas cin
 
 Ces trois services modifient ce que voit l'établissement. Ils sont **refusés si
 l'écriture est coupée** dans les options (§ [7](#7-écrire-dans-pronote)) — le
-cas d'une installation antérieure à la 0.0.29 :
+cas d'une entrée qui n'a jamais enregistré ce réglage :
 
 > L'écriture dans PRONOTE est désactivée. Activez d'abord « Autoriser l'écriture
 > dans PRONOTE » dans les options de l'intégration.
@@ -1147,9 +1147,9 @@ l'interrupteur :
 > actualité comme lue et envoyer des messages sont possibles, et l'établissement
 > voit ces actions.
 
-**Une installation antérieure à la version 0.0.29 reste en lecture seule** tant
-que vous n'activez pas l'interrupteur : la mise à jour ne choisit pas à votre
-place.
+**Une entrée qui n'a jamais enregistré ce réglage reste en lecture seule** :
+l'interrupteur s'y affiche coupé, et rien n'est écrit tant que vous ne
+l'activez pas. Une mise à jour de l'intégration ne choisit pas à votre place.
 
 ### Ce que ça implique
 
@@ -1270,7 +1270,7 @@ supérieure prudente.
 | **Marquer périmé après** | 6 | *Rarement.* Multiples de l'intervalle d'une catégorie au-delà desquels ses entités sont marquées périmées. Elles gardent leur dernière valeur au lieu de devenir indisponibles. Baisser cette valeur ne fait pas collecter plus souvent : ça fait juste dire « périmé » plus tôt. |
 | **Fuseau de l'établissement** | Vide — donc le fuseau de Home Assistant | *Seulement si l'établissement est dans un autre fuseau que vous.* PRONOTE renvoie des heures locales sans fuseau ; c'est ici qu'on dit dans quel fuseau les interpréter. Voir ci-dessous : **la case vide est un réglage**, pas un oubli. |
 | **Stratégie de session** | Conserver la session (recommandé) | *Non.* Voir ci-dessous. |
-| **Autoriser l'écriture dans PRONOTE** | Activé (désactivé pour une installation antérieure à la 0.0.29) | *À couper si vous ne voulez rien écrire.* Voir § [7](#7-écrire-dans-pronote). |
+| **Autoriser l'écriture dans PRONOTE** | Activé pour une nouvelle entrée (coupé pour une entrée qui n'a jamais enregistré ce réglage) | *À couper si vous ne voulez rien écrire.* Voir § [7](#7-écrire-dans-pronote). |
 
 **Le fuseau de l'établissement, et pourquoi la case est vide.** Vide veut dire
 « suis le fuseau de Home Assistant », et c'est ce que veulent presque tous les
@@ -1288,10 +1288,9 @@ Le fuseau s'écrit `Région/Ville`, par exemple `Europe/Paris` — pas `Paris`, 
 message sous la case ; il n'y a donc pas de faute de frappe capable de mettre
 le compte hors service.
 
-> Si vous utilisiez une version antérieure à la 0.0.19, il y a de bonnes
-> chances que cette case soit déjà remplie sans que vous l'ayez voulu : les
-> anciennes versions y recopiaient le fuseau de Home Assistant dès qu'on
-> ouvrait cette page. Si l'établissement est dans votre fuseau, videz-la.
+> Si la case contient un fuseau que vous n'avez pas saisi vous-même et que
+> l'établissement est dans votre fuseau, videz-la : remplie, elle fige le
+> fuseau même si celui de Home Assistant change.
 
 **La stratégie de session.** Deux valeurs : « Conserver la session
 (recommandé) » et « Une session par lot ». La première garde la connexion
@@ -1415,22 +1414,22 @@ journée. À 80 % du plafond, Home Assistant ouvre un signalement de réparation
 
 ## 9. Automatisations
 
-**Vous venez de l'intégration `pronote` ?** Ce paragraphe explique comment
+**Vous venez d'une autre intégration PRONOTE ?** Ce paragraphe explique comment
 écrire une automatisation ; il ne dit pas comment déplacer celles que vous avez
 déjà. Pour ça, lisez
 [Migrer ses automatisations](MIGRATION-AUTOMATISATIONS.md) — en particulier
 avant de retirer l'ancienne intégration, car c'est ce retrait, et non
 l'installation de Carnet scolaire, qui casse vos automatisations existantes.
 
-### 9.1 Les huit blueprints livrés
+### 9.1 Les neuf blueprints livrés
 
-Huit modèles d'automatisation en français sont fournis avec l'intégration. Ils
+Neuf modèles d'automatisation en français sont fournis avec l'intégration. Ils
 font le travail délicat — remise à l'échelle des notes, filtrage des jours sans
 cours, distinction entre absence et retard — et ne vous demandent que de choisir
 un élève et une action de notification.
 
 Le tableau ci-dessous les résume. **Chaque réglage est expliqué, et chaque piège
-nommé, dans [Les huit blueprints, en détail](BLUEPRINTS.md)** — à lire avant de
+nommé, dans [Les neuf blueprints, en détail](BLUEPRINTS.md)** — à lire avant de
 remplir un formulaire, et surtout avant de conclure qu'un blueprint ne se
 déclenche pas. Pour une automatisation complète et prête à coller par
 blueprint, voyez [Exemples d'utilisation](EXEMPLES-BLUEPRINTS.md).
@@ -1445,6 +1444,7 @@ blueprint, voyez [Exemples d'utilisation](EXEMPLES-BLUEPRINTS.md).
 | **PRONOTE - Menu de la cantine** | Annonce le menu du jour, le matin à heure fixe. Se tait les jours sans menu publié, sans cours ou de vacances. |
 | **PRONOTE - Nouveau message ou information** | Notifie à l'arrivée d'un message dans la messagerie PRONOTE, ou à la publication d'une information par l'établissement. Les deux sources sont activables séparément, et une option ne retient que les informations contenant un sondage — celles qui demandent une réponse. |
 | **PRONOTE - Retour de l'école** | Exécute une action à la fin des cours : notification, portail, chauffage. L'heure vient du capteur « Fin des cours », qui a déjà retiré les cours annulés et les dispenses. Une option restreint l'automatisation aux journées écourtées par une annulation — et ce test compte les annulations au lieu de comparer deux horaires, une dispense n'étant pas une annulation. |
+| **PRONOTE - Retour du midi** | Exécute une action quand la matinée se termine avant la pause du midi, et dit à quelle heure les cours reprennent. L'heure vient du capteur « Fin de matinée ». Une option dit si un cours annulé avance le retour, ou si l'élève reste en permanence jusqu'à l'heure prévue. Ne fait rien les jours sans pause du midi. |
 
 **Comment les importer.** Les blueprints sont livrés dans le dossier de
 l'intégration mais ne sont pas installés automatiquement.
@@ -1726,7 +1726,7 @@ Ces messages apparaissent dans **Paramètres → Système → Réparations**.
 | **Pas de photo de l'élève.** | L'établissement ne publie pas de photo pour cet élève. | C'est le cas le plus fréquent, et il n'y a rien à faire : l'entité **Photo** n'est même pas créée si PRONOTE ne déclare aucune photo. Si elle existe mais reste vide, elle sera retentée au prochain rechargement de l'intégration : la photo n'est cherchée qu'une fois, exprès, pour ne pas dépenser le budget quotidien sur une image inexistante. |
 | **Les moyennes sont vides, ou la « Période en cours » est indisponible.** | Changement de trimestre, ou établissement qui ne publie pas de notes. Pendant les vacances scolaires, entre deux périodes, PRONOTE ne publie souvent plus de moyenne courante. | C'est normal, et l'intégration préfère ne rien dire que dire faux : quand la période en cours ne peut pas être déterminée de façon fiable, l'entité devient indisponible plutôt que de désigner la mauvaise période. Les chiffres du trimestre écoulé restent lisibles dans les entités « Moyenne générale (Trimestre 1) », « Bulletin (Trimestre 1) », etc. Les moyennes reviendront à l'ouverture de la période suivante. |
 | **Une note reste à « unknown » alors qu'elle est bien dans PRONOTE.** | La « note » est en réalité une mention : « Absent », « Non noté », « Dispensé », « Non rendu ». | Regardez l'attribut `status` du capteur « Dernière note » : il porte le motif. C'est volontaire — un état numérique ne peut pas contenir du texte sans casser les seuils et les graphiques. |
-| **Le nombre de cours du jour semble doublé.** | Ce défaut est corrigé : PRONOTE renvoie le cours d'origine *et* son remplacement, et l'intégration ne garde que le plus récent. | Si vous observez encore un doublon, signalez-le : c'est un bug. |
+| **Le nombre de cours du jour semble doublé.** | PRONOTE renvoie le cours d'origine *et* son remplacement ; l'intégration ne garde que le plus récent. | Si vous observez un doublon, signalez-le : c'est un bug. |
 | **Une case cochée dans la liste de devoirs revient toute seule.** | L'écriture n'est pas activée, l'appel a été refusé par le limiteur, ou PRONOTE a accepté la coche sans l'enregistrer. | Vérifiez « Autoriser l'écriture dans PRONOTE » dans les options. Une écriture reportée, ou relue inchangée, affiche une erreur explicite plutôt que d'échouer en silence. |
 | **La liste de devoirs n'a pas de case à cocher, alors que l'écriture est activée.** | Le compte est un compte parent. | C'est voulu : PRONOTE n'enregistre pas une coche envoyée depuis un compte parent. Seul le compte de l'élève peut cocher un devoir. |
 | **Un service répond « Reporté par le limiteur ».** | Le budget est momentanément épuisé. | Le message donne le délai à attendre. Contrairement à une collecte programmée, un service reporté échoue visiblement : c'est délibéré, pour que vous sachiez qu'il n'a rien fait. |
@@ -1739,7 +1739,7 @@ Ces messages apparaissent dans **Paramètres → Système → Réparations**.
 | **Un service refuse d'agir sur le compte.** | *« Ce compte suit plusieurs enfants… Ciblez l'appareil de l'enfant plutôt que celui du compte. »* | Choisissez l'appareil de l'enfant. L'appareil du compte n'est accepté comme raccourci que s'il n'y a qu'un enfant. |
 | **Un déclencheur d'appareil ne se déclenche jamais.** | Vous avez ciblé l'appareil du compte au lieu de celui de l'enfant. Ou la catégorie concernée est désactivée. Ou l'établissement ne publie pas cette donnée. | Ciblez l'appareil de l'enfant : le compte ne propose aucun déclencheur. Vérifiez que la catégorie est activée dans « Intervalles de collecte ». |
 | **Une automatisation s'est déclenchée en masse après un redémarrage.** | Ce ne devrait pas arriver : aucun évènement n'est émis lors de la première collecte après un démarrage. | Si cela se produit, signalez-le. |
-| **Deux appareils apparaissent pour le même enfant.** | La trace d'un défaut réparé : PRONOTE change le numéro qui identifie un enfant, et l'intégration s'en servait pour nommer ses entités. Le jour où il a changé, un second appareil est apparu. | L'appareil dont les entités ne bougent plus se supprime sans risque. Voir § [10.5](#105-deux-appareils-pour-un-seul-enfant). |
+| **Deux appareils apparaissent pour le même enfant.** | Un appareil créé à partir du numéro par lequel PRONOTE identifie un enfant : ce numéro change, et l'appareil qui en dépendait n'est plus alimenté. | L'appareil dont les entités ne bougent plus se supprime sans risque. Voir § [10.5](#105-deux-appareils-pour-un-seul-enfant). |
 
 ### 10.4 Comment recharger ou reconfigurer
 
@@ -1777,29 +1777,27 @@ Ces messages apparaissent dans **Paramètres → Système → Réparations**.
 
 Sur certaines installations, la liste des appareils montre **deux** appareils
 pour le même enfant : un dont les entités se mettent à jour, un dont les entités
-restent figées à leur dernière valeur. C'est la trace d'un défaut réparé en
-**v0.0.10**, et l'appareil figé se supprime sans risque.
+restent figées à leur dernière valeur. L'appareil figé se supprime sans risque.
 
-**Ce qui s'est passé.** PRONOTE identifie chaque enfant par un numéro de son
-côté, et ce numéro **change** — il est lié à la session, pas à l'élève.
-L'intégration s'en servait pour nommer ses entités ; le jour où le numéro a
-changé, elle a cru découvrir un nouvel enfant et a créé un second appareil avec
-un jeu complet d'entités. L'ancien est resté, sans plus rien pour l'alimenter.
-Depuis, l'intégration attribue elle-même une clé à chaque enfant et ne dépend
-plus du numéro de PRONOTE, donc le dédoublement ne peut plus se produire.
+**D'où il vient.** PRONOTE identifie chaque enfant par un numéro de son côté, et
+ce numéro **change** — il est lié à la session, pas à l'élève. Un appareil créé
+à partir de ce numéro est abandonné le jour où le numéro change, et plus rien ne
+l'alimente. L'intégration attribue donc elle-même une clé stable à chaque
+enfant et ne dépend pas du numéro de PRONOTE : elle ne crée pas de nouvel
+appareil quand il change.
 
 **Lequel supprimer.** Celui dont les entités ne bougent plus. Deux façons de le
 reconnaître à coup sûr :
 
 - ouvrez une de ses entités et regardez **Dernière modification** : sur
-  l'appareil mort, elle date d'avant la mise à jour en v0.0.10 ;
+  l'appareil mort, elle est ancienne et n'avance plus ;
 - l'appareil vivant est celui que « Prochain cours » et « Cours du jour »
   suivent au fil de la journée.
 
 **Ce que la suppression ne casse pas.** Vos tableaux de bord et vos
 automatisations pointent sur l'appareil vivant, pas sur le mort — c'est celui
-qui porte les identifiants d'entité d'origine. La mise à jour a réécrit les
-identifiants internes **sur place** : les identifiants d'entité, l'appareil, les
+qui porte les identifiants d'entité d'origine. L'intégration réécrit les
+identifiants internes **sur place** quand elle adopte un appareil existant : les identifiants d'entité, l'appareil, les
 noms que vous avez donnés, les pièces et les étiquettes sont conservés. Rien à
 refaire côté cartes ni côté automatisations.
 
@@ -1808,12 +1806,11 @@ figé est souvent celui que vous aviez renommé, ce qui donne à croire que le
 renommage a provoqué le dédoublement. Ce n'est pas le cas, et il ne peut pas
 l'être : l'appariement d'un enfant se fait sur le nom que **PRONOTE** publie,
 jamais sur le libellé affiché dans Home Assistant. Renommer un appareil, une
-entité, ou les deux, n'a aucun effet sur ce mécanisme. Un test compare le nom
-que vous avez donné octet par octet avant et après la mise à jour, parce que
-c'est la promesse la plus lourde de cette page.
+entité, ou les deux, n'a aucun effet sur ce mécanisme, et le nom que vous avez
+donné est conservé à l'identique.
 
-**N'attendez pas de notification.** L'adoption des clés se fait en silence : la
-mise à jour ne crée **aucun** signalement dans *Paramètres → Système →
+**N'attendez pas de notification.** L'adoption des clés se fait en silence :
+elle ne crée **aucun** signalement dans *Paramètres → Système →
 Réparations*, et rien ne vous annonce qu'elle a eu lieu. Elle laisse une trace
 dans le journal de l'intégration, en clés techniques seulement — jamais un nom
 d'enfant. Le seul signe visible est celui décrit ici : un appareil de plus, dont
@@ -1857,7 +1854,7 @@ et dans les rapports de bug. C'est pour cela qu'elle n'est pas conservée.
 de l'intégration.** Vous avez le droit de l'apprendre ici plutôt que de le
 découvrir, donc voici exactement où et pourquoi.
 
-Depuis la v0.0.10, l'intégration tient une table qui associe à chaque enfant une
+L'intégration tient une table qui associe à chaque enfant une
 clé qu'elle a frappée elle-même, l'identifiant que PRONOTE lui donne en ce
 moment, et son nom. Cette table vit dans l'entrée de configuration, c'est-à-dire
 dans le dossier `.storage` de votre configuration Home Assistant — le même
@@ -1867,7 +1864,7 @@ de connexion.
 Le nom y est **nécessaire**, et le remplacer par une empreinte rendrait le
 mécanisme inopérant. L'identifiant que PRONOTE attribue change ; quand il
 change, le nom est le seul point d'accroche qui reste pour reconnaître un enfant
-déjà connu au lieu d'en créer un second — c'est précisément le défaut décrit au
+déjà connu au lieu d'en créer un second — le dédoublement décrit au
 § 10.5. Or une empreinte ne se compare qu'à une empreinte identique : il
 suffirait que l'établissement écrive le nom autrement, ne serait-ce qu'une
 majuscule ou un accent, pour que l'appariement échoue et que le dédoublement
@@ -2075,7 +2072,7 @@ tant que les appareils existent encore :
   entité en fait autant, dans son onglet des éléments liés. C'est la seule
   méthode exhaustive, et elle cesse de fonctionner une fois l'entrée supprimée ;
 - après coup, il reste la recherche : dans **Paramètres → Automatisations et
-  scènes**, cherchez `pronote`, puis le nom de l'enfant tel qu'il apparaissait
+  scènes**, cherchez `carnet_scolaire`, puis le nom de l'enfant tel qu'il apparaissait
   dans les identifiants d'entités ;
 - les cartes se repèrent à l'œil : une entité inconnue s'affiche en « Entité non
   disponible » sur le tableau de bord ;
@@ -2084,7 +2081,7 @@ tant que les appareils existent encore :
 
 #### Les blueprints importés
 
-Les huit blueprints livrés (§ [9.1](#91-les-huit-blueprints-livrés)) ne sont pas
+Les neuf blueprints livrés (§ [9.1](#91-les-neuf-blueprints-livrés)) ne sont pas
 installés par l'intégration : vous les avez importés vous-même, et ils ne partent
 donc pas avec elle. **Deux choses distinctes sont à retirer**, dans cet ordre :
 
@@ -2407,8 +2404,8 @@ l'action… ». Le détail de chaque service est au § [5](#5-les-services).
 | **Conditions** | Les dix, selon les entités présentes sur l'appareil | Sept : « Un contrôle est prévu aujourd'hui », « C'est les vacances » et « Ce ne sont pas les vacances » ne sont pas proposées, faute d'entité |
 | **Actions** | « Tout rafraîchir », « Rafraîchir les notes » ; « Marquer une actualité comme lue » si l'écriture est activée ; « Cocher un devoir » si, en plus, le compte est un compte élève | « Tout rafraîchir » et « Rafraîchir les notes » |
 
-Les huit blueprints livrés reposent sur ces mêmes entités et déclencheurs
-(§ [9.1](#91-les-huit-blueprints-livrés)).
+Les neuf blueprints livrés reposent sur ces mêmes entités et déclencheurs
+(§ [9.1](#91-les-neuf-blueprints-livrés)).
 
 ---
 
@@ -2443,9 +2440,10 @@ cause côté serveur ne se lèvent pas côté Home Assistant.
   collecte coûterait une requête par élément. *Que faire :* ouvrir PRONOTE pour
   le contenu ; les entités disent qu'il y a du nouveau et de qui
   (§ [4.6](#46-les-actualités-et-la-messagerie)).
-- **Une installation antérieure à la version 0.0.29 reste en lecture seule.**
-  L'écriture est activée à la création d'une entrée ; une entrée plus ancienne
-  n'a jamais choisi d'écrire, et la mise à jour ne choisit pas à sa place.
+- **Une entrée qui n'a jamais enregistré le réglage d'écriture reste en
+  lecture seule.** L'écriture est activée à la création d'une entrée ; une
+  entrée sans ce réglage n'a jamais choisi d'écrire, et une mise à jour ne
+  choisit pas à sa place.
   *Que faire :* activer « Autoriser l'écriture dans PRONOTE » dans les options
   (§ [7](#7-écrire-dans-pronote)).
 - **Le code PIN à deux facteurs est redemandé** chaque fois que PRONOTE
@@ -2536,7 +2534,7 @@ cause côté serveur ne se lèvent pas côté Home Assistant.
 | --- | --- |
 | `README.md` | Présentation du projet |
 | `docs/AFFICHER-LES-DONNEES.md` | Construire un tableau de bord, avec ou sans la bibliothèque de cartes |
-| `docs/BLUEPRINTS.md` | Chaque réglage des huit blueprints, et le piège que chacun évite |
+| `docs/BLUEPRINTS.md` | Chaque réglage des neuf blueprints, et le piège que chacun évite |
 | `docs/ARCHITECTURE.md` | Développeurs : comment c'est construit |
 | `docs/annexe-b-rate-limit.md` | Le détail du limiteur de débit, si le § 8 vous a donné envie de creuser |
 | `docs/MIGRATION-AUTOMATISATIONS.md` | Vous arrivez de l'intégration `pronote` et vos automatisations sont déjà écrites |

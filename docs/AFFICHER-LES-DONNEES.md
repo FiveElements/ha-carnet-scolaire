@@ -167,7 +167,7 @@ l'afficher promettrait une donnée qui n'existe pas côté Home Assistant.
 
 Pour être **prévenu** plutôt que d'aller voir, ces deux familles ont leurs
 déclencheurs d'appareil — « nouvelle actualité » et « nouveau message » — et
-c'est le bon outil : voyez [Les huit blueprints](BLUEPRINTS.md).
+c'est le bon outil : voyez [Les neuf blueprints](BLUEPRINTS.md).
 
 ### Les listes en Markdown
 
@@ -316,10 +316,7 @@ besoin.
 Le piège n'est pas qu'une entité morte ait l'air saine — elle est
 `unavailable`, donc visiblement dégradée. Le piège est qu'elle ait l'air
 **passagère** : sur un tableau de bord, « indisponible » se lit comme un creux
-de collecte qui va se résorber, et une entité morte ne se résorbera jamais. Sur
-une installation réelle, 56 entités orphelines étaient toutes `unavailable` avec
-`restored` — et le diagnostic a pris des heures parce que les deux cas se
-ressemblent.
+de collecte qui va se résorber, et une entité morte ne se résorbera jamais.
 
 Retenez une ligne : **`stale` répond à « est-ce vieux ? », `restored` à « est-ce
 mort ? », et la seconde question ne se pose jamais à la première.** Pour
@@ -352,17 +349,18 @@ passe, et un mot de passe n'a rien à faire dans un état d'entité que n'import
 quel utilisateur de Home Assistant peut lire. Ces trois données s'obtiennent par
 un appel de service, décrit au § 5.1 du guide.
 
-**La couleur de matière est publiée depuis la v0.0.13.** `background_color` est
-un attribut des créneaux de la liste `lessons`, des devoirs et des moyennes par
-matière : la couleur que l'établissement associe à la matière, **telle que le
+**La couleur de matière est publiée.** `background_color` est
+un attribut des créneaux de la liste `lessons`, des devoirs, des éléments de
+« Notes » et des moyennes par matière : la couleur que l'établissement associe à la matière, **telle que le
 serveur l'envoie**, ou `null`. La clé est toujours présente, seule sa valeur peut
 manquer, et aucune couleur n'est inventée — ni défaut, ni dérivation depuis le
 nom de la matière. L'annexe A en donne la règle complète.
 
 Deux réserves, parce qu'elles décident de ce qu'une carte peut afficher :
 
-- **Trois endroits ne la portent pas.** Le capteur du prochain cours compose ses
-  attributs un à un et ne la reprend pas ; les matières du bulletin non plus,
+- **Quatre endroits ne la portent pas.** Les capteurs « Prochain cours » et
+  « Dernière note » composent leurs attributs un à un et ne la reprennent pas ;
+  les matières du bulletin non plus,
   bien que le DTO la porte ; et les évaluations n'ont pas de couleur du tout,
   le champ étant absent en amont. Sur ceux-là, une table de correspondance
   écrite côté carte reste le seul moyen d'obtenir un accent — et elle doit
@@ -372,19 +370,19 @@ Deux réserves, parce qu'elles décident de ce qu'une carte peut afficher :
   l'envoie sous `couleur` en minuscules et non `CouleurFond` — même sémantique,
   orthographe différente.
 
-!!! warning "Une table de compensation devenue muette ne le dit pas"
+!!! warning "Une table de compensation muette ne le dit pas"
 
-    Si vous aviez écrit une table de couleurs par matière pour compenser
-    l'absence du champ, elle ne s'applique probablement plus. Une carte qui
-    consulte d'abord la couleur du serveur ne retombe sur votre table que pour
-    les matières que l'établissement ne colore pas — donc, en pratique, pour
-    aucune. **Le bloc reste dans votre YAML et ne fait plus rien**, sans erreur
-    et sans avertissement.
+    Une table de couleurs par matière écrite côté carte ne sert que là où le
+    serveur ne fournit pas de couleur. Une carte qui consulte d'abord
+    `background_color` ne retombe sur votre table que pour les matières que
+    l'établissement ne colore pas — souvent, en pratique, pour aucune. **Le bloc
+    reste alors dans votre YAML sans rien faire**, sans erreur et sans
+    avertissement.
 
     C'est le même mode de panne qu'un `entity_id` inconnu dans un déclencheur,
     que Home Assistant accepte sans broncher et qui ne se déclenche jamais : un
-    YAML silencieusement inopérant. Ne retirez pas la table pour autant sur les
-    trois endroits ci-dessus, où elle sert encore.
+    YAML silencieusement inopérant. Gardez la table pour les quatre endroits
+    ci-dessus, où elle sert.
 
 **Ce que PRONOTE envoie et que l'intégration ne republie pas.** Deux données
 sont décodées puis retenues, et il est plus utile de le savoir que de les
@@ -420,5 +418,5 @@ normalement.
 | [Documentation des cartes](https://fiveelements.github.io/ha-carnet-scolaire-cards/) | Les neuf cartes, réglage par réglage |
 | [§ 4 du guide](GUIDE-UTILISATEUR.md#4-catalogue-des-entités) | Le catalogue des entités et de leurs attributs |
 | [§ 5.1 du guide](GUIDE-UTILISATEUR.md#51-les-services-qui-renvoient-une-réponse) | Les services à réponse, pour l'iCal et le PDF |
-| [Les huit blueprints](BLUEPRINTS.md) | Automatiser, plutôt qu'afficher |
+| [Les neuf blueprints](BLUEPRINTS.md) | Automatiser, plutôt qu'afficher |
 | [Exemples d'utilisation](EXEMPLES-BLUEPRINTS.md) | Une automatisation complète par blueprint |
