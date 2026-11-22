@@ -2,13 +2,13 @@
 
 Ticking an item posts ``SaisieTAFFaitEleve`` to PRONOTE, so the establishment
 sees it too. That is the only write in the whole integration reachable without
-a service call, which is exactly why it is gated: with write operations off --
-the default (§8.3) -- the list is read-only and says so through its supported
-features rather than by failing when tapped.
+a service call, which is exactly why it is gated: with write operations off
+(§8.3) the list is read-only and says so through its supported features rather
+than by failing when tapped.
 
 It is read-only on a parent account too, whatever the option says. PRONOTE
-answers a parent session's tick normally and records nothing (measured on
-2026-09-27), so a checkbox offered there could only ever lie.
+answers a parent session's tick normally and records nothing, so a checkbox
+offered there could only ever lie.
 
 On a student account the tick is read back before it is reported: the server's
 answer proves nothing, and a tick that did not land raises, so the card puts
@@ -89,7 +89,7 @@ class PronoteHomeworkTodoList(PronoteEntity, TodoListEntity):
         # can be written. Home Assistant's own list card ticks an item by
         # sending it back whole, due date and description included, and
         # `todo.update_item` refuses a field whose feature is not declared --
-        # so with the tick alone, every tick from that card failed with
+        # so with the tick alone, every tick from that card would fail with
         # `update_field_not_supported`. `async_update_todo_item` accepts them
         # unchanged and refuses them changed.
         self._attr_supported_features = (

@@ -95,7 +95,7 @@ EVENTS: Final[tuple[PronoteEventDescription, ...]] = (
         tier=Tier.ATTENDANCE,
         event_types=[EVENT_ABSENCE_ADDED],
     ),
-    # Split out from `new_absence` in v2. An absence and a late arrival do not
+    # Separate from `new_absence`: an absence and a late arrival do not
     # carry the same payload -- `hours`/`days` against `minutes` -- and an
     # automation that wants one and not the other should not have to filter
     # (annexe A §4).

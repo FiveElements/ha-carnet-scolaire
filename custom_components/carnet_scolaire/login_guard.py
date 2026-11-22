@@ -1,25 +1,22 @@
 """Login accounting that has to outlive one config entry object.
 
 Two things in this integration are longer-lived than a ``PronoteAccount``, and
-both were lost because they lived on one.
+both would be lost if they lived on one.
 
 **The punitive state must survive a set-up retry.** ``PronoteAccount`` builds
 its own :class:`~.ratelimit.RateLimiter` in ``__init__``, so every attempt at
-``async_setup_entry`` got a brand-new one. Home Assistant retries a
+``async_setup_entry`` gets a brand-new one. Home Assistant retries a
 ``ConfigEntryNotReady`` with a backoff capped at eighty seconds, so an
-establishment down for a weekend produced a fresh limiter -- with its hour-long
-bootstrap hold, its credentials hold and its exponential backoff all reset --
-every eighty seconds for sixty-one hours. That is thousands of logins against a
-configured ceiling of twenty-four a day, with ``calls_today`` reporting five,
-because each reporter was a different object. The limiter's state is therefore
-handed across set-up attempts through ``hass.data``.
+establishment down for a weekend would get a fresh limiter -- bootstrap hold,
+credentials hold and exponential backoff all reset -- every eighty seconds:
+thousands of logins against a ceiling of twenty-four a day, each counted by a
+different object. The limiter's state is therefore handed across set-up
+attempts through ``hass.data``.
 
-**The configuration flow's logins have to be counted too.** The flow's probe
-went straight to ``build_client``: no spacing, no bucket, no daily counter, and
--- the part that matters -- no failed-login guard. A user retyping a password
-into the re-authentication form could try it as often as they liked, which is
-precisely the one gesture that gets an address suspended (annexe B §3.1). Flow
-logins now go through a guard held here.
+**The configuration flow's logins have to be counted too.** Without a guard,
+a user retyping a password into the re-authentication form could try it as
+often as they want, which is precisely the one gesture that gets an address
+suspended (annexe B §3.1). Flow logins go through a guard held here.
 
 Nothing here is persisted to disk. Monotonic timestamps are only meaningful
 within one process, and a hold that survived a restart would be a hold nobody

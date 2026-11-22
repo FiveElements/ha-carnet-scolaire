@@ -43,8 +43,8 @@ WRITE_ACTIONS: Final = (ACTION_MARK_HOMEWORK_DONE, ACTION_MARK_INFORMATION_READ)
 
 #: The domain service each write action calls. A write is offered only if the
 #: source advertises that service: EcoleDirecte advertises none, and the
-#: option alone left "mark information read" in its editor -- an action whose
-#: every run the service then refused.
+#: option alone would leave "mark information read" in its editor -- an action
+#: whose every run the service would refuse.
 WRITE_ACTION_SERVICE: Final[dict[str, str]] = {
     ACTION_MARK_HOMEWORK_DONE: SERVICE_MARK_HOMEWORK_DONE,
     ACTION_MARK_INFORMATION_READ: SERVICE_MARK_INFORMATION_READ,

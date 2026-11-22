@@ -18,15 +18,14 @@ silently.
 
 It also has to cover the *choice of client*. A second gate, ``_gate``, is held
 across "pick a client, wait for budget, call, retry" as one unit. Without it a
-service invoked during a tick captured a client, awaited its spacing, and woke
-up to post on a client that a concurrent ``Erreur.G = 10`` retry had already
-closed -- producing a spurious expiry sample, a third login, and a failed tier
-from a single overlap.
+service invoked during a tick could capture a client, await its spacing, and
+wake up to post on a client that a concurrent ``Erreur.G = 10`` retry had
+already closed -- producing a spurious expiry sample, a third login, and a
+failed tier from a single overlap.
 
-**Reconnection.** Specification v1 closed the session between batches on the
-strength of a cost model that was wrong three times over (annexe B §5.1). The
-strategy here is lazy: keep the session, and log in again only when the server
-says it expired.
+**Reconnection.** Closing the session between batches rests on a cost model
+that does not hold (annexe B §5.1). The strategy here is lazy: keep the
+session, and log in again only when the server says it expired.
 
 Its defensibility rests on a dominance argument, and the argument has to be
 stated precisely because a loose version of it is false. Lazy is not free in
@@ -102,9 +101,9 @@ ERROR_TOO_MANY_AUTHORIZATIONS: Final = 25
 
 #: Every code that means "the session you are holding is gone; open another".
 #:
-#: 10 is the documented one and was for a long time the only one here. **8 is
-#: the one a live establishment actually sent**, with ``Erreur.Titre`` reading
-#: "La page a expiré !" -- the same statement in different words. It has to be
+#: 10 is the documented one. **8 is one establishments actually send**, with
+#: ``Erreur.Titre`` reading "La page a expiré !" -- the same statement in
+#: different words. It has to be
 #: recognised by number, because ``pronotepy`` has no entry for 8 in
 #: ``error_messages`` and therefore renders it as ``Unknown error from
 #: pronote: 8 | La page a expiré !``. That string is a *message*, not a
@@ -112,23 +111,19 @@ ERROR_TOO_MANY_AUTHORIZATIONS: Final = 25
 #: (``pronoteAPI.py:191`` attaches ``pronote_error_code`` for every code but
 #: 22).
 #:
-#: Treating 8 as an unclassified refusal cost the live instance seven hours of
-#: frozen data, and the shape of that failure is the argument for this set
-#: existing at all. The session was dead server-side while
-#: ``SessionManager.is_open`` still answered ``True``, so no branch ever
-#: reached :meth:`SessionManager._reopen`; every attempt failed, each failure
-#: deepened the exponential backoff, and no call could succeed to reset it.
-#: That is not a pause that resolves -- it is a well, and only a restart got
-#: the instance out of it. An unrecognised expiry code is therefore not a
-#: cosmetic gap: it is a permanent outage with a plausible-looking limiter
-#: state (``backoff``) on top of it.
+#: An unrecognised expiry code is not a cosmetic gap. The session is dead
+#: server-side while ``SessionManager.is_open`` still answers ``True``, so no
+#: branch reaches :meth:`SessionManager._reopen`; every attempt fails, each
+#: failure deepens the exponential backoff, and no call can succeed to reset
+#: it -- a permanent outage with a plausible-looking limiter state
+#: (``backoff``) on top of it.
 SESSION_EXPIRED_CODES: Final = frozenset({ERROR_PAGE_EXPIRED, ERROR_SESSION_EXPIRED})
 
 #: How long the presumption "the session I hold is usable" survives with not
 #: one successful call to support it.
 #:
 #: This is the guard that catches the *next* unrecognised code, and it is the
-#: reason :data:`SESSION_EXPIRED_CODES` is not the whole fix. A held client is
+#: reason :data:`SESSION_EXPIRED_CODES` is not the whole answer. A held client is
 #: only ever evidence that a login once succeeded; after hours of silence it
 #: is a belief, and the cheapest correct move is to stop holding it.
 #:
@@ -162,10 +157,10 @@ MIN_LIFETIME_SAMPLE_SECONDS: Final = 60.0
 #: Transport failures ``requests`` raises. Not one of them is a
 #: ``PronoteAPIError``, and -- the trap -- not one of them is a
 #: ``TimeoutError``: ``requests.Timeout`` inherits from ``OSError``, so
-#: ``except TimeoutError`` caught nothing at all. A school down for a weekend
-#: therefore produced an uncounted bootstrap GET every five minutes with no
-#: backoff whatsoever, while ``calls_today`` reported zero. ``OSError`` alone
-#: covers the family, built-in ``TimeoutError`` included.
+#: ``except TimeoutError`` catches nothing at all, and a school down for a
+#: weekend would produce an uncounted bootstrap GET every five minutes with no
+#: backoff whatsoever. ``OSError`` alone covers the family, built-in
+#: ``TimeoutError`` included.
 _TRANSPORT_ERRORS: Final = (OSError,)
 
 #: Decoding failures that can escape ``ClientBase.__init__``. ``ParsingError``
@@ -186,10 +181,10 @@ class LoginRefused(Exception):  # noqa: N818 -- a decision, surfaced as control 
 class MfaRequired(Exception):  # noqa: N818 -- surfaced to open a re-auth flow
     """PRONOTE asked for the 2FA PIN, which is deliberately not stored.
 
-    Specification v1 combined "never keep the PIN" with 64 logins a day, which
-    is 64 daily chances to fail hard at three in the morning with no way to
-    recover. The lazy strategy resolves the contradiction rather than masking
-    it -- one to three logins a day -- and this exception opens a
+    "Never keep the PIN" combined with a login per batch would be 64 daily
+    chances to fail hard at three in the morning with no way to recover. The
+    lazy strategy resolves the contradiction rather than masking it -- one to
+    three logins a day -- and this exception opens a
     re-authentication flow that *asks the user for the PIN*. A secret you refuse
     to store is a secret you must know how to ask for again (§8.1).
     """
@@ -389,12 +384,10 @@ class SessionManager:
         self._last_probe: float | None = None
 
         # Which batch this session was opened for. `PER_BATCH` means one login
-        # per *batch*, and getting this wrong was expensive: comparing the
-        # strategy alone made `_reconnect_required()` true on every `run()`, and
-        # `run()` is called once per `(child, tier)` -- so one tick of a
-        # two-child account with three closed periods asked for 36 full logins
-        # against a cap of 24, and the integration died before its first batch
-        # finished.
+        # per *batch*: comparing the strategy alone would make
+        # `_reconnect_required()` true on every `run()`, and `run()` is called
+        # once per `(child, tier)` -- so one tick of a two-child account with
+        # three closed periods would ask for 36 full logins against a cap of 24.
         self._batch_id = 0
         self._session_batch_id: int | None = None
 
@@ -475,10 +468,9 @@ class SessionManager:
             "open": self.is_open,
             "age_seconds": self.session_age,
             # Reported next to `open` on purpose: the two together are what
-            # tell a live session from a session merely being held. `open` was
-            # `True` and `age_seconds` was 25832 while every tier failed, and
-            # the field that would have said so in one reading -- this one --
-            # was the field that did not exist.
+            # tell a live session from a session merely being held. `open` and
+            # a large `age_seconds` can stand beside a session every tier fails
+            # against; this field says so in one reading.
             "idle_seconds": self._inactivity_gap() if self.is_open else None,
             "measured_lifetime_minutes": self._lifetime.observed_minutes,
             "lifetime_samples": len(self._lifetime.samples),
@@ -609,12 +601,11 @@ class SessionManager:
         any call -- the session expired, so this very call opened a new one.
         The caller still holds the identifier of the session before: the
         account learns the new roster only after its batch. Without this,
-        every call after a re-login raised ``ChildNotFound`` -- the whole
-        batch's collections, and on a live instance the first tick of a
-        homework item, which Home Assistant reported as "no child with id".
-        The account resolves it through the child's minted key; an identifier
-        it cannot place is passed on unchanged, and ``set_child`` refuses it as
-        before.
+        every call after a re-login would raise ``ChildNotFound`` -- the whole
+        batch's collections, and the tick of a homework item, which Home
+        Assistant reports as "no child with id". The account resolves it
+        through the child's minted key; an identifier it cannot place is passed
+        on unchanged, and ``set_child`` refuses it.
         """
         announced = [(child.id, child.name) for child in client.children]
         if self.resolve_child is None or any(
@@ -627,10 +618,10 @@ class SessionManager:
         """Charge the difference when the gateway spent more than declared.
 
         This is what makes ``GatewayResult.calls`` load-bearing rather than
-        decorative. Without it the limiter only ever saw the a-priori cost the
-        caller declared, so an accidental lazy-property access placed real
-        requests that the spacing, the bucket and the daily cap all missed --
-        which is precisely the regression the whole gateway design exists to
+        decorative. Without it the limiter would only ever see the a-priori
+        cost the caller declared, so an accidental lazy-property access would
+        place real requests that the spacing, the bucket and the daily cap all
+        miss -- which is precisely what the whole gateway design exists to
         prevent.
         """
         actual = getattr(result, "calls", None)
@@ -647,9 +638,9 @@ class SessionManager:
         """Log once when PRONOTE stops answering.
 
         Silver ``log-when-unavailable``: INFO, and only the first time. A
-        second failed call in the same outage must stay silent -- that is
-        what used to fill the log when every coordinator printed its own
-        error for the same unreachable server.
+        second failed call in the same outage must stay silent, rather than
+        every coordinator printing its own error for the same unreachable
+        server.
 
         ``reason`` is a fixed text or :func:`~.failures.describe_failure`,
         never ``str(error)``: a ``requests`` message quotes the establishment's
@@ -689,9 +680,9 @@ class SessionManager:
         # By type, not by code. `_Communication.post` raises `ExpiredObject`
         # for `Erreur.G = 22` on its own branch, *before* the branch that
         # attaches `pronote_error_code` (pronoteAPI.py:183 against :191), so
-        # this error arrives with no code at all. Testing the code alone made
-        # the whole "this is our bug, report it" arm below dead code, and a
-        # G = 22 fell through to the generic backoff instead -- holding a
+        # this error arrives with no code at all. Testing the code alone would
+        # make the whole "this is our bug, report it" arm below dead code, and a
+        # G = 22 would fall through to the generic backoff instead -- holding a
         # perfectly healthy server because *we* leaked an object across the
         # session boundary. Annexe B §4 is explicit that this one must never be
         # absorbed into the backoff.
@@ -815,7 +806,7 @@ class SessionManager:
         """Whether to log in again before using the held session.
 
         Under ``PER_BATCH`` this is true exactly once per batch. Comparing only
-        the strategy made it true on every call, which is a different and far
+        the strategy would make it true on every call, which is a different and far
         more expensive policy -- see ``_session_batch_id``.
 
         The presumption check comes first and applies under **every** strategy,
@@ -831,13 +822,11 @@ class SessionManager:
         """Whether the held session has gone too long without a success.
 
         :attr:`is_open` answers "am I holding a client", which is a fact about
-        this process and says nothing about the server. On the night this was
-        written it answered ``True`` for seven hours and ten minutes about a
-        session PRONOTE had already discarded, and every tier failed against
-        it -- so the fact was true and the belief it stood for was false.
+        this process and says nothing about the server: it can answer ``True``
+        for hours about a session PRONOTE has already discarded.
 
-        Keeping the two apart is the general form of the fix that
-        :data:`SESSION_EXPIRED_CODES` only solves for one code. A protocol code
+        Keeping the two apart is the general form of what
+        :data:`SESSION_EXPIRED_CODES` only solves for known codes. A protocol code
         we do not recognise, a server that stops answering without saying why,
         an establishment that invalidates sessions on its own schedule: all of
         them look the same from here, and all of them are caught by refusing to
@@ -973,13 +962,13 @@ class SessionManager:
         with it. This is also the reason the lazy strategy matters beyond call
         counting: at one login a day there is one window a day in which an
         abrupt shutdown between the server's rotation and the local write leaves
-        a dead token; at 64 logins a day there were 64 (§6.5).
+        a dead token; at 64 logins a day there would be 64 (§6.5).
 
         The in-memory update happens whether or not a persistence callback was
-        supplied, and a failed write is *loud*. Silently swallowing it left the
-        server holding the new token, memory holding the new token, and storage
-        holding a dead one -- with the only symptom appearing at the next
-        restart, as a QR code that has to be scanned again.
+        supplied, and a failed write is *loud*. Silently swallowing it would
+        leave the server holding the new token, memory holding the new token,
+        and storage holding a dead one -- with the only symptom appearing at
+        the next restart, as a QR code that has to be scanned again.
         """
         exported = export_credentials(client)
         self._credentials.password = str(exported.get("password", ""))
@@ -1058,14 +1047,13 @@ class SessionManager:
     def _note_survival(self, gap: float) -> None:
         """A call succeeded after ``gap`` seconds of inactivity.
 
-        ``gap`` matters, and passing it in is the fix for a real defect. The
-        conclusion "this server's timeout is short" used to be lifted by the
-        *next successful call*, which under the degradation is always the call
-        immediately after a fresh login -- so the degradation never survived one
-        call and the strategy oscillated for ever, paying an extra request every
-        batch. Lifting it now requires counter-evidence: a session that stayed
-        usable across an idle gap at least as long as the shortest gap that
-        previously killed one.
+        ``gap`` matters. Lifting the conclusion "this server's timeout is
+        short" on the *next successful call* would lift it on the call
+        immediately after a fresh login, which always succeeds -- so the
+        degradation would never survive one call and the strategy would
+        oscillate for ever, paying an extra request every batch. Lifting it
+        requires counter-evidence: a session that stayed usable across an idle
+        gap at least as long as the shortest gap that previously killed one.
         """
         self._consecutive_expiries = 0
         if not self._short_timeout_confirmed:
@@ -1087,7 +1075,7 @@ class SessionManager:
         self._last_probe = None
 
     def _note_expiry(self) -> None:
-        """The server said ``Erreur.G = 10``: record how long the session lived.
+        """The server said the session expired: record how long it lived.
 
         The sample is the gap between the last successful call and now, not the
         session's total age: what expires is *inactivity*.

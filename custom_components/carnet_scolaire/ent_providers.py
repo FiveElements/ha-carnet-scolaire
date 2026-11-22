@@ -1,21 +1,19 @@
 """The ENT portals the login form offers, and how a stored name becomes a login.
 
 A portal is persisted by **name**, because a config entry holds JSON and a
-portal is a function. That name used to be resolved in three places -- the
-form's option list, the flow's probe and the session's reconnection -- each
-with its own ``getattr`` on ``pronotepy.ent``. They agreed only because
-nothing had yet been added to one of them. This module is now the single
-answer to both questions: which names exist, and what a name logs in with.
+portal is a function. The form's option list, the flow's probe and the
+session's reconnection all resolve that name here, so they cannot disagree:
+this module is the single answer to both questions -- which names exist, and
+what a name logs in with.
 
 It also offers portals ``pronotepy`` does not ship working. Its ``ent.py``
 carries ``enc_hauts_de_seine`` as a commented-out binding to ``_oze_ent``,
 and binding it as written fails before any credential is sent: ``_oze_ent``
 loads the portal's home page and looks for the Keycloak form there, but that
-page is now a JavaScript application that redirects by script, so the form is
-absent and the function dies on ``None.findAll``. Upstream disabled it in 2023
-("Remove outdated CAS", #255) and has since declared the ENT functions
-unmaintained (#335); a parent report from 2022 (#165) had already shown the
-OZE fallback asking for the pupil's function where a parent needs ``TUT``.
+page is a JavaScript application that redirects by script, so the form is
+absent and the function dies on ``None.findAll``. Upstream has disabled it and
+declares the ENT functions unmaintained, and its OZE fallback asks for the
+pupil's function where a parent needs ``TUT``.
 
 What does work is the portal's **CAS** endpoint, and PRONOTE itself points at
 it: an establishment reachable only through the portal answers every request

@@ -71,11 +71,10 @@ async def async_get_conditions(
     """
     # Matched on the *suffix*, not by splitting. A unique id is
     # `<entry>_<student>_<key>` and most keys contain an underscore
-    # themselves, so taking the last segment answered `day` for `school_day`
-    # and `class` for `in_class`: eight of the ten conditions silently never
-    # appeared in the automation editor, and the two that did were the two
-    # single-word keys. Suffix matching against the keys we actually want is
-    # also immune to the unique-id scheme changing again.
+    # themselves, so taking the last segment would answer `day` for
+    # `school_day` and `class` for `in_class`, and every multi-word condition
+    # would silently vanish from the automation editor. Suffix matching against
+    # the keys we actually want is also immune to the unique-id scheme changing.
     available: dict[str, str] = {}
     for key, _state in CONDITION_MAP.values():
         entity_id = _entity_for(hass, device_id, key)
@@ -124,8 +123,9 @@ def async_condition_from_config(
     when it is absent. It has to be: the editor always supplies it, because
     `async_get_conditions` puts it there, but a condition written by hand or
     delivered in a blueprint carries only the device and the type -- and
-    reading it unconditionally raised ``KeyError`` inside the automation, which
-    surfaces as "this automation is broken" with no indication of which line.
+    reading it unconditionally would raise ``KeyError`` inside the automation,
+    which surfaces as "this automation is broken" with no indication of which
+    line.
     """
     key, wanted = CONDITION_MAP[config[CONF_TYPE]]
     entity_id = config.get(CONF_ENTITY_ID) or _entity_for(

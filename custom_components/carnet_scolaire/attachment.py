@@ -88,10 +88,7 @@ DOCUMENT_TIERS: Final = (Tier.HOMEWORK, Tier.MARKS, Tier.HISTORY)
 
 #: How long a minted address stays usable.
 #:
-#: Five minutes. It used to be twelve hours, and that figure was derived from a
-#: constraint that no longer exists: the address sat in an attribute, so it had
-#: to outlive the homework tier's interval or a parent would meet a 401 on a
-#: link the page was still showing. Minted by the service at the click and
+#: Five minutes. Minted by the service at the click and
 #: opened immediately, it only has to survive the round trip and a slow PDF
 #: viewer asking for a second range -- and every minute beyond that is a minute
 #: a copied address still opens a child's document.
@@ -560,7 +557,7 @@ def _ascii(name: str) -> str:
     still outside ASCII becomes ``_`` -- never ``?``: Windows forbids ``?`` in
     a filename, and a browser that meets one discards the proposed name and
     saves the file under the URL's last segment, a 16-hex key with no
-    extension. Measured on a live instance, on every accented name.
+    extension.
     """
     folded = "".join(
         character

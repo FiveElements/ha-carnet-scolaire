@@ -256,10 +256,9 @@ REAUTH_SCHEMA: Final = probatio.Schema(
 #: `account_name` -- the pupil's name on a pupil's own login -- only long
 #: enough to check a reconnection reached the same child.
 #:
-#: One set rather than a literal per call site, because there were two call
-#: sites and only one list: the re-authentication path stripped the PIN and
-#: nothing else, so a QR re-enrolment would have persisted the payload it had
-#: just promised not to keep.
+#: One set rather than a literal per call site, because there are several call
+#: sites: a path that stripped only the PIN would let a QR re-enrolment persist
+#: the payload it had just promised not to keep.
 _NEVER_PERSISTED: Final = frozenset(
     {CONF_QR_PAYLOAD, CONF_QR_PIN, CONF_ACCOUNT_PIN, "account_id", "account_name"}
 )
@@ -271,10 +270,10 @@ _ED_PERSISTED: Final = frozenset(
 def _log_rejected_payload(error: Exception, raw: object) -> None:
     """Say *why* a pasted QR code was rejected, without echoing it.
 
-    This rejection is the one flow failure that never reaches the network, and
-    it logged nothing at all -- so a parent whose messaging app had quietly
-    added characters to the JSON, and this happened, saw only "that does not
-    look like the content of a PRONOTE QR code" while the log stayed silent.
+    This rejection is the one flow failure that never reaches the network.
+    Without this line, a parent whose messaging app quietly added characters to
+    the JSON would see only "that does not look like the content of a PRONOTE
+    QR code" while the log stayed silent.
 
     What is recorded is the *shape*: the exception's own message, the length of
     what was pasted, and whether it even starts like a JSON object. Never the
@@ -299,17 +298,17 @@ def _log_rejected_payload(error: Exception, raw: object) -> None:
 def _log_refusal(error: BaseException) -> None:
     """Say *why* a login was refused, on this integration's own logger.
 
-    A classified failure used to log nothing at all -- only the unexpected ones
-    wrote a traceback -- so "PRONOTE refused these credentials" was the whole of
-    what a bug report could contain, and the four causes behind it were
-    indistinguishable. Diagnosing a real one meant guessing, twice in one day.
+    Without it a classified failure logs nothing at all -- only the unexpected
+    ones write a traceback -- so "PRONOTE refused these credentials" would be the
+    whole of what a bug report could contain, and the four causes behind it
+    would be indistinguishable.
 
     At DEBUG, because DEBUG is what a user turns on before reporting a bug, and
     strictly more conservative than the ERROR-level traceback the unexpected arm
     already writes unconditionally. The category is ours and the cause is
     upstream's: `pronotepy` raises static messages here ("challenge decryption
-    failed", "invalid confirmation code"), which is exactly the distinction that
-    was missing.
+    failed", "invalid confirmation code"), which is exactly the distinction a
+    report needs.
 
     What this must never become is `logging.getLogger("pronotepy")` at DEBUG:
     `pronoteAPI.py` writes the hexadecimal of every request body there,
@@ -377,10 +376,9 @@ def _account_identity(account_id: str | None) -> tuple[str, str]:
     *account*" -- and a parent re-enrolling their own account from a fresh QR
     code would be told it belongs to somebody else.
 
-    What is left is **not** an account identity, and an earlier version of this
-    docstring said it was. The prefix is almost certainly a PRONOTE *resource
-    type* rather than a number of its own: measured on a live instance, every
-    child carries ``46#…`` and every homework ``147#…``. Two accounts of one
+    What is left is **not** an account identity. The prefix is almost certainly
+    a PRONOTE *resource type* rather than a number of its own: every child
+    carries ``46#…`` and every homework ``147#…``. Two accounts of one
     establishment therefore read the same here. This pair says *which
     establishment and which kind of resource*, nothing more; whether the login
     reached the same family is :func:`_shares_a_followed_child`'s question.
@@ -471,8 +469,8 @@ def _shares_a_followed_child(
     name the entry already records; a pupil's own login, which announces no
     child, must carry the name of the one child the entry follows.
 
-    An entry with no readable name -- one created before the key table
-    existed and never set up since -- has nothing to compare, and is passed
+    An entry with no readable name -- one whose child key table holds no
+    record yet -- has nothing to compare, and is passed
     on the establishment check alone rather than refused: refusing it would
     leave its owner no way to repair it but deleting it, which is the outcome
     this check exists to prevent. That fallback is weaker, and knowingly so.
@@ -636,8 +634,8 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_menu(
             step_id=STEP_USER,
             menu_options=[STEP_PRONOTE, STEP_ECOLEDIRECTE],
-            # See BRAND_LOGO_URL for why this is a URL and for the version gate
-            # that keeps it: the mark reaches this screen as a markdown image
+            # See BRAND_LOGO_URL for why this is a URL and for the check that
+            # keeps it: the mark reaches this screen as a markdown image
             # because hassfest refuses a URL written into the translation
             # string itself, and names a placeholder as the way to pass one.
             description_placeholders={"logo": BRAND_LOGO_URL},
@@ -930,11 +928,9 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         entry = self._reauth_entry
 
         if user_input is not None and entry is not None:
-            # Before the attempt, as the docstring says -- and it was not
-            # happening at all: `reset_after_reauth` had no caller outside the
-            # limiter's own tests, so the MFA hold, whose only exit is a human
-            # supplying the PIN, could not be exited by a human supplying the
-            # PIN.
+            # Before the attempt, as the docstring says: the MFA hold's only
+            # exit is a human supplying the PIN, so this is where it must be
+            # lifted.
             clear_login_penalties(self.hass, entry.entry_id)
             data = dict(entry.data)
             if user_input.get("password"):
@@ -972,7 +968,7 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         login, so a token that went stale -- an interrupted login, a session
         opened twice, a device revoked in the app -- is dead for good, and the
         only thing that mints a new one is a new QR code. Showing such an
-        account the password form was offering a repair that could not work,
+        account the password form would offer a repair that cannot work,
         and the account's own two-factor PIN is asked for here too, so nothing
         the old form could fix is lost by not showing it.
 
@@ -1057,14 +1053,11 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         # Assistant schedules it whenever the entry changed, and
         # `reload_even_if_entry_is_unchanged=False` spares a login when it did
         # not. It is also why the integration registers **no** update listener.
-        # On an entry that has one, Home Assistant 2026.9 reports this very call
-        # -- whatever that flag says, as soon as the data changed, which a
+        # On an entry that has one, Home Assistant reports this very call --
+        # whatever that flag says, as soon as the data changed, which a
         # reconnection always does -- with `report_usage("has an update listener
-        # and should use it for scheduling a reload",
-        # breaks_in_ha_version="2026.12.0")`. An earlier comment here claimed
-        # the flag avoided that report; it did not, and every reconnection of a
-        # loaded entry logged it. Options now reload through
-        # `PronoteOptionsFlow` instead (see its docstring).
+        # and should use it for scheduling a reload", ...)`. Options reload
+        # through `PronoteOptionsFlow` instead (see its docstring).
         return self.async_update_reload_and_abort(
             entry,
             data=persisted,
@@ -1103,11 +1096,11 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Change how an existing entry connects, without removing it.
 
-        Removing and re-adding an entry was the only way to correct an address,
-        switch to the ENT or move to a QR code, and it cost everything attached
-        to the entry: its devices, its entity ids, the automations and the
-        history written against them, the options, the children deliberately
-        left unticked.
+        Without it, removing and re-adding an entry would be the only way to
+        correct an address, switch to the ENT or move to a QR code, and it costs
+        everything attached to the entry: its devices, its entity ids, the
+        automations and the history written against them, the options, the
+        children deliberately left unticked.
 
         No form of its own. PRONOTE gets the add flow's three-way menu and then
         the add flow's own steps -- the same schemas, the same probe, the same
@@ -1312,20 +1305,20 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         Returns the credentials to persist plus the children, or ``None`` after
         filling ``errors``. Runs in the executor because constructing a
         ``pronotepy`` client *is* a network login (§3.2), and it runs **through
-        the limiter**, which it did not.
+        the limiter**.
 
-        That omission mattered more than it looks. This is the one login path a
-        human can repeat at will: the re-authentication form re-displays itself
-        on every failure, so a parent convinced the password is right could
-        submit it twenty times in a minute. None of those attempts reached
-        `may_login`, none was counted by `note_login`, and the three-attempt
-        guard rail -- the defence against the one sanction PRONOTE applies to an
-        address rather than to an account -- never saw them (annexe B §3.1).
+        That matters more than it looks. This is the one login path a human can
+        repeat at will: the re-authentication form re-displays itself on every
+        failure, so a parent convinced the password is right could submit it
+        twenty times in a minute. Each attempt must reach `may_login` and be
+        counted by `note_login`, or the three-attempt guard rail -- the defence
+        against the one sanction PRONOTE applies to an address rather than to an
+        account -- never sees them (annexe B §3.1).
         """
         guard = login_guard(self.hass)
         # QR enrolment performs two complete logins by construction, so it is
         # declared as two. Under-declaring here would spend the budget without
-        # recording it, which is the defect this whole file just stopped having.
+        # recording it.
         # The payload is part of the test, not just the mode: a QR-enrolled
         # entry keeps `qr_code` for ever, but once the payload is gone it logs
         # in through pronotepy's token mode, which is a single login. Charging
@@ -1445,8 +1438,8 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         """Create the entry, dropping the single-use and never-stored fields."""
         # `children` is *not* in `_NEVER_PERSISTED`, and must not be: it holds
         # the user's selection, which `PronoteAccount` reads to decide whose
-        # data to collect. It used to be excluded here, which is how the
-        # selection came to be discarded on every single install.
+        # data to collect; excluding it would discard the selection on every
+        # install.
         data = {
             key: value
             for key, value in self._data.items()
@@ -1455,9 +1448,9 @@ class PronoteConfigFlow(ConfigFlow, domain=DOMAIN):
         if data.get(CONF_SOURCE) == Source.ECOLEDIRECTE.value:
             data = {key: data[key] for key in _ED_PERSISTED if key in data}
             return self.async_create_entry(title=str(self._data["title"]), data=data)
-        # Seeded rather than left to a fallback: the fallback has to keep
-        # answering "off" for entries created before writes were on by
-        # default, so a new entry must say "on" in its own options (§8.3).
+        # Seeded rather than left to a fallback: the fallback answers "off" for
+        # an entry lacking the key, so a new entry must say "on" in its own
+        # options (§8.3).
         return self.async_create_entry(
             title=str(self._data["title"]),
             data=data,
@@ -1476,21 +1469,16 @@ class PronoteOptionsFlow(OptionsFlowWithReload):
 
     **It is also what applies a save (§7.3).** ``OptionsFlowWithReload``
     reloads the entry when, and only when, the stored options really changed,
-    which replaces the update listener ``__init__.py`` used to register. The
-    listener had to go: Home Assistant 2026.9 reports every
-    ``async_update_reload_and_abort`` on an entry carrying one -- that is,
-    every re-authentication and reconfiguration of a running account -- and
-    announces the break for 2026.12. Dropping it also removed the guard it
-    needed, because a listener fires on *any* write, including the account's
-    own writes to ``entry.data`` (a rotated token, a newly paired child), none
-    of which may reload; this flow only ever sees the options.
+    so the integration registers no update listener. Home Assistant reports
+    every ``async_update_reload_and_abort`` on an entry carrying one -- that
+    is, every re-authentication and reconfiguration of a running account. A
+    listener would also fire on *any* write, including the account's own
+    writes to ``entry.data`` (a rotated token, a newly paired child), none of
+    which may reload; this flow only ever sees the options.
 
-    The reload is limited to a **loaded** entry, which is what the listener's
-    lifetime gave for free: it was registered at the end of a successful
-    set-up and removed on unload. Saving the options of an entry that is
-    failing therefore does not start a set-up -- and a login -- of its own; it
-    waits for Home Assistant's own retry, as it always did. See
-    :meth:`_save`.
+    The reload is limited to a **loaded** entry. Saving the options of an
+    entry that is failing therefore does not start a set-up -- and a login --
+    of its own; it waits for Home Assistant's own retry. See :meth:`_save`.
     """
 
     async def async_step_init(
@@ -1523,7 +1511,7 @@ class PronoteOptionsFlow(OptionsFlowWithReload):
                 # Refused here rather than at set-up. The string reaches
                 # `ZoneInfo` in `PronoteGateway.__init__`, which raises
                 # `ZoneInfoNotFoundError` on the set-up path -- so "Paris"
-                # instead of "Europe/Paris" used to take every entity of the
+                # instead of "Europe/Paris" would take every entity of the
                 # account down and explain itself as `unavailable`.
                 errors[OPT_ESTABLISHMENT_TIMEZONE] = "invalid_timezone"
                 shown = typed
@@ -1758,7 +1746,7 @@ class PronoteOptionsFlow(OptionsFlowWithReload):
         load-bearing part. "Absent from the answers means cleared" is only true
         of the section on screen; applied to the whole merge it would wipe
         every limiter tunable each time somebody saved the "general" page,
-        which is the exact failure this method was written to prevent.
+        which is the exact failure this method exists to prevent.
         """
         merged = {**self.config_entry.options, **user_input}
         for key in clearable:
@@ -1888,14 +1876,14 @@ def _parse_qr_payload(raw: str) -> dict[str, Any]:
     except json.JSONDecodeError as error:
         raise ValueError("not JSON") from error
     if not isinstance(payload, dict):
-        # A ValueError, deliberately, and not the TypeError this used to be.
-        # Every failure of this function means the same thing to its one
-        # caller -- "this payload is unusable" -- and that caller catches
-        # ValueError. A TypeError therefore escaped the flow entirely, so a
-        # payload of `[1, 2]` or `"nope"` -- valid JSON, wrong shape, and
-        # exactly what a badly cropped QR code decodes to -- produced an
-        # unhandled exception and Home Assistant's generic "unknown error"
-        # instead of the field error beside the box to re-scan into.
+        # A ValueError, deliberately, and not a TypeError. Every failure of this
+        # function means the same thing to its one caller -- "this payload is
+        # unusable" -- and that caller catches ValueError. A TypeError would
+        # escape the flow entirely, so a payload of `[1, 2]` or `"nope"` --
+        # valid JSON, wrong shape, and exactly what a badly cropped QR code
+        # decodes to -- would produce an unhandled exception and Home
+        # Assistant's generic "unknown error" instead of the field error beside
+        # the box to re-scan into.
         raise ValueError(  # noqa: TRY004 -- see the comment above
             "not a JSON object"
         )
@@ -1903,7 +1891,7 @@ def _parse_qr_payload(raw: str) -> dict[str, Any]:
     if missing:
         raise ValueError(f"missing keys: {', '.join(sorted(missing))}")
 
-    # Presence is not enough, and the gap was expensive. `qrcode_login` does
+    # Presence is not enough. `qrcode_login` does
     # `bytes.fromhex(qr_code["login"])` and the same for `jeton` **before** the
     # `try` that turns a decryption failure into `QRCodeDecryptError`
     # (pronotepy 2.15.7, `clients.py:184-191`). A truncated or mangled hex
@@ -1911,13 +1899,13 @@ def _parse_qr_payload(raw: str) -> dict[str, Any]:
     # not a `PronoteAPIError`, escapes every classified arm of the probe, and
     # lands in the last-resort `except Exception`.
     #
-    # Two consequences, neither of them the user's fault. The screen said
-    # "unexpected error" for what is a copy-paste problem, and the limiter was
-    # told `TRANSPORT` -- which calls `note_failure()` and opens an exponential
-    # backoff hold on the *instance-wide* guard, blocking every other config
-    # flow, and growing on each retry. All of it for an attempt that never
-    # opened a socket. A messaging app inserting a timestamp into the pasted
-    # JSON is enough to produce it.
+    # Two consequences, neither of them the user's fault. The screen would say
+    # "unexpected error" for what is a copy-paste problem, and the limiter would
+    # be told `TRANSPORT` -- which calls `note_failure()` and opens an
+    # exponential backoff hold on the *instance-wide* guard, blocking every
+    # other config flow, and growing on each retry. All of it for an attempt
+    # that never opened a socket. A messaging app inserting a timestamp into
+    # the pasted JSON is enough to produce it.
     for key in ("login", "jeton"):
         value = payload[key]
         if not isinstance(value, str):
@@ -1972,9 +1960,10 @@ class ProbeQrInvalid(ProbeError):  # noqa: N818 -- a flow outcome, not an error 
 class ProbeEntUnknown(ProbeError):  # noqa: N818 -- a flow outcome, not an error class
     """The named ENT provider does not exist in the installed ``pronotepy``.
 
-    Its own category because the alternative was silence: the resolver returned
-    ``None`` and the login proceeded in direct mode, sending the ENT portal's
-    credentials to the PRONOTE server. See :func:`.flow_login._ent_provider`.
+    Its own category because the alternative is silence: a resolver returning
+    ``None`` would let the login proceed in direct mode, sending the ENT
+    portal's credentials to the PRONOTE server. See
+    :func:`.flow_login._ent_provider`.
     """
 
 

@@ -15,20 +15,19 @@ from typing import Final
 #: and a neutral domain can never collide with a custom integration that owns
 #: ``pronote`` or ``ecoledirecte``. The repository is ``ha-carnet-scolaire`` and
 #: the integration is displayed as "Carnet scolaire"; this domain is the only
-#: place the underscored form appears. It was ``pronote_ng`` until 0.0.32, and
-#: Home Assistant has no domain migration: an entry created under the old name
-#: must be removed and added again.
+#: place the underscored form appears. Home Assistant has no domain migration:
+#: an entry created under the ``pronote_ng`` domain must be removed and added
+#: again.
 DOMAIN: Final = "carnet_scolaire"
 
 # ---------------------------------------------------------------------------
 # Protocol surface
 # ---------------------------------------------------------------------------
-# Tab identifiers, verified against pronotepy 2.15.7. Two of these were wrong in
-# specification v1 and are called out here so a future reader does not "fix"
-# them back: reading the news feed is `PageActualites` (clients.py:856), while
-# `SaisieActualites` is the *write* used by Information.mark_as_read
-# (dataClasses.py:1148); the discussions list is `ListeMessagerie`
-# (clients.py:828).
+# Tab identifiers, verified against pronotepy 2.15.7. Two are easy to confuse
+# and are called out here so a reader does not "fix" them: reading the news
+# feed is `PageActualites` (clients.py:856), while `SaisieActualites` is the
+# *write* used by Information.mark_as_read (dataClasses.py:1148); the
+# discussions list is `ListeMessagerie` (clients.py:828).
 FUNC_TIMETABLE: Final = ("PageEmploiDuTemps", 16)
 FUNC_HOMEWORK: Final = ("PageCahierDeTexte", 88)
 FUNC_NEWS: Final = ("PageActualites", 8)
@@ -181,12 +180,10 @@ CONF_SOURCE: Final = "source"
 #: not the key.**
 #:
 #: PRONOTE writes a child's resource identifier as ``46#<signature>`` and that
-#: signature is *not stable between sessions*. Three distinct values were
-#: observed for one pupil on one account. Because an entity's ``unique_id``
-#: embedded it, a rotation looked like the arrival of a new child: a second
-#: device appeared, a full set of entities was created against it, and the
-#: previous set was orphaned in the registry -- every dashboard, automation and
-#: helper pointing at it dead, and nothing logged.
+#: signature is *not stable between sessions*: one pupil can carry several
+#: values on one account. A ``unique_id`` embedding it would make a rotation
+#: look like the arrival of a new child -- a second device, a full set of new
+#: entities, and the previous set orphaned in the registry with nothing logged.
 #:
 #: So the integration mints a key it owns and pairs the announced children
 #: against this table at each set-up: by resource identifier while it still
@@ -260,10 +257,9 @@ DEFAULT_WAKE_MARGIN: Final = 90
 DEFAULT_HISTORY_PERIODS: Final = 0  # 0 means "every closed period"
 #: What a *new* PRONOTE entry is created with (§8.3). Seeded into the entry's
 #: options at creation, never read as a fallback: an entry that lacks the key
-#: was created while writes were off by default, and reading this constant for
-#: it would turn writes on for somebody who never chose them.
+#: never chose writes, and reading this constant for it would turn them on.
 DEFAULT_WRITE_OPERATIONS_ENABLED: Final = True
-#: What an entry without the key is: one created before the default changed.
+#: What an entry without the key gets: writes stay off until turned on.
 LEGACY_WRITE_OPERATIONS_ENABLED: Final = False
 DEFAULT_STALE_AFTER: Final = 6
 
@@ -302,29 +298,22 @@ OPTION_RANGES: Final[dict[str, tuple[float, float]]] = {
 #: The mark shown at the top of the first screen of the configuration flow.
 #:
 #: A URL and not a path -- though not because the local brand folder goes
-#: unread. Since Home Assistant 2026.3 a custom integration's own ``brand/``
-#: directory is served by the frontend through the brands proxy API
+#: unread. On every supported Home Assistant version a custom integration's own
+#: ``brand/`` directory is served by the frontend through the brands proxy API
 #: (``/api/brands/integration/{domain}/{image}``), and those local images take
 #: precedence over the ``home-assistant/brands`` repository; so
-#: ``custom_components/carnet_scolaire/brand/`` is read by the frontend itself on a
-#: recent instance, not only by the HACS validation.
+#: ``custom_components/carnet_scolaire/brand/`` is read by the frontend itself,
+#: not only by the HACS validation.
 #:
-#: The mechanism is version-gated, and the gate is now closed behind us:
-#: ``hacs.json`` declares a floor of 2026.11.0, which is above the 2026.3 that
-#: introduced the proxy, so **every supported instance serves the local
-#: folder**. There is therefore no longer a version on which this constant is
-#: the only way to put the mark on that screen -- the argument that justified
-#: it has expired.
-#:
-#: What still holds it here is one unverified claim: that the config-flow
+#: What holds this constant here is one unverified claim: that the config-flow
 #: dialog's own header consumes the proxy. The proxy's existence does not
 #: establish that this particular screen uses it, and if it does, the markdown
-#: image below renders the logo a second time. So the removal is pending a
-#: visual check of the first step of the flow on a 2026.8-or-newer instance,
-#: and not pending anything else. When that check comes back positive, this
-#: constant, its import, the ``description_placeholders`` argument in
-#: ``config_flow.async_step_user`` and the ``{logo}`` placeholder in
-#: ``scripts/build_translations.py`` all go together.
+#: image below renders the logo a second time. So its removal is pending a
+#: visual check of the first step of the flow, and not pending anything else.
+#: When that check comes back positive, this constant, its import, the
+#: ``description_placeholders`` argument in ``config_flow.async_step_user``
+#: and the ``{logo}`` placeholder in ``scripts/build_translations.py`` all go
+#: together.
 #:
 #: Passed as a description placeholder rather than written into the translation
 #: string, because hassfest rejects a URL inside one and names this as the
@@ -366,19 +355,18 @@ class SessionStrategy(StrEnum):
 
     ``LAZY`` is the default and the recommended value: keep the session, and
     re-login only when the server says it expired. Which codes say that is
-    ``session.SESSION_EXPIRED_CODES`` and not a single number: an
-    establishment answered ``Erreur.G = 8`` ("La page a expiré !") where the
-    specification documents 10, and recognising only 10 left a dead session
-    held for seven hours. A held session is also given up after
+    ``session.SESSION_EXPIRED_CODES`` and not a single number: establishments
+    answer ``Erreur.G = 8`` ("La page a expiré !") where the specification
+    documents 10, and an unrecognised code leaves a dead session held. A held
+    session is also given up after
     ``session.PRESUMED_DEAD_AFTER_SECONDS`` without one successful call, which
     is what catches the *next* code nobody has seen yet. It cannot
     be worse than ``PER_BATCH`` for any value of the server's inactivity
     timeout -- if the timeout turns out to be shorter than the fastest tier,
     every batch finds a dead session and opens one, which *is* ``PER_BATCH``.
 
-    ``PER_BATCH`` is kept as an explicit escape hatch: it is what specification
-    v1 prescribed, and an establishment with an unusual policy may want it
-    pinned rather than discovered.
+    ``PER_BATCH`` is kept as an explicit escape hatch: an establishment with an
+    unusual policy may want it pinned rather than discovered.
     """
 
     LAZY = "lazy"
@@ -484,23 +472,22 @@ EVENT_HOMEWORK_ADDED: Final = "homework_added"
 EVENT_LESSON_CANCELED: Final = "lesson_canceled"
 #: A cancellation that was **lifted**: the lesson is back on.
 #:
-#: Its absence is what made the delta detector's old "if nothing else matched,
-#: call it a cancellation" fallback fire ``lesson_canceled`` for exactly the
-#: opposite event -- so an automation that notifies "no school first period,
-#: sleep in" fired on the morning the lesson was reinstated.
+#: It is its own event so that ``lesson_canceled`` never fires for the
+#: opposite change: an automation that notifies "no school first period, sleep
+#: in" must stay silent on the morning the lesson is reinstated.
 EVENT_LESSON_RESTORED: Final = "lesson_restored"
 #: Cancelled, with another lesson taught on the slot: a substitution, a room
 #: change or a "cours maintenu", which PRONOTE all serve as the original flagged
 #: ``estAnnule`` plus the entry replacing it. The child still has a lesson, so
-#: reporting it as ``lesson_canceled`` announced an absent teacher on a morning
-#: with an evaluation in another room.
+#: reporting it as ``lesson_canceled`` would announce an absent teacher on a
+#: morning with an evaluation in another room.
 EVENT_LESSON_REPLACED: Final = "lesson_replaced"
 EVENT_LESSON_MOVED: Final = "lesson_moved"
 #: Only the ``Statut`` label moved -- no flag, no time, no room, no teacher.
 #:
 #: PRONOTE uses that field for things it does not set ``estAnnule`` for
 #: ("Prof. absent", "Cours dépl."), so the change is real and worth reporting;
-#: it is just not a cancellation, which is what it used to be reported as.
+#: it is just not a cancellation, and is not reported as one.
 EVENT_LESSON_STATUS_CHANGED: Final = "lesson_status_changed"
 EVENT_ROOM_CHANGED: Final = "room_changed"
 EVENT_TEACHER_CHANGED: Final = "teacher_changed"
@@ -558,8 +545,8 @@ AGNOSTIC_SERVICES: Final = frozenset({SERVICE_REFRESH, SERVICE_GET_RATE_LIMIT_ST
 #: and ``cls._unrecorded_attributes`` resolves by ordinary attribute lookup, so
 #: a subclass that declares the name **replaces** its parent's set instead of
 #: extending it. A subclass therefore never declares it here; a new name is
-#: added to this constant. v0.0.22 learned this the expensive way -- see the
-#: comment where ``PronoteSensor`` deliberately has no declaration.
+#: added to this constant -- see the comment where ``PronoteSensor``
+#: deliberately has no declaration.
 UNRECORDED_LIST_ATTRIBUTES: Final = frozenset(
     {
         "items",

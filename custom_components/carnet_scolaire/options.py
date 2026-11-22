@@ -57,8 +57,7 @@ if TYPE_CHECKING:
 _LOGGER: Final = logging.getLogger(__name__)
 
 #: Requests one batch of a tier costs, counted against the upstream source
-#: rather than assumed -- this table is the thing specification v1 got wrong
-#: three times, and two of its entries were still wrong after review.
+#: rather than assumed.
 #:
 #: ``timetable`` is 1.14 because ``Client.lessons()`` bills by *week*: asking
 #: for today and tomorrow costs the same single request as the whole week,
@@ -68,18 +67,16 @@ _LOGGER: Final = logging.getLogger(__name__)
 #:
 #: ``marks`` is 2 because the current period's report card rides along.
 #:
-#: ``history`` is **8**, not the 6 the annexe derived. Four requests per closed
-#: period, not three: ``DernieresNotes`` 198, ``PageBulletins``, ``PagePresence``
-#: 19 and ``DernieresEvaluations`` 201. Tab 201 is in neither the specification
-#: nor the annexe, which is exactly why counting from the code beats counting
-#: from the prose.
+#: ``history`` is **8**: four requests per closed period -- ``DernieresNotes``
+#: 198, ``PageBulletins``, ``PagePresence`` 19 and ``DernieresEvaluations``
+#: 201 -- counted from the code rather than from the prose.
 #:
 #: ``discussions`` is **2**, not 1. The thread list is one request, and
 #: ``Discussion.messages`` posts ``ListeMessages`` on every read, so expanding
 #: the newly active threads costs up to
 #: ``gateway.MAX_DISCUSSION_EXPANSIONS`` more. Two is the honest average for an
-#: account that receives a message or so per cycle; the limiter no longer
-#: relies on this figure being right, because the session reconciles the real
+#: account that receives a message or so per cycle; the limiter does not
+#: rely on this figure being right, because the session reconciles the real
 #: cost the gateway reports (see ``RateLimiter.reconcile``).
 REQUESTS_PER_BATCH: Final[dict[Tier, float]] = {
     Tier.TIMETABLE: 1.14,
@@ -253,8 +250,8 @@ def estimate_daily_requests(
     Same function that produced annexe B §5.3, so the options page and the
     document cannot drift apart.
 
-    ``session_lifetime_minutes`` is the unknown parameter the whole session
-    debate turned on. Passing the measured value gives the real estimate;
+    ``session_lifetime_minutes`` is the unknown parameter the session strategy
+    depends on. Passing the measured value gives the real estimate;
     leaving it ``None`` assumes the pessimistic case, which is the point of the
     dominance argument -- the estimate shown to a user who has no measurement
     yet must be the one they cannot be disappointed by.
@@ -271,11 +268,8 @@ def estimate_daily_requests(
             continue
         minutes = max(1, intervals.get(tier, DEFAULT_TIER_INTERVALS[tier]))
         # A tier whose interval is longer than the active window still runs
-        # once a day. The previous `min(runs, 1440/minutes)` clamp was dead for
-        # every possible input -- `runs` is already the smaller of the two --
-        # and it left a 1440-minute tier counted 0.667 times a day, which is
-        # why `history` came out at 4 requests where the annexe says 6 (and
-        # where the code actually spends 8).
+        # once a day; without this floor a 1440-minute tier would be counted
+        # 0.667 times a day.
         runs = max((active_hours * 60.0) / minutes, 1.0)
         data_requests += runs * per_batch * students
         batches_per_day = max(batches_per_day, runs)
@@ -290,8 +284,8 @@ def estimate_daily_requests(
         session_lifetime_minutes=session_lifetime_minutes,
     )
     # The login cap is a real ceiling, so the estimate has to respect it. Left
-    # uncapped, the degenerate case of a five-minute server timeout quoted 64
-    # logins a day against a configured maximum of 24 -- an estimate the
+    # uncapped, the degenerate case of a five-minute server timeout would quote
+    # 64 logins a day against a configured maximum of 24 -- an estimate the
     # running integration could not produce even if it tried.
     logins = min(
         logins,
@@ -328,8 +322,8 @@ def _estimate_logins(
 ) -> float:
     """How many logins a day the strategy implies.
 
-    This is the arithmetic the whole session decision rested on. With
-    ``PER_BATCH`` it is one login per batch -- specification v1's design. With
+    This is the arithmetic the session strategy rests on. With
+    ``PER_BATCH`` it is one login per batch. With
     ``LAZY`` it is one login per batch *only if* the server's inactivity timeout
     is shorter than the fastest tier's interval; otherwise the data traffic keeps
     the session alive on its own and it falls to a handful a day.
@@ -338,9 +332,8 @@ def _estimate_logins(
     """
     if batches_per_day <= 0:
         # Every data tier switched off. There is then no batch to open a
-        # session for, so quoting the three-a-day floor described the login
-        # traffic of a configuration that performs none -- and the options page
-        # showed 21 requests a day for an integration doing nothing at all.
+        # session for, and quoting the three-a-day floor would describe login
+        # traffic for a configuration that performs none.
         return 0.0
     if strategy is SessionStrategy.PER_BATCH:
         return batches_per_day

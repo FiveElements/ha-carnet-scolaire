@@ -1,8 +1,8 @@
 """Fail when the documentation cites a source location that cannot be trusted.
 
-The documentation cites source locations by the hundred -- ``scheduler.py:236``,
-``gateway.py:1193-1264`` -- and until now nothing checked a single one of them.
-They are load-bearing: the project's own convention is that a claim about
+A documentation citation of a source location -- ``scheduler.py:236``,
+``gateway.py:1193-1264`` -- is load-bearing: the project's convention is that a
+claim about
 behaviour points at the code that implements it, so a reader who distrusts a
 sentence can go and read it. A citation that lands on unrelated code is worse
 than an absent one, because the reader then tries to reconcile the wrong code
@@ -17,13 +17,8 @@ documentation. Always blocking: there is nothing to weigh.
 
 **The range has not drifted.** Bounds alone miss the common and most
 misleading case: a range that slid a few lines and still lands on real code.
-Measured on ``ARCHITECTURE.md``, two citations out of three sampled were wrong
-this way -- ``const.py:338-343`` given for ``EVENT_LESSON_RESTORED``, which is
-at line 385 and whose cited lines carry the end of another enum; ``todo.py:71``
-given for ``UPDATE_TODO_ITEM``, which is at 79 while line 71 reads
-``student: Student,``. Both are well inside the file, so the first check sees
-nothing, and a reader has no reason to doubt the citation rather than the
-sentence.
+Such a range is well inside the file, so the first check sees nothing, and a
+reader has no reason to doubt the citation rather than the sentence.
 
 Drift is read from history rather than content. For each citation, take a
 **baseline** -- a commit at which the citation was plausibly true -- and ask
@@ -31,17 +26,15 @@ whether the *cited* file has changed at or above the end of the range since.
 If it has, the range may have moved.
 
 **The baseline is per citation, not per document**, and that distinction is the
-whole accuracy of the check. Using the document's last commit means any edit
-anywhere in the file silences every report against it: 145 of this project's
-146 citations in one document predate its last commit, so a one-line typo fix
-rebased all of them and the check went quiet having verified nothing. So the
-baseline is the commit that last wrote *the line carrying the citation*, from
-``git blame``. Touching the document elsewhere no longer resets anything, and
-rewriting the citation's own line means somebody did re-open it.
+whole accuracy of the check. Using the document's last commit would let any
+edit anywhere in the file -- a one-line typo fix -- rebase every citation in it
+and silence the check having verified nothing. So the baseline is the commit
+that last wrote *the line carrying the citation*, from ``git blame``. Touching
+the document elsewhere resets nothing, and rewriting the citation's own line
+means somebody did re-open it.
 
-**Blocking and reporting are separated, deliberately.** On the blame baseline
-this repository has a backlog of some seventy suspect citations. Failing a
-change on seventy lines it did not touch is not a gate, it is a gate that gets
+**Blocking and reporting are separated, deliberately.** Failing a change on
+suspect citations it did not touch is not a gate, it is a gate that gets
 switched off -- so what blocks is narrower than what is reported:
 
 * **Blocking** -- the range may have moved *because of the commits under
@@ -122,10 +115,8 @@ class HistoryUnavailableError(RuntimeError):
     Raised rather than skipped, and that is the whole point.
     ``actions/checkout`` clones one commit deep by default, which makes every
     history question return nothing -- and a check that reads "no answer" as
-    "no problem" reports success for a gate that never ran. This project has
-    been bitten by exactly that shape twice already: a mkdocs warning that
-    only fails under ``--strict``, and a test image whose pinned library was
-    not the pinned library. Opting out has to be visible, hence ``--no-drift``.
+    "no problem" reports success for a gate that never ran. Opting out has to
+    be visible, hence ``--no-drift``.
     """
 
 
@@ -430,11 +421,8 @@ def _check(
         # Whether the range drifted at all is settled once, against the
         # citation's own baseline. Asking the tested range that question
         # instead flags a citation somebody has already re-opened *because*
-        # the file moved -- which is what happened the first time this ran:
-        # `device_trigger.py:58-73` had been re-cited as 60-75 in the very
-        # commit that fixed it, and the check demanded it be looked at again.
-        # A gate that fires on work already done is a gate people learn to
-        # ignore.
+        # the file moved, in the very commit that fixed it. A gate that fires
+        # on work already done is a gate people learn to ignore.
         baseline = blame.get(line)
         if baseline is None or baseline == UNCOMMITTED:
             continue

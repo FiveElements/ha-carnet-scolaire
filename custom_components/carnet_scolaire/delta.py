@@ -1,9 +1,8 @@
 """Change detection: two rules, because one cannot do the job.
 
-Specification v1 had a single rule -- "delta on the ``N`` identifier, never on
-content". It is right for most collections and **incapable of implementing
-``cours_modifie``**, which is the most useful event of the set. Two reasons,
-both verified:
+A single rule -- "delta on the ``N`` identifier, never on content" -- is right
+for most collections and **incapable of implementing ``cours_modifie``**, which
+is the most useful event of the set. Two reasons, both verified:
 
 * a room change keeps the same ``N``, so it produces no identifier delta at
   all, and ``room_changed`` / ``teacher_changed`` would never fire;
@@ -20,35 +19,31 @@ written. A label a teacher corrects must not wake the house up.
 **The timetable** compares a whitelisted field tuple **per lesson
 identifier**, over the *un*-de-duplicated week. ``memo``,
 ``background_color`` and lesson content are excluded, so a corrected memo
-still fires nothing -- which is what the single rule was really trying to buy.
+still fires nothing.
 
-Both halves of that sentence were wrong in the first implementation, and both
-were wrong in a way that produced no error at all:
+Both parts of that sentence matter, and getting either wrong produces no error
+at all:
 
-* it keyed on the **slot** (day plus position in the day). Since the day is
-  part of a slot key, a lesson that moved could never be seen to have moved:
-  ``lesson_moved`` was structurally unreachable, while a change to the
-  establishment's slot *grid* -- the bell times shifting by five minutes --
-  moved ``start`` for every lesson in every slot at once and fired a
-  ``lesson_moved`` for the entire week;
-* it ran over the **de-duplicated** week. On a substitution PRONOTE serves the
-  original entry with ``estAnnule`` set *plus* a replacement with a higher
-  ``num``, and de-duplication keeps the replacement -- so the entry carrying
-  the cancellation had been discarded one layer down, and the cancellation was
+* keyed on the **slot** alone (day plus position in the day), a lesson that
+  moved could never be seen to have moved, since the day is part of the key --
+  ``lesson_moved`` would be unreachable, while a shift of the establishment's
+  slot *grid* would fire a ``lesson_moved`` for the entire week;
+* run over the **de-duplicated** week, a substitution -- the original entry
+  with ``estAnnule`` set *plus* a replacement with a higher ``num``, of which
+  de-duplication keeps the replacement -- would make the cancellation
   unobservable.
 
-Keying on ``N`` fixes both: a cancellation, a room change, a teacher change and
-a move are all *the same entry* changing, which is exactly what an identifier
-is for.
+Pairing on ``N`` addresses both: a cancellation, a room change, a teacher
+change and a move are all *the same entry* changing, which is exactly what an
+identifier is for.
 
 Stated generally: **delta on identity where identity is stable, on a
 whitelisted subset of fields where the protocol supersedes instead of
 appending.**
 
-And ``N`` turned out to be stable for **one session only**: PRONOTE
-re-encrypts it at every login. Keyed on it, the first collection after a
-reconnection announced every homework item of the year as new -- fifty-four
-events in one millisecond, measured -- and compared no lesson with anything.
+But ``N`` is stable for **one session only**: PRONOTE re-encrypts it at every
+login. Keyed on it, the first collection after a reconnection would announce
+every homework item of the year as new and compare no lesson with anything.
 So the identity this module sees is the key :mod:`.item_keys` mints from the
 content, and the lesson pairing still uses ``N`` where it is valid: inside the
 session that produced the previous timetable, which is the only way to follow a
@@ -181,9 +176,9 @@ class DeltaDetector:
         """Carry what is remembered about one student to a new identifier.
 
         PRONOTE renames a child at every login. Without this, the first
-        snapshot under the new identifier was a "first pass" and primed the
-        detector instead of comparing: a grade published in between was
-        never announced.
+        snapshot under the new identifier would be a "first pass" and prime the
+        detector instead of comparing: a grade published in between would never
+        be announced.
         """
         for key in [k for k in self._seen_ids if k[0] == old]:
             self._seen_ids[(new, key[1])] = self._seen_ids.pop(key)
@@ -210,7 +205,7 @@ class DeltaDetector:
             student_id,
             # The period's position, not its `N`: that is re-encrypted by every
             # login, and a new collection name primes instead of comparing --
-            # a grade published across a reconnection was never announced.
+            # a grade published across a reconnection would never be announced.
             f"grades:{facts.period_index}",
             (grade.id for grade in facts.grades),
         )
@@ -275,8 +270,8 @@ class DeltaDetector:
 
         # Each collection is named by the period's position, as for grades,
         # and for the same reason: the period's `N` is re-encrypted by every
-        # login, and a renamed collection primed instead of comparing -- an
-        # absence recorded across a reconnection was never announced.
+        # login, and a renamed collection primes instead of comparing -- an
+        # absence recorded across a reconnection would never be announced.
         new_absences = self._new_ids(
             student_id,
             f"absences:{facts.period_index}",
@@ -409,17 +404,17 @@ class DeltaDetector:
                 # A thread appearing with nothing unread is not an arrival: a
                 # conversation the parent started, or one already read on the
                 # phone before the integration ever saw it. Diffing zero
-                # against zero produced a context-less "somebody wrote to you"
-                # for every such thread on the cycle it first appeared.
+                # against zero would produce a context-less "somebody wrote to
+                # you" for every such thread on the cycle it first appeared.
                 continue
             if before is None:
                 # A thread never seen before, which is not the same as a thread
-                # that had no unread messages -- and the two used to be
-                # collapsed by `previous.get(id, 0)`. A conversation becomes
+                # that had no unread messages, so not `previous.get(id, 0)`.
+                # A conversation becomes
                 # visible for the first time for reasons other than a message
                 # arriving: a label moved, a thread restored from Trash, an
                 # establishment un-archiving a September discussion. Diffing
-                # that against zero replayed the whole thread as arrivals,
+                # that against zero would replay the whole thread as arrivals,
                 # which is the failure §2.2.1 exists to prevent.
                 #
                 # It is still worth notifying -- a genuinely new conversation
@@ -458,17 +453,17 @@ class DeltaDetector:
         from the same session: that is the only pairing that survives a
         *move*, since the minted key is built from the slot and a moved lesson
         changes slot. By the key otherwise: the ``N`` is re-encrypted by every
-        login, and pairing on it alone meant a cancellation published across a
-        reconnection was compared with nothing and never announced.
+        login, and pairing on it alone would compare a cancellation published
+        across a reconnection with nothing, and never announce it.
 
         The ``N`` names the *course*, not one sitting of it: the same weekly
         lesson carries the same ``N`` in both weeks fetched. So the ``N`` only
         arbitrates when the key cannot -- an entry whose own key is among the
         entries sharing its ``N`` is paired with itself, and the ``N`` decides
         only between entries whose slot has gone. A map from ``N`` to one key
-        kept next week's sitting, and every collection compared this week's
-        lessons with their twins seven days on: a move for each of them, a
-        cancellation for each lesson cancelled this week and not the next,
+        would keep next week's sitting, and every collection would compare this
+        week's lessons with their twins seven days on: a move for each of them,
+        a cancellation for each lesson cancelled this week and not the next,
         re-announced every twenty minutes.
 
         Note what is *not* emitted: an entry appearing for the first time is not
@@ -562,8 +557,8 @@ def _replacement(lesson: Lesson, facts: TimetableFacts) -> Lesson | None:
     That is how PRONOTE serves a substitution, a room change and a "cours
     maintenu": the original flagged ``estAnnule`` **plus** the entry that
     replaces it on the slot. The child still has a lesson then, and announcing
-    the original as cancelled told a family the teacher was absent on a morning
-    the child had an evaluation in another room. Among several, the one with
+    the original as cancelled would tell a family the teacher is absent on a
+    morning the child has an evaluation in another room. Among several, the one with
     the highest ``num`` -- the one PRONOTE displays.
     """
     if not lesson.canceled:
@@ -586,8 +581,7 @@ class _LessonMemo:
     """The minimum kept between snapshots to describe a change.
 
     Only the whitelisted signature plus the few fields an event's
-    ``previous_*`` attributes need -- specifically the fields specification v1
-    promised and had no source for.
+    ``previous_*`` attributes need, which the protocol supplies nowhere else.
     """
 
     signature: tuple[object, ...]
@@ -637,10 +631,9 @@ def _lesson_events(
     first consumer that annotates what it received.
 
     There is deliberately no "if nothing matched, call it a cancellation"
-    fallback any more. Every branch of the whitelisted signature now has a name
-    of its own, so the fallback could only ever fire for a transition it was
-    wrong about -- and the transition it actually fired for was a cancellation
-    being **lifted**, which it reported as ``lesson_canceled``.
+    fallback. Every branch of the whitelisted signature has a name of its own,
+    so such a fallback could only fire for a transition it is wrong about --
+    such as a cancellation being **lifted**, reported as ``lesson_canceled``.
     """
     context = _lesson_context(lesson, before)
     events: list[DeltaEvent] = []
@@ -690,7 +683,7 @@ def _lesson_events(
     if not events and lesson.status != before.status:
         emit(EVENT_LESSON_STATUS_CHANGED)
 
-    # Every component of `Lesson.change_signature` now maps to a branch above,
+    # Every component of `Lesson.change_signature` maps to a branch above,
     # so this list cannot come back empty for a lesson whose signature moved --
     # a replaced entry, which returned early, is the one silence meant.
     # That invariant is *checked*, in `tests/test_delta.py`, rather than

@@ -81,11 +81,11 @@ _PASSWORD_FIELD: Final = re.compile(
 #: share a channel one can write while the other reads. Confining it needs a
 #: process-wide lock, not a per-entry one.
 #:
-#: It guards **only** the set arithmetic, which takes microseconds. It used to
-#: be held across the whole of ``ClientBase.__init__`` -- that is, across a
-#: login: one GET plus four to six POSTs -- which turned every
-#: ``release_client`` into a blocking wait on another entry's network round
-#: trip. Called from the event loop, that froze Home Assistant outright.
+#: It guards **only** the set arithmetic, which takes microseconds. Held across
+#: the whole of ``ClientBase.__init__`` -- that is, across a login: one GET
+#: plus four to six POSTs -- it would turn every ``release_client`` into a
+#: blocking wait on another entry's network round trip, and, called from the
+#: event loop, freeze Home Assistant outright.
 _REGISTRY_LOCK: Final = threading.Lock()
 
 #: Per-thread HTTP timeouts for the login currently running on this thread.
@@ -108,10 +108,9 @@ class BootstrapUnavailable(PronoteAPIError):  # noqa: N818 -- a condition, not a
     Deliberately says nothing about *why*. pronotepy decides an address is
     suspended with ``if "IP" in html`` -- two capitals anywhere in the page, so
     a school writing "Espace IP" in a footer, or a CSS class, or the letters
-    inside ``SKIP``, ``ZIP`` or ``EQUIPE``, all trigger it. Specification v1
-    built an hour-long hold, a full stop to every call, and a repair issue with
-    "explicit text" on that signal: it would have told parents their home
-    address was banned because of a footer.
+    inside ``SKIP``, ``ZIP`` or ``EQUIPE``, all trigger it. An hour-long hold
+    and a repair issue with "explicit text" built on that signal would tell
+    parents their home address was banned because of a footer.
 
     A state the integration cannot establish reliably must not exist in its
     vocabulary. The repair opened for this exception enumerates the possible
@@ -124,13 +123,13 @@ class BootstrapDelegated(BootstrapUnavailable):
 
     An establishment that delegates authentication to its ENT has PRONOTE
     redirect every visit, direct login included, to the portal's own login
-    page. That page has a password field and no ``Start`` block, and until
-    this class existed it was reported as the generic "no session page" --
-    true, and useless to a parent whose address was right, whose space was
-    open, and who needed only to pick the ENT login instead.
+    page. That page has a password field and no ``Start`` block. The generic
+    "no session page" would be true, and useless to a parent whose address is
+    right, whose space is open, and who needs only to pick the ENT login
+    instead.
 
     Still a :class:`BootstrapUnavailable`, so every caller that does not know
-    this finer verdict keeps handling it exactly as before. It names what the
+    this finer verdict handles it as the generic one. It names what the
     page *is*, which is observable, and nothing about the account.
     """
 
@@ -336,9 +335,9 @@ def install_hardened_transport() -> None:
     issuing a second one.
 
     Installed **permanently and idempotently** rather than around each login.
-    The scoped version had to hold a process-wide lock across the whole
-    construction -- a full network login -- so that two entries could not race
-    on the module attribute; and that lock then blocked every other entry's
+    A scoped installation would have to hold a process-wide lock across the
+    whole construction -- a full network login -- so that two entries could not
+    race on the module attribute, and that lock would block every other entry's
     teardown for the length of somebody else's handshake. A permanent
     installation needs no lock at all, because nothing is left to race on: the
     class is the same object for everybody, and the only per-login value, the
@@ -469,10 +468,10 @@ class HardenedClient(pronotepy.Client):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         # Set *before* the base constructor, which logs in, which posts, which
-        # reaches our own `post()` -- and `post()` reads this attribute. It only
-        # survived because none of upstream's three login posts passes an
-        # `onglet`, so the branch that reads it was skipped. The day one of them
-        # gains a tab, every login would raise `AttributeError`, which is in
+        # reaches our own `post()` -- and `post()` reads this attribute. None of
+        # upstream's three login posts passes an `onglet` today, so the branch
+        # that reads it is skipped; the day one of them gains a tab, a missing
+        # attribute would make every login raise `AttributeError`, which is in
         # neither `_DECODING_ERRORS` nor the set-up handler's `except` chain: a
         # raw traceback and no classification at all.
         self._selected_child: dataClasses.ClientInfo | None = None
@@ -549,8 +548,7 @@ class HardenedClient(pronotepy.Client):
         if function_name == "Identification" and data:
             # The official app's body ends with this key, null outside an
             # enrolment; upstream omits it. A session opened without it is
-            # refused a graded test's paper the app is served -- this is the
-            # last difference the two logins showed.
+            # refused a graded test's paper the app is served.
             data = {**data, "informationsAppareil": None}
         if data:
             post_data["data"] = data
@@ -716,9 +714,9 @@ def _period_registry_confined() -> Iterator[Callable[[HardenedClient], None]]:
             # The constructor raised. Upstream runs `self.periods_ = self.periods`
             # *before* `self.logged_in = self._login()`, so an account with 2FA
             # and no stored PIN -- which raises `MFAError` on every attempt --
-            # had already put its periods in the global set, each one holding
+            # has already put its periods in the global set, each one holding
             # its client, its session and its socket pool. `attach` never ran,
-            # so nothing removed them, and every retry added more.
+            # so without this sweep every retry would add more.
             #
             # Sweeping "everything that appeared" could in principle also
             # remove a period another entry registered concurrently. That is

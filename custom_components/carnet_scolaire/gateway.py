@@ -5,9 +5,8 @@ re-read on a version bump and the only point to double in tests (§3.4).
 
 Two rules govern the decoding, and they are not the same rule.
 
-**Deduplicate without reimplementing.** Specification v1 concluded the raw
-responses had to be decoded by hand, which contradicted its own §3.4: it
-refused to take on upstream's decoding debt and then took it on. pronotepy's
+**Deduplicate without reimplementing.** Decoding the raw responses by hand
+would contradict §3.4 by taking on upstream's decoding debt. pronotepy's
 data classes accept the bare dictionary -- ``Average(json)``, ``Absence(json)``,
 ``Delay(json)``, ``Evaluation(json)``, ``Report(data)``; ``Lesson(client,
 json)`` and ``Punishment(client, json)`` take a client and nothing else. So the
@@ -120,8 +119,8 @@ _LOGGER: Final = logging.getLogger(__name__)
 #:   resolver only guards the *path*, never the converter's own body.
 #: * ``IndexError`` -- ``Util.grade_parse`` does ``grade_translate[int(s[1]) -
 #:   1]`` against a table of eight (dataClasses.py:118), so a future ``|9``
-#:   sentinel indexes past the end. This one is why the tuple is shared: it was
-#:   present on two decoders and missing from five.
+#:   sentinel indexes past the end. This one is why the tuple is shared: one
+#:   list, so no decoder can miss an entry.
 #: * ``TypeError`` -- a path segment that is ``null`` rather than absent, which
 #:   upstream's ``KeyError`` guard does not cover.
 #: * ``ZeroDivisionError`` -- ``Lesson.__init__`` computes ``place %
@@ -164,7 +163,7 @@ class PeriodNotInSession(Exception):  # noqa: N818 -- fails a tier, never a serv
     A period is identified across sessions by its position, never by its
     ``N``: every ``N`` is re-encrypted at each login. Raised rather than
     falling back on the ``N`` the caller holds, because that ``N`` belongs to
-    an earlier session and posting it is the very defect
+    an earlier session and posting it is exactly what
     :meth:`PronoteGateway.in_this_session` prevents; and rather than returning
     an empty collection, which would publish "no grades this term" as a
     success. The tier fails and keeps its previous snapshot.
@@ -191,7 +190,7 @@ class ItemNotFound(Exception):  # noqa: N818 -- surfaced as a ServiceValidationE
     collection that published the key and the gesture that sent it back. It is
     raised rather than answered with success: PRONOTE itself accepts an unknown
     ``N`` without complaint and records nothing, and a tick lost that way is
-    exactly the defect the key exists to end.
+    exactly what the key exists to prevent.
     """
 
     def __init__(self, item_id: str) -> None:
@@ -332,20 +331,14 @@ def _external_file_url(
 
     The keys go in the web client's order -- ``N``, ``G``, ``Actif`` -- which
     is what ``ObjetElement.toJSONAll`` writes: ``_toJSON`` puts ``N`` then
-    ``G``, and the remaining own properties, ``Actif`` among them, follow. A
-    live instance served the answers with ``Actif`` before ``G`` but refused
-    the paper under every ``N`` and type tried, while the web client's own
-    links to both opened; their encrypted segments share their first 64 bytes,
-    which with a 45-to-47 character ``N`` ends exactly after ``"G":"Devoir``.
+    ``G``, and the remaining own properties, ``Actif`` among them, follow.
 
     Padded **once**, by ``aes_encrypt`` itself. Upstream pads before calling
     it, so its segment carries a whole extra block: the server removes one
     padding and parses the rest as JSON, ``k`` bytes of value ``k`` included.
-    Those bytes are harmless only when ``k`` is a JSON blank -- 9, 10 or 13.
-    With a 45-character ``N``, as on one live instance, the answers ended on 10 and
-    opened, and the paper, two characters shorter, ended on 12 and answered
-    404 for every test. The official app's link to the same paper is one
-    block shorter than the doubly padded one was.
+    Those bytes are harmless only when ``k`` is a JSON blank -- 9, 10 or 13 --
+    so a doubly padded link opens or answers 404 depending on the length of
+    its plaintext. The official app's link is likewise padded once.
     """
     fields: dict[str, Any] = {"N": ref}
     if genre is not None:
@@ -473,10 +466,9 @@ def _attachment(raw: Any, establishment_host: str | None) -> HomeworkAttachment:
     one carrying a ``Session`` parameter or a ``FichiersExternes`` segment is a
     session-bearing address whatever host it names: published, it would open a
     document with no credentials, which is the exact hazard this module keeps
-    files out of attributes for. None was measured on a live instance -- eleven
-    links, all third parties -- and that is a fact about one fortnight of
-    homework, not a guarantee. The card cannot make this check itself: it does
-    not know the server's host, and it should not.
+    files out of attributes for. Such links may be rare, but rarity is not a
+    guarantee. The card cannot make this check itself: it does not know the
+    server's host, and it should not.
     """
     name = str(_get(raw, "L"))
     identifier = str(_get(raw, "N") or "")
@@ -673,12 +665,10 @@ def _shape(value: Any) -> str:
     user is invited to attach to a public issue (§8.2).
 
     The distinction between an empty mapping and a missing one is the whole
-    point, and the first version of this warning lost it: both printed ``[]``,
-    because a caller passing ``_get(...) or {}`` turns "absent" into "empty"
-    before the reader ever sees it. A live establishment then reported "what it
-    does carry is ``[]``" and nobody could tell whether the section was empty
-    or the path was wrong -- which is exactly the question the warning exists
-    to answer.
+    point: a caller passing ``_get(...) or {}`` turns "absent" into "empty"
+    before the reader ever sees it, and "what it does carry is ``[]``" would
+    not say whether the section is empty or the path is wrong -- which is
+    exactly the question the warning exists to answer.
     """
     if value is None:
         return "absent"
@@ -696,10 +686,11 @@ def _required_list(source: Any, *path: str, what: str) -> list[Any]:
     first. That distinction is the difference between a broken integration and
     a quiet school week, and collapsing them is the worst failure mode this
     gateway has: if PRONOTE renamed ``ListeCours``, then ``_get(...) or []``
-    returned an empty timetable, the tier reported **success**, the snapshot was
-    replaced, ``binary_sensor.<eleve>_jour_de_classe`` read ``off`` and the
-    wake-up automation simply stopped firing -- with nothing in the log, and
-    staleness never triggering either, because the collection had succeeded.
+    would return an empty timetable, the tier would report **success**, the
+    snapshot would be replaced, ``binary_sensor.<eleve>_jour_de_classe`` would
+    read ``off`` and the wake-up automation would simply stop firing -- with
+    nothing in the log, and staleness never triggering either, because the
+    collection had succeeded.
 
     Raising instead makes the tier fail, which keeps the previous snapshot,
     marks it dated and eventually raises a repair (§5.4). "I know, but it is
@@ -722,9 +713,8 @@ def _required_list(source: Any, *path: str, what: str) -> list[Any]:
             # changed *to this*". Names only, never a value: this warning lands
             # in the file users are invited to attach to a public issue (§8.2).
             #
-            # It is here because its absence was expensive. A live server
-            # dropped one key, the log said `KeyError: 'liste'`, and there was
-            # no way to tell a renamed field from a section the establishment
+            # Without it, a dropped key reads as `KeyError: 'liste'`, with no
+            # way to tell a renamed field from a section the establishment
             # does not publish without shipping a build just to look.
             _LOGGER.warning(
                 "PRONOTE returned nothing usable for %s: %s carries no %r, so "
@@ -953,7 +943,7 @@ class PronoteGateway:
         ``ScheduledPunishment.start`` are all resolved strictly upstream: they
         raise rather than return ``None``, and that exception is already caught
         one level up. An impossible ``if ... is None: return None`` in each of
-        those four decoders was four branches no test could ever reach.
+        those four decoders would be four branches no test could ever reach.
 
         A ``date`` becomes local midnight, so a calendar can compare an all-day
         event against a timed one -- which ``date`` and ``datetime`` mixed
@@ -972,8 +962,8 @@ class PronoteGateway:
 
         ``periods``, ``class_name``, ``establishment`` and ``name`` are read out
         of ``func_options`` and ``parametres_utilisateur``, already in memory
-        once authenticated -- **no call at all**. Specification v1 filed these
-        under the ``static`` tier and budgeted requests for them (annexe A §2).
+        once authenticated -- **no call at all**, so no tier budgets requests
+        for them (annexe A §2).
         """
         info = client.info
         student = Student(
@@ -1028,11 +1018,11 @@ class PronoteGateway:
         A caller holds a :class:`Period` taken from the session facts, and the
         session facts are read at set-up and when the roster changes -- not at
         every login. A login can happen inside any call (the session expired,
-        or ``per_batch`` opened a new one), and that call then carried the
+        or ``per_batch`` opened a new one), and that call would then carry the
         previous session's ``N`` onto the wire: on a parent account until the
         end of the batch, on a student account -- whose roster never changes,
-        so whose facts were never read again -- for as long as Home Assistant
-        ran. Resolved here, inside the call and on the client that places it,
+        so whose facts are never read again -- for as long as Home Assistant
+        runs. Resolved here, inside the call and on the client that places it,
         so no login anywhere upstream can come between the two.
 
         By position, the one handle on a period that survives a login
@@ -1080,20 +1070,17 @@ class PronoteGateway:
         ``Client.lessons()`` loops ``for week in range(first_week, last_week +
         1)`` and posts ``PageEmploiDuTemps`` once *per week*, then filters
         client-side. Asking for "today and tomorrow" therefore costs exactly the
-        same request as asking for the whole week, which is why the separate
-        week tier was folded in here (§5.2).
+        same request as asking for the whole week, which is why there is no
+        separate week tier (§5.2).
 
-        The horizon used to be those two days, with next week's request placed
-        only when tomorrow fell in another week -- that is, **on a Sunday and
-        on no other day**. So from Saturday's first collection until Monday's,
-        the timetable held nothing at all about Monday: the card drew an empty
-        day, ``sensor.<eleve>_prochain_cours`` had nothing to point at, and
+        Next week is always fetched, not only when tomorrow falls in another
+        week. Otherwise, over a weekend the timetable would hold nothing about
+        Monday: the card would draw an empty day,
+        ``sensor.<eleve>_prochain_cours`` would have nothing to point at, and
         ``binary_sensor.<eleve>_vacances``, which asks a seven-day question,
-        was answering it from two days of data and read ``on`` every weekend --
-        an automation that skips the alarm on holidays skipped it for Monday.
-        Reaching one week ahead instead costs one extra request per collection
-        and makes the fetched window (14 days from Monday, 8 from Sunday) at
-        least as wide as the widest question asked of it.
+        would read ``on``. Reaching one week ahead costs one extra request per
+        collection and makes the fetched window (14 days from Monday, 8 from
+        Sunday) at least as wide as the widest question asked of it.
 
         The weeks are clamped to ``[first_week, last_week]``: outside the
         school year nothing is asked for at all. The long holidays are the
@@ -1128,9 +1115,8 @@ class PronoteGateway:
             )
         )
 
-        # A measurement, not an error trace: this path has decoded the colour
-        # field since day one and published it nowhere, so nobody knew whether
-        # it arrives empty. One line per collection, under
+        # A measurement, not an error trace: it says whether the colour field
+        # arrives empty. One line per collection, under
         # `custom_components.carnet_scolaire` -- never under `pronotepy`, whose DEBUG
         # writes the reversible hex of every request body.
         _LOGGER.debug(
@@ -1207,8 +1193,8 @@ class PronoteGateway:
 
         # `avecConseilDeClasse` is what the web client sends, and it brings the
         # class councils in as entries of their own. `pronotepy` never reads
-        # their `G`; decoded as lessons, an evening council moved "end of the
-        # school day" and made a day without lessons a school day.
+        # their `G`; decoded as lessons, an evening council would move "end of
+        # the school day" and make a day without lessons a school day.
         lessons = [
             lesson
             for lesson in (
@@ -1227,8 +1213,8 @@ class PronoteGateway:
         ``_resolver`` walks the path inside ``try: ... except KeyError``, so a
         segment holding ``null`` -- ``{"cahierDeTextes": {"V": null}}`` is a
         real response -- raises ``TypeError``, which is neither converted to
-        ``ParsingError`` nor caught by the obvious tuple. One such entry used to
-        fail the whole tier, which is exactly what §3.3.3 forbids.
+        ``ParsingError`` nor caught by the obvious tuple. Uncaught, one such
+        entry would fail the whole tier, which is exactly what §3.3.3 forbids.
 
         And when upstream does refuse the entry, the raw JSON is decoded
         directly rather than the slot being dropped: see :meth:`_lesson_raw`.
@@ -1302,17 +1288,14 @@ class PronoteGateway:
         is also the only place that can refuse an impossible one.
 
         **Returning the substitution rather than hiding it** is the point of
-        the second element. This used to claim that ``end_inferred`` was
-        already ``True`` on every entry it could touch -- but that flag is
-        exactly ``DateDuCoursFin is None``, while this guard fires on
-        ``end <= start`` whatever the field said. A server publishing a
-        present-but-impossible end therefore got a fabricated ``start + 1h``
-        with the flag still ``False``: an invented hour declared reliable,
-        which is the opposite of what the flag is for, and worst precisely
-        where the data is least trustworthy. Whether a server ever does that
-        is unknown and does not matter -- the caller ORs this into
-        ``end_inferred``, so the invariant now holds by construction instead
-        of by circumstance.
+        the second element. ``end_inferred`` is exactly
+        ``DateDuCoursFin is None``, while this guard fires on ``end <= start``
+        whatever the field said. Without the second element, a server
+        publishing a present-but-impossible end would get a fabricated
+        ``start + 1h`` with the flag still ``False``: an invented hour declared
+        reliable, which is the opposite of what the flag is for. The caller ORs
+        this into ``end_inferred``, so the invariant holds by construction
+        instead of by circumstance.
         """
         if end > start:
             return end, False
@@ -1380,9 +1363,9 @@ class PronoteGateway:
         awkward one: ``Lesson.__init__`` resolves ``ListeContenus`` with no
         ``strict=False``, and a slot with no published content -- which is
         precisely how a **cancellation** often arrives -- has no
-        ``ListeContenus`` at all. Dropping those entries meant the one event
-        this integration exists to emit, ``event.<eleve>_cours_modifie`` with
-        ``lesson_canceled``, could not fire for them.
+        ``ListeContenus`` at all. Dropping those entries would mean the one
+        event this integration exists to emit, ``event.<eleve>_cours_modifie``
+        with ``lesson_canceled``, could not fire for them.
 
         Everything derived from the content record (subject, teachers, rooms)
         is legitimately absent here. The slot's coordinates, its timing and its
@@ -1434,25 +1417,24 @@ class PronoteGateway:
     def homework(self, client: HardenedClient) -> GatewayResult[HomeworkFacts]:
         """Homework for the whole school year, in one request.
 
-        Two things here were wrong and both were silent, so they are worth
+        Two choices here would fail silently if reversed, so they are worth
         spelling out.
 
         **The span starts at the first day of the school year, not today.**
         Upstream filters its own response with ``if date_from <= hw.date <=
         date_to`` and builds the week domain from ``get_week(date_from)``, so
-        passing ``self.today()`` discarded every *overdue* assignment. That made
-        ``binary_sensor.<eleve>_devoirs_en_retard`` structurally incapable of
-        ever being ``on``, and its ``count`` permanently ``0`` -- while the
-        docstring claimed the opposite. Fixing it costs nothing: the request is
-        a week *range*, so one post covers the year either way, and
+        passing ``self.today()`` would discard every *overdue* assignment,
+        making ``binary_sensor.<eleve>_devoirs_en_retard`` structurally
+        incapable of ever being ``on``. It costs nothing: the request is a week
+        *range*, so one post covers the year either way, and
         ``homework_horizon`` stays what §5.2 says it is, a presentation filter.
 
         **The decoding is by hand**, for the reason §3.3.3 gives.
         ``Homework.__init__`` resolves ``TAFFait``, ``descriptif.V`` and
         ``Matiere.V`` with no default, so a single entry served without one of
-        them raised ``ParsingError`` from inside upstream's list comprehension
-        and failed the **entire** tier -- taking the to-do list, the calendar
-        and both homework sensors down with it.
+        them would raise ``ParsingError`` from inside upstream's list
+        comprehension and fail the **entire** tier -- taking the to-do list,
+        the calendar and both homework sensors down with it.
         """
         payload = {
             "domaine": {
@@ -1571,9 +1553,8 @@ class PronoteGateway:
         entries = _required_list(data, "listeDevoirs", what="grades")
         grades = tuple(self._grade(entry) for entry in entries)
         # The structure of one entry with a paper -- keys and types, never a
-        # value. It is what showed that the paper is fetched by `elmSujet`'s
-        # own `N` and not the grade's, and it is kept for the next field
-        # PRONOTE adds there.
+        # value. It documents that the paper is fetched by `elmSujet`'s own `N`
+        # and not the grade's, and it shows the next field PRONOTE adds there.
         documented = next(
             (
                 entry
@@ -1686,11 +1667,11 @@ class PronoteGateway:
         resolves ``moyClasse``, ``moyMin`` and ``moyMax`` with neither a
         ``default`` nor ``strict=False``, so an establishment that does not
         publish class statistics -- which §3.3.3 names explicitly as a
-        legitimate case -- made the constructor raise for **every single
-        subject**. The result was not a degraded reading but no averages at
-        all: ``MarksFacts.averages`` came back empty, every
-        ``sensor.<eleve>_moyenne_<matiere>`` disappeared, and the only trace was
-        one DEBUG line per subject.
+        legitimate case -- makes the constructor raise for **every single
+        subject**. The result would not be a degraded reading but no averages
+        at all: ``MarksFacts.averages`` empty, every
+        ``sensor.<eleve>_moyenne_<matiere>`` gone, and the only trace one DEBUG
+        line per subject.
 
         Keyed on the subject, because ``Average`` carries no identifier of its
         own and §2.4 rules out using a position in a list.
@@ -1724,16 +1705,15 @@ class PronoteGateway:
 
         if "ListeServices" not in data:
             # Both of `Report`'s resolvers carry `default=[]`, so a response
-            # whose shape moved decoded happily into an *empty* report -- and
-            # `sensor.<eleve>_bulletin` then said "published, zero subjects"
-            # rather than "not published". Requiring the key keeps those two
-            # very different answers apart.
+            # whose shape moved would decode happily into an *empty* report --
+            # and `sensor.<eleve>_bulletin` would say "published, zero
+            # subjects" rather than "not published". Requiring the key keeps
+            # those two very different answers apart.
             #
             # The capital L is upstream's, not a typo: `Report` resolves
             # `ListeServices` while `DernieresNotes` uses `listeServices`.
-            # Checking the lower-case spelling here reported every published
-            # report card as unpublished, which is what the test that asks for
-            # one is now there to catch.
+            # Checking the lower-case spelling here would report every
+            # published report card as unpublished.
             _LOGGER.debug("report card response carries no ListeServices")
             return None, 1
 
@@ -1967,8 +1947,8 @@ class PronoteGateway:
         """News items and surveys, in one request.
 
         ``PageActualites`` tab 8 -- the *read*. ``SaisieActualites`` on the same
-        tab is the write used by ``mark_as_read``, and specification v1 had the
-        two the wrong way round (§3.4).
+        tab is the write used by ``mark_as_read``; the two are easy to swap
+        (§3.4).
 
         ``Information.content()`` is deliberately never touched: it is a lazy
         attribute that posts when read.
@@ -1977,9 +1957,9 @@ class PronoteGateway:
         and averages: ``Information.__init__`` resolves ``auteur``, ``lue``,
         ``nature.V.L``, ``estSondage`` and ``reponseAnonyme`` strictly, and
         ``client.information_and_surveys()`` builds the whole list in a single
-        comprehension. One item missing a category therefore emptied the news
-        tier, took ``sensor.<eleve>_informations_non_lues`` with it, and left
-        the school's actual announcement invisible.
+        comprehension. One item missing a category would therefore empty the
+        news tier, take ``sensor.<eleve>_informations_non_lues`` with it, and
+        leave the school's actual announcement invisible.
         """
         payload = {"modesAffActus": {"_T": 26, "V": "[0..3]"}}
         raw = client.post(FUNC_NEWS[0], FUNC_NEWS[1], payload)
@@ -2271,16 +2251,15 @@ class PronoteGateway:
     def static(self, client: HardenedClient) -> GatewayResult[StaticFacts]:
         """The teaching staff, and nothing else.
 
-        One request. The iCal URL used to be collected here and is not any
-        more: keeping it would drop an autonomous authentication bearer into the
-        snapshot store, a long-lived structure whose purpose is to be dumped
-        into a diagnostic report (§8.2).
+        One request. Not the iCal URL: keeping it would drop an autonomous
+        authentication bearer into the snapshot store, a long-lived structure
+        whose purpose is to be dumped into a diagnostic report (§8.2).
 
         Decoded here rather than through ``client.get_teaching_staff()``, and
         the difference is not stylistic. Upstream reads
         ``post("PageEquipePedagogique", 37)["dataSec"]["data"]["liste"]["V"]``
         with bare subscription, so a server whose response omits ``liste`` --
-        which is what a live PRONOTE 26.2 does -- reaches the user as
+        which is what PRONOTE 26.2 does -- reaches the user as
         ``KeyError: 'liste'``. That names nothing anyone can act on, and it
         breaks §3.3's own rule: one raw ``post`` per tab, the entries handed to
         upstream's data classes, the *reading* done by this module's helpers.
@@ -2288,13 +2267,11 @@ class PronoteGateway:
         the keys the response did carry -- which is the difference between a
         diagnosable outage and a guess.
         """
-        # The whole response and the whole path, not a pre-walked fragment.
-        # This first read `_get(..., "dataSec", "data") or {}` and asked for
-        # `liste` alone, which meant the warning could not tell an empty
-        # `data` from a missing one -- the `or {}` had already turned the
-        # second into the first. A live establishment then reported exactly
-        # that ambiguity, the instrument was built to answer it, and it did:
-        # `data` is present and **empty**. Hence the branch below.
+        # The whole response and the whole path, not a pre-walked fragment:
+        # reading `_get(..., "dataSec", "data") or {}` and asking for `liste`
+        # alone would leave the warning unable to tell an empty `data` from a
+        # missing one. Some establishments answer with `data` present and
+        # **empty**. Hence the branch below.
         response = client.post("PageEquipePedagogique", 37)
         section = _get(response, "dataSec", "data")
         if isinstance(section, dict) and not section:
@@ -2305,10 +2282,9 @@ class PronoteGateway:
             # `onglet` with "Action not permitted" before anything is sent
             # (`pronoteAPI.py:126`), so a response at all means 37 is granted.
             #
-            # Failing here instead cost a real instance its
-            # `equipe_pedagogique` entity permanently: the tier could never
-            # hold data, so it could never stop being retried, and it was the
-            # one collection that never came back. And an empty staff list is
+            # Failing here instead would cost the `equipe_pedagogique` entity
+            # permanently: the tier could never hold data, so it could never
+            # stop being retried. And an empty staff list is
             # **safe** to publish, which is the whole reason this differs from
             # `_required_list`'s refusal. That refusal exists for collections
             # whose emptiness silently breaks an automation -- a renamed
@@ -2449,7 +2425,7 @@ class PronoteGateway:
 
         The address is ``FichiersExternes/<hex>/<name>?Session=<h>``, the hex
         segment being ``{"N": id, "Actif": true}`` encrypted with the session's
-        own AES key and IV. It used to be derived by ``dataClasses.Attachment``,
+        own AES key and IV. It is not derived by ``dataClasses.Attachment``,
         which pads that segment twice: the server removes one padding and
         refuses whatever leaves a non-blank byte after the JSON, which is most
         ``N`` lengths. :func:`_external_file_url` builds it padded once.
@@ -2503,11 +2479,10 @@ class PronoteGateway:
         document's own ``N`` and, only on a 404 and only when it differs, one
         by the grade's; any other refusal is the answer.
 
-        One live instance refused the paper (404) while the answers opened,
-        until the segment stopped being padded twice (see
-        :func:`_external_file_url`). Tried there first and dropped for want of
-        effect: a ``Navigation`` to the grades tab, and a browser navigation's
-        ``Referer`` and ``Sec-Fetch`` headers. A refusal reaches the card as a
+        The segment is padded once (see :func:`_external_file_url`); padded
+        twice, the server refuses most papers with a 404. Neither a
+        ``Navigation`` to the grades tab nor a browser navigation's ``Referer``
+        and ``Sec-Fetch`` headers is needed. A refusal reaches the card as a
         502, as any other does.
 
         The address is the one place this module builds what
@@ -2527,7 +2502,7 @@ class PronoteGateway:
         )
         # The role *and* the name, as this session reads them: a teacher who
         # replaces the answers replaces the file, and the key a card holds
-        # names the file it was shown -- so that key now names nothing, rather
+        # names the file it was shown -- so that key then names nothing, rather
         # than opening a document the card never listed.
         document = next(
             (
@@ -2596,10 +2571,7 @@ class PronoteGateway:
         The list is read before the post. PRONOTE's ``N`` is re-encrypted by
         every login, so the one a snapshot holds names nothing in a later
         session -- and the server answers an unknown ``N`` normally and records
-        nothing. Measured: a tick sent at 22:59:58 with the ``N`` of a list
-        read at 21:55, in a session opened at 22:57, was accepted, billed and
-        read back unticked.
-        So the list is read again here, in the session that posts, and the key
+        nothing. So the list is read again here, in the session that posts, and the key
         is looked up in it; an item that is no longer there raises
         :class:`ItemNotFound` instead of reporting a success.
 
@@ -2610,14 +2582,13 @@ class PronoteGateway:
 
         The line carries ``E`` (the entity state, ``2`` for a modification),
         which ``Homework.set_done`` omits. Without it the server answers
-        normally and records nothing: measured on a live instance, two ticks
-        were accepted, billed, and read back unticked by the next collection,
-        with no error anywhere. Maintained clients of the same protocol send
-        ``E: 2`` on this request; ``pronotepy`` 2.15.7 predates that.
+        normally and records nothing, with no error anywhere. Maintained
+        clients of the same protocol send ``E: 2`` on this request;
+        ``pronotepy`` 2.15.7 does not.
 
         Three requests, then: the list is read a second time after the post,
         because the server's answer proves nothing. A parent session's tick is
-        answered normally and recorded nowhere (measured on 2026-09-27), and
+        answered normally and recorded nowhere, and
         the only evidence that a tick landed is the item read back with the
         requested state -- otherwise :class:`WriteNotApplied` is raised.
         """
@@ -2782,8 +2753,8 @@ def _supersedes(candidate: Lesson, current: Lesson) -> bool:
     ``num`` decides, per upstream's rule. A **tie** needs an answer of its own,
     and response order is not one: ``num`` is the ``P`` field, which defaults to
     0 when absent, so two content-less entries on the same slot -- an outing and
-    a detention, say -- both scored 0 and the second was dropped in silence,
-    taking ``binary_sensor.<eleve>_sortie_pedagogique`` and one calendar event
+    a detention, say -- both score 0, and dropping the second in silence would
+    take ``binary_sensor.<eleve>_sortie_pedagogique`` and one calendar event
     with it.
 
     On a tie the entry that is *not* cancelled wins, because a replacement is

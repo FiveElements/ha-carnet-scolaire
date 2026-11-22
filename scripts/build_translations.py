@@ -1806,11 +1806,11 @@ EXCEPTIONS: list[tuple[str, str, str]] = [
 
 ISSUES: list[tuple[str, str, str, str, str]] = [
     (
-        # Opened by `async_open_unreadable_issue`, on a live path
-        # (`__init__.py`), and it had no entry here -- so Home Assistant
-        # rendered the raw key as the title of a repair the user cannot
-        # otherwise diagnose. A separate issue from `bootstrap_failed` because
-        # the remedy differs: there is nothing for the user to correct.
+        # Opened by `async_open_unreadable_issue` (`__init__.py`); without an
+        # entry here Home Assistant would render the raw key as the title of a
+        # repair the user cannot otherwise diagnose. A separate issue from
+        # `bootstrap_failed` because the remedy differs: there is nothing for
+        # the user to correct.
         "account_unreadable",
         "PRONOTE answered something this integration cannot read",
         "PRONOTE a répondu quelque chose d'illisible",
@@ -2182,10 +2182,9 @@ def _entities(index: int) -> dict[str, Any]:
     # An `event` entity's *state* is the type of the last event it fired, and
     # Home Assistant displays it. Read from
     # `entity.event.<key>.state_attributes.event_type.state.<value>`; without
-    # these, a dashboard showed `lesson_canceled` in snake case while the very
-    # same string sat translated two blocks away under
-    # `device_automation.trigger_type`. Both come from `TRIGGER_TYPES` here, so
-    # the two readings of one event can no longer disagree.
+    # these, a dashboard would show `lesson_canceled` in snake case. Both this
+    # and `device_automation.trigger_type` come from `TRIGGER_TYPES` here, so
+    # the two readings of one event cannot disagree.
     labels = {key: (en, fr)[index - 1] for key, en, fr in TRIGGER_TYPES}
     events: dict[str, Any] = block(EVENTS)
     for key, types in EVENT_TYPES_BY_ENTITY.items():
@@ -2407,8 +2406,8 @@ def _catalogue(index: int) -> dict[str, Any]:
                 )[pick]
             },
             # Referenced by `services.yaml` through `translation_key:
-            # orientation`. Without it the PDF service offered "portrait" and
-            # "landscape" as raw values, in English, in both catalogues.
+            # orientation`. Without it the PDF service would offer "portrait"
+            # and "landscape" as raw values, in English, in both catalogues.
             "orientation": {
                 "options": (
                     {"portrait": "Portrait", "landscape": "Landscape"},
@@ -2507,13 +2506,11 @@ def _services_yaml() -> str:
             lines.append("      selector:")
             # Re-indented by two. The table below is written at the depth of
             # `selector:` itself so it stays readable, and emitting it verbatim
-            # made every selector body a *sibling* of `selector:` rather than
-            # its child: `selector: null`, eighteen times. Home Assistant
-            # validates `services.yaml` against its own schema at load time
-            # (`helpers/service.py:498`), logs one line and returns `{}` -- so
-            # all eight services appeared in the UI with **no fields at all**,
-            # and `hassfest` failed on the same file. This is the whole defect,
-            # and it is two spaces.
+            # would make every selector body a *sibling* of `selector:` rather
+            # than its child: `selector: null`. Home Assistant validates
+            # `services.yaml` against its own schema at load time, logs one line
+            # and returns `{}` -- so every service would appear in the UI with
+            # **no fields at all**, and `hassfest` would fail on the same file.
             lines.extend(
                 f"  {line}" if line else line for line in selectors[key].splitlines()
             )

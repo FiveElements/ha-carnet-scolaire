@@ -1,18 +1,11 @@
 #!/usr/bin/env python3
 """Where the ``pronotepy`` pin is declared, and whether upstream moved past it.
 
-This module exists because of an outage that lasted a morning. Every login
-against one school started failing with a ``CryptoError`` that upstream labels
-"probably the qr code has expired" -- a message that sends the reader after a QR
-code which was, in fact, perfectly valid. The real cause was on the server
-side: the establishment's PRONOTE had been upgraded to 26.2.5, and the pinned
-``pronotepy==2.15.6`` predates the three-line rewrite of the challenge exchange
-in ``ClientBase._login`` that upstream shipped as ``2.15.7`` under the commit
-subject *"fix compatibility with PRONOTE 2026.2.5.6"*.
-
-That release had existed for six days. Nothing in this repository said so, and
-the version number alone would not have helped: what identified the cause was
-the **commit subject**. So the job that uses this module reports the new
+A PRONOTE server upgrade can break every login against the pinned
+``pronotepy`` with an error that points elsewhere -- a ``CryptoError`` upstream
+labels "probably the qr code has expired" -- while the fix already exists in a
+newer upstream release. The version number alone does not say so; the
+**commit subject** does. So the job that uses this module reports the new
 version, its date *and* the subjects between the two tags, which is the piece
 of information that actually ends the investigation.
 
@@ -20,9 +13,8 @@ It reports them on a **pull request that raises the pin**, not on an issue.
 The difference is what the maintainer gets to read: an issue says a newer
 release exists, a pull request says whether it *works* -- because opening one
 runs `validate.yml`, which exercises the whole suite and `mypy --strict`
-against the new library on both socles. On the day of the outage that evidence
-would have been available within minutes of upstream publishing, instead of
-requiring somebody to reproduce the install by hand. What the pull request
+against the new library on both socles, within minutes of upstream
+publishing. What the pull request
 cannot do is discharge the rule in `CONTRIBUTING.md` §5 -- every divergence
 documented in ``hardened_client.py`` has to be re-read against the new version
 by a human -- so nothing here merges anything.
@@ -290,9 +282,9 @@ def upstream_subjects(
 ) -> list[str] | None:
     """Commit subjects between the two tags, or ``None`` if they do not resolve.
 
-    This is the payload of the whole exercise. The outage in the module
-    docstring was ended by reading one subject line; a report that made a
-    maintainer go and find it by hand would have saved nobody.
+    This is the payload of the whole exercise: the cause of a breakage is
+    named in a subject line, and a report that made a maintainer go and find
+    it by hand would save nobody.
 
     ``None``, not ``[]``: upstream's tag naming is a convention
     (``v2.15.7`` today) and not a promise, so "no commits between the tags" and
@@ -406,9 +398,8 @@ def _evidence(
     """The four facts, in the order they get read.
 
     Pinned version, new version, its date, and the upstream commit subjects.
-    The fourth is the one that was missing the morning this mechanism comes
-    from: the cause was named in a commit subject, and a report that made
-    somebody go and find it would have saved nobody.
+    The fourth is the one that names a cause, and a report that made somebody
+    go and find it would save nobody.
     """
     date = release.released.split("T")[0] if release.released else "date inconnue"
     lines = [
@@ -537,8 +528,8 @@ def fallback_issue_body(
 
     A repository can forbid Actions from creating pull requests, a branch can
     be protected, a push can be refused. None of that is a reason for the
-    information to be lost -- which was the entire failure being corrected
-    here -- so the report still arrives, as an issue, saying why it is one.
+    information to be lost, so the report still arrives, as an issue, saying
+    why it is one.
     """
     lines = [
         f"<!-- {MARKER} -->",

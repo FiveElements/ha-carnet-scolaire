@@ -127,7 +127,7 @@ def _setup_error[E: HomeAssistantError](
 ) -> E:
     """A set-up failure Home Assistant can show in the user's language.
 
-    It replaces ``kind(str(error))``, which put the underlying exception's text
+    Never ``kind(str(error))``, which would put the underlying exception's text
     on the integration card and in the log. That text is not ours: a
     ``pronotepy`` or transport error can quote a server page, or an address the
     user pasted with its session parameters still on it (`urls.py` exists for
@@ -193,10 +193,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
         # Retry, and open nothing. These are ordinary ends of a session rather
         # than faults to report: the connector has already dropped the tokens
         # it held, so the retry logs in again. This arm sits *above* the
-        # `ConnectorError` catch-all deliberately -- an expired token that fell
-        # through to it opened a repair asking the user to file a bug report,
-        # for a condition that fixed itself on the next attempt, and no code
-        # path ever closes that card again.
+        # `ConnectorError` catch-all deliberately -- an expired token falling
+        # through to it would open a repair asking the user to file a bug
+        # report, for a condition that fixes itself on the next attempt, and
+        # no code path ever closes that card again.
         await account.async_unload()
         raise _setup_error(
             ConfigEntryNotReady, "setup_login_postponed", error
@@ -234,7 +234,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: PronoteConfigEntry) -> b
         raise _setup_error(ConfigEntryNotReady, "setup_network_error", error) from None
     except (DataError, KeyError, ValueError) as error:
         # A decoding error *after* the login -- the children, the periods --
-        # comes out of the session unwrapped, and used to escape set-up
+        # comes out of the session unwrapped. Left uncaught it escapes set-up
         # entirely: Home Assistant then logs "Error setting up entry" with the
         # full traceback, at ERROR, on its own logger, and the text of a
         # decoding error is the payload it could not read. It is the condition
@@ -308,12 +308,11 @@ async def async_remove_config_entry_device(
     """Whether the user may delete this device from the device page.
 
     Without this hook Home Assistant hides the delete button and answers the
-    WebSocket call with "Config entry does not support device removal". That
-    was the state when §10.5 of the user guide, and the release notes of
-    v0.0.10, both told the reader to delete the stale child device: an
-    instruction the code made impossible. The button is the whole remedy
-    offered for a generation the repair deliberately leaves alone, so its
-    absence turned a documented cleanup into a dead end.
+    WebSocket call with "Config entry does not support device removal". The
+    button is the whole remedy offered for a stale child-device generation the
+    repair deliberately leaves alone (§10.5 of the user guide tells the reader
+    to delete it), so its absence would turn a documented cleanup into a dead
+    end.
 
     A **child** device may be removed. If the child is still followed the
     entry recreates it on the next reload, which is Home Assistant's normal
@@ -322,7 +321,6 @@ async def async_remove_config_entry_device(
 
     The **account** device may not. Every child declares it as `via_device`,
     so removing it would leave the children pointing at a parent that no
-    longer exists -- the exact state that once flattened the device tree until
-    the next restart.
+    longer exists, which flattens the device tree until the next restart.
     """
     return (DOMAIN, entry.entry_id) not in device.identifiers

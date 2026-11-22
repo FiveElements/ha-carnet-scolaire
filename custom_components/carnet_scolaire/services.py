@@ -10,10 +10,11 @@ backup, in screenshots and in bug reports. As a service response it exists for
 the length of one script run. That is also why it is absent from the
 diagnostics download -- there is nothing to redact, because nothing is kept.
 
-**A write is off by default (§8.3).** Ticking a homework item, marking news read
-and sending a message all change what the establishment sees. They are refused
-unless the user turned write operations on, and refused with an explanation
-rather than ignored.
+**A write is gated on an option (§8.3).** Ticking a homework item, marking news
+read and sending a message all change what the establishment sees. They are
+refused unless write operations are on -- the default for a new entry, not for
+an entry whose options lack the key -- and refused with an explanation rather
+than ignored.
 
 Every call goes through the rate limiter and the serial executor like any
 collection: a service is not a dispensation. ``refresh`` in particular does not
@@ -109,11 +110,10 @@ def _one_device(value: Any) -> str:
     wrote it under ``target:`` -- and a dashboard's action picker writes
     ``target:``.
 
-    Declaring ``cv.string`` therefore rejected every button on a card with
+    Declaring ``cv.string`` would therefore reject every button on a card with
     ``value should be a string at 'device_id'``, which reads as the card being
-    at fault rather than this schema, and cost a peer session a round of
-    debugging on the wrong side of the boundary. Nothing in the failure names
-    the real cause, which is why the mechanism is written out here rather than
+    at fault rather than this schema. Nothing in the failure names the real
+    cause, which is why the mechanism is written out here rather than
     summarised.
 
     A list of *several* devices is a different matter and stays an error, with
@@ -244,8 +244,8 @@ def _resolve(hass: HomeAssistant, device_id: str) -> tuple[PronoteAccount, str |
             # The suffix is the key this integration minted for the child; the
             # gateway needs the identifier PRONOTE announced this session.
             # `None` here means the device belongs to a child the account no
-            # longer announces -- an orphan from before the keys existed --
-            # which must not be silently served as some other child.
+            # longer announces -- an orphan device -- which must not be
+            # silently served as some other child.
             student_id = account.student_id_for_key(child_key)
             if student_id is not None:
                 return account, student_id
