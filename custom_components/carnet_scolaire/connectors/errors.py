@@ -22,10 +22,10 @@ class ConnectorSessionExpiredError(ConnectorError):
     and succeeds.
 
     It has its own class for one reason, and the reason is what the user sees.
-    Raised as a bare ``ConnectorError`` it fell into the set-up arm that opens
-    the ``account_unreadable`` repair -- a card asking the user to file a bug
-    report, never closed again by any code path, for a condition that repaired
-    itself eighty seconds later on the retry.
+    Raised as a bare ``ConnectorError`` it would fall into the set-up arm that
+    opens the ``account_unreadable`` repair -- a card asking the user to file a
+    bug report, never closed again by any code path, for a condition that
+    repairs itself on the retry.
     """
 
 

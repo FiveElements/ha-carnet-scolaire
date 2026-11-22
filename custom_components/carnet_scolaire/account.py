@@ -276,16 +276,14 @@ class PronoteAccount:
         # An options save reloads the entry, which builds a new scheduler whose
         # every deadline is unset -- making all ten tiers immediately due. The
         # previous schedule is handed across the reload through `hass.data`, so
-        # nudging one interval no longer costs a login plus a full batch (§7.3).
+        # nudging one interval does not cost a login plus a full batch (§7.3).
         #
         # The schedule travels with the data it describes, and **only** with
         # it. Handing across a deadline while the coordinators came back empty
-        # is what left every child entity `unavailable` on a live instance: the
-        # new scheduler believed the tiers were fresh, `due()` returned
-        # nothing, and the batch that ran was a batch of nothing -- for a whole
-        # tier interval, which is twenty-four hours for `menus`, `static` and
-        # `history`. Inside quiet hours the limiter could not refill them
-        # either, so a reload at 22:10 emptied the dashboard until 06:00.
+        # would leave every child entity `unavailable`: the new scheduler would
+        # believe the tiers fresh, `due()` would return nothing, and the batch
+        # would be a batch of nothing -- for a whole tier interval, which is
+        # twenty-four hours for `menus`, `static` and `history`.
         #
         # So a tier whose snapshot came back keeps its deadline, and a tier
         # without data is due immediately. That invariant is the whole point,
@@ -322,14 +320,11 @@ class PronoteAccount:
         self._unsub_tick: Any | None = None
         self._tick_lock = asyncio.Lock()
         #: Batches that have run to completion, empty ones included. It exists
-        #: because "has the first collection finished?" had no answer a caller
-        #: could wait on: the lock is only held *while* a batch runs, so a test
-        #: that checked it before the first-collection task had started read
-        #: `False` and concluded the batch was over. That produced the
-        #: lowest-priority tier's entity `unavailable` on a loaded machine,
-        #: about one run in twenty, on the gated row -- a flaky gate, which
-        #: lets something through or blocks a release at random. Counted at the
-        #: end and not at the start, so it means finished.
+        #: so "has the first collection finished?" has an answer a caller can
+        #: wait on: the lock is only held *while* a batch runs, so a caller
+        #: checking it before the first-collection task has started reads
+        #: `False` and wrongly concludes the batch is over. Counted at the end
+        #: and not at the start, so it means finished.
         self._completed_ticks = 0
         self._shutting_down: bool = False
         #: Registry id of this entry's account device, filled in by
@@ -348,7 +343,7 @@ class PronoteAccount:
 
         A missing key reads as the *legacy* default, not the current one: new
         entries are created with the key set, so its absence means an entry
-        from before writes were on by default, whose owner never chose them.
+        whose owner never chose writes.
         """
         return bool(
             self.entry.options.get(
@@ -361,8 +356,7 @@ class PronoteAccount:
         """Whether a homework tick sent from this account can reach PRONOTE.
 
         Only a student's own session can. ``SaisieTAFFaitEleve`` sent from a
-        parent session is answered normally and recorded nowhere -- measured
-        on 2026-09-27 with the ``N`` of the posting session, and consistent
+        parent session is answered normally and recorded nowhere, consistently
         with the Espace Parents, where the state of a homework item is text
         and not a checkbox. So a parent account is refused the tick up front,
         rather than billed for a write that is then reported as a success.
@@ -466,12 +460,6 @@ class PronoteAccount:
         waits for the tier's own interval: three hours for ``marks``, a full
         day for ``menus`` and ``history``, and with quiet hours on, until
         06:00.
-
-        Measured on a live instance at 00:12: all ten tiers placed their
-        requests and published, and nineteen entities across seven tiers stayed
-        ``unavailable`` with their data already present. The two tiers whose
-        snapshots landed before the platforms were forwarded -- ``timetable``
-        and ``homework`` -- were the only ones that displayed.
         """
         # Collect immediately rather than waiting a full tick: a fresh install
         # showing nothing for five minutes reads as broken.
@@ -485,15 +473,13 @@ class PronoteAccount:
         """Refill the coordinators from a reload, and say which tiers came back.
 
         ``carried`` is keyed by each child's *minted* key, not by the PRONOTE
-        resource identifier the coordinators use, and that is the defect this
-        re-keying removes. The identifier rotates between sessions, and the
-        reload's own login is a new session: carried under the old identifier,
-        every snapshot came back where no entity looked for it, while the tier
-        still counted as restored and kept its deadline. A live instance lost
-        all forty-four entities of its only child on an options save, for as
-        long as each tier's interval -- the login had logged the rotation a
-        second earlier. So this runs after pairing, and a tier counts as
-        restored only if **every** child followed now has its snapshot back.
+        resource identifier the coordinators use. The identifier rotates
+        between sessions, and the reload's own login is a new session: carried
+        under the old identifier, every snapshot would come back where no entity
+        looks for it, while the tier still counted as restored and kept its
+        deadline -- every entity of the child empty for a whole tier interval.
+        So this runs after pairing, and a tier counts as restored only if
+        **every** child followed now has its snapshot back.
         The session tier is skipped: the login has just published it afresh.
 
         Returns tier *names*, because that is the key
@@ -502,8 +488,7 @@ class PronoteAccount:
 
         A tier is only reported as restored when it actually carries a
         snapshot: an empty mapping is not data, and reporting it would restore
-        that tier's deadline and leave its entities unavailable -- the exact
-        defect this method exists to remove.
+        that tier's deadline and leave its entities unavailable.
 
         The values are the same objects, not copies: snapshots are frozen DTOs
         (§2.2), so there is nothing to protect them from, and the mapping
@@ -617,18 +602,14 @@ class PronoteAccount:
         artefact, and re-pairing against it is the normal mode of operation.
 
         Every announced child is paired, followed or not, and the selection is
-        stored as the minted keys of the followed ones. It used to be stored
-        as resource identifiers, which is to say as the one value known to
-        rotate: every login that renamed a child made it a "newcomer", its new
-        identifier was appended, and a one-child account ended up holding
-        eleven identifiers of which none matched -- warning at every restart
-        that the selection had lapsed, and silently re-following any child the
-        user had declined. A declined child now keeps a record in the table and
-        stays out of the selection, so a rotation cannot turn it into a
-        newcomer; a child the table has never seen is still followed, because
-        nobody was ever asked about it. `child_keys.followed` holds the rule,
-        including the one-time translation of a selection still stored as
-        identifiers.
+        stored as the minted keys of the followed ones -- never as resource
+        identifiers, the one value known to rotate, which would make every
+        renamed child a "newcomer" and silently re-follow any child the user
+        had declined. A declined child keeps a record in the table and stays
+        out of the selection, so a rotation cannot turn it into a newcomer; a
+        child the table has never seen is followed, because nobody was ever
+        asked about it. `child_keys.followed` holds the rule, including the
+        one-time translation of a selection still stored as identifiers.
 
         Writing the entry here is safe: only the options flow reloads the
         entry (`PronoteOptionsFlow`), and a write to ``entry.data`` wakes
@@ -644,9 +625,8 @@ class PronoteAccount:
         chosen = followed(stored, table, selection, keys)
         for note in notes:
             # Keys only, never a name: this lands in the log users attach to
-            # public issues (§8.2). It is logged at all because the silence
-            # here is what hid the duplicate-device defect for as long as it
-            # existed.
+            # public issues (§8.2). It is logged at all because a silent
+            # pairing would hide a duplicate-device defect.
             _LOGGER.info("child identity: %s", note)
         if selection and is_legacy_selection(selection):
             _LOGGER.info(
@@ -663,11 +643,11 @@ class PronoteAccount:
         if not student_ids and announced:
             # Following every child is the right recovery -- refusing to
             # collect anything would take the whole integration down -- but
-            # doing it silently is what once let a serious defect hide. Since
-            # the selection is kept as minted keys, a rotation no longer lands
-            # here: only an account on which every child the user chose has
-            # gone, leaving only children they declined. The selection itself
-            # is left as stored, so a returning child is followed again.
+            # not silently. Since the selection is kept as minted keys, a
+            # rotation does not land here: only an account on which every child
+            # the user chose has gone, leaving only children they declined. The
+            # selection itself is left as stored, so a returning child is
+            # followed again.
             _LOGGER.warning(
                 "none of the %d children selected for this account is among "
                 "the %d it now announces, all of which were declined; all %d "
@@ -695,26 +675,23 @@ class PronoteAccount:
     def _async_adopt_existing_registry_rows(self) -> None:
         """Re-point rows created against PRONOTE's rotating identifier.
 
-        Entities and devices that predate the minted keys carry
+        Entities and devices created against the resource identifier carry
         ``<entry_id>_46#<signature>...`` in their ``unique_id``. Rewriting that
-        **in place** is the whole difference between a fix and a second
-        breakage: `async_update_entity` keeps the registry row, so the
-        ``entity_id``, the device, a name the user set by hand, the area and
-        the labels all survive. Creating new entities and leaving the old ones
-        would *be* the defect, performed deliberately -- and it would break
-        every dashboard badge and tile, which can only be wired to a literal
-        ``entity_id``.
+        **in place** is what matters: `async_update_entity` keeps the registry
+        row, so the ``entity_id``, the device, a name the user set by hand, the
+        area and the labels all survive. Creating new entities and leaving the
+        old ones would break every dashboard badge and tile, which can only be
+        wired to a literal ``entity_id``.
 
         Run here rather than from a version-numbered migration handler, and
         that is a deliberate choice: a migration runs before any login, so it
-        cannot know which children the account announces *now* -- and on an
-        instance that already suffered the defect the registry holds two
-        generations for one child, with no way to tell from the registry alone
-        which is alive. Pairing has just answered that question, so this runs
-        immediately after it and only ever touches children the account
-        actually announced. The other generation is left exactly as it is: its
-        entities are dead either way, and deleting registry rows on a user's
-        behalf is not this integration's decision.
+        cannot know which children the account announces *now* -- and the
+        registry may hold two generations for one child, with no way to tell
+        from the registry alone which is alive. Pairing has just answered that
+        question, so this runs immediately after it and only ever touches
+        children the account actually announced. The other generation is left
+        exactly as it is: its entities are dead either way, and deleting
+        registry rows on a user's behalf is not this integration's decision.
 
         Idempotent by construction -- after the first pass nothing matches the
         old prefix -- so it also repairs an entry whose identifier rotated
@@ -751,21 +728,17 @@ class PronoteAccount:
     ) -> None:
         """Adopt rows whose identifier PRONOTE no longer announces.
 
-        This is the case the repair exists for, and the first version missed
-        it. It looked up ``<entry_id>_<the identifier announced now>`` -- so it
-        worked only while the identifier had *not* rotated since the rows were
-        created, which is precisely when there is nothing to repair. On the
-        instance that motivated the fix the identifier had rotated, no row
-        matched, and 56 entities were created beside the 56 already there: the
-        defect performed deliberately. The test that was supposed to cover this
-        used the identifier the fake account announces, so it never rotated
-        anything.
+        This is the case the repair exists for. Looking up ``<entry_id>_<the
+        identifier announced now>`` alone works only while the identifier has
+        *not* rotated since the rows were created, which is precisely when
+        there is nothing to repair; otherwise no row matches and a full second
+        set of entities is created beside the first.
 
         The rows are found through the **devices** and not by splitting a
         ``unique_id``: a resource identifier may itself contain an underscore
-        (``46#_KlUc...`` was one of the three observed), so there is no safe
-        separator to split on. A child device carries exactly
-        ``<entry_id>_<identifier>`` and nothing more, which is unambiguous. The
+        (``46#_...``), so there is no safe separator to split on. A child device
+        carries exactly ``<entry_id>_<identifier>`` and nothing more, which is
+        unambiguous. The
         account device is ``<entry_id>`` alone and cannot be mistaken for one.
 
         Only ever with a **single** unmatched child. With siblings there is no
@@ -817,16 +790,12 @@ class PronoteAccount:
         # The newest, when an instance carries several dead generations: an
         # older one was already superseded by the one after it, so the last
         # PRONOTE created is the one whose entities the dashboards were built
-        # on. Measured on the live instance the two generations were two hours
-        # apart, and the newer one held exactly the entities every badge and
-        # automation referenced.
+        # on.
         #
-        # By creation time and **not** by name, which was the first idea and
-        # does not work: the integration names both generations from PRONOTE,
-        # so `default_name` was byte-identical on both: only the rename the
-        # user had applied to the older one differed. Matching on the name
-        # would have had to choose between two equal candidates, and twins
-        # share a name in any case.
+        # By creation time and **not** by name: the integration names both
+        # generations from PRONOTE, so `default_name` is byte-identical on
+        # both, and matching on the name would have to choose between two
+        # equal candidates -- twins share a name in any case.
         newest = max(device.created_at for device, _ in candidates)
         latest = [pair for pair in candidates if pair[0].created_at == newest]
         if len(latest) > 1:
@@ -954,8 +923,8 @@ class PronoteAccount:
         stored months ago has to be matched to the child of this session.
 
         A value that is *already* a known resource identifier is returned
-        unchanged, which is what makes a device created before the keys
-        existed keep working between the upgrade and the migration.
+        unchanged, which keeps a device still carrying a resource identifier
+        working until its registry row is re-pointed.
         """
         if key in self._child_keys:
             return key
@@ -999,8 +968,8 @@ class PronoteAccount:
         It is a loud fallback rather than an exception because raising here
         would fail the whole entry -- losing every child's entities -- to
         protect the identity of one. The error says what to look for, since
-        the consequence is precisely the defect this replaced: an entity whose
-        identity follows a value PRONOTE rotates.
+        the consequence is an entity whose identity follows a value PRONOTE
+        rotates.
         """
         key = self._child_keys.get(student_id)
         if key is None:
@@ -1099,9 +1068,9 @@ class PronoteAccount:
         # An identifier the last pairing did not see is, far more often than a
         # child enrolled mid-year, a child PRONOTE renamed at the last login.
         # Which of the two it is, and whether it is followed, is decided by
-        # re-pairing -- not here. This used to append every such identifier to
-        # the stored selection, so a one-child account grew it by one per
-        # login. Re-pairing recognises a renamed child by its record, keeps a
+        # re-pairing -- not here; appending every such identifier to the stored
+        # selection would grow a one-child account's by one per login.
+        # Re-pairing recognises a renamed child by its record, keeps a
         # declined one declined, and follows a genuinely new one: unknown is
         # not refused, because the selection was chosen among the children
         # that existed *then*, and one that did not exist was never declined.
@@ -1125,10 +1094,10 @@ class PronoteAccount:
         child PRONOTE renamed at the last login. Re-reading the session facts
         gives the account the new identifier; the snapshots, the change
         detector's memory and the per-student dispensation all stayed under
-        the old one. Left there, every entity read a snapshot nothing would
-        refresh again, and each tier counted as never collected for the new
-        identifier -- so it ran as a first collection, through quiet hours, to
-        publish where no entity looked.
+        the old one. Left there, every entity would read a snapshot nothing
+        refreshes again, and each tier would count as never collected for the
+        new identifier -- so it would run as a first collection, through quiet
+        hours, to publish where no entity looks.
         """
         current = {key: student_id for student_id, key in self._child_keys.items()}
         renamed = {
@@ -1215,9 +1184,9 @@ class PronoteAccount:
                 # until there have been *consecutive* failures, which is
                 # exactly the case for every authentication refusal -- bad
                 # credentials, a demanded PIN, an unreadable bootstrap all
-                # leave that counter at zero. Deferring by zero seconds made
-                # the tier due again on the very next tick, so ten tiers
-                # attempted ten logins a tick: the one gesture that gets an
+                # leave that counter at zero. Deferring by zero seconds would
+                # make the tier due again on the very next tick, so ten tiers
+                # would attempt ten logins a tick: the one gesture that gets an
                 # address suspended.
                 self.scheduler.mark_failed(tier, self.limiter.retry_delay())
                 # Described, not quoted: `AccountUnreadable` is raised from a
@@ -1278,7 +1247,7 @@ class PronoteAccount:
             # `mark_failed` and not `defer`, because "produced nothing" is a
             # failure however politely it arrived: a bare deferral by one
             # back-off base is shorter than the master tick, so a tier in this
-            # state was retried at every tick for as long as it lasted. The
+            # state would be retried at every tick for as long as it lasted. The
             # floor lives in `mark_failed`, which is the only difference
             # between the two.
             self.scheduler.mark_failed(tier, self.limiter.retry_delay())
@@ -1455,11 +1424,10 @@ class PronoteAccount:
         """Report an impossible bootstrap **without naming a cause**.
 
         pronotepy decides an address is suspended with ``if "IP" in html`` --
-        two capitals anywhere in the page. Specification v1 built an hour-long
-        hold and a repair with "explicit text" on that, which would have told
-        parents their home address was banned because a school wrote "Espace IP"
-        in a footer. This issue enumerates the possible causes and picks none
-        (§6.3).
+        two capitals anywhere in the page. A repair with "explicit text" built on
+        that would tell parents their home address was banned because a school
+        wrote "Espace IP" in a footer. This issue enumerates the possible causes
+        and picks none (§6.3).
         """
         ir.async_create_issue(
             self.hass,

@@ -1,13 +1,13 @@
-# Les huit blueprints, en détail
+# Les neuf blueprints, en détail
 
 Un blueprint est un modèle d'automatisation : vous choisissez l'élève et ce
-qu'il faut faire, le modèle fournit le reste. Les huit livrés avec Carnet scolaire
-existent parce que huit automatisations scolaires reviennent tout le temps, et
+qu'il faut faire, le modèle fournit le reste. Les neuf livrés avec Carnet scolaire
+existent parce que neuf automatisations scolaires reviennent tout le temps, et
 que chacune contient un piège qu'on ne voit qu'après s'être fait prendre.
 
 Ce document explique chaque réglage et nomme chaque piège. Pour la vue
 d'ensemble et **la procédure d'import**, voyez le
-[§ 9.1 du guide de l'utilisateur](GUIDE-UTILISATEUR.md#91-les-huit-blueprints-livrés).
+[§ 9.1 du guide de l'utilisateur](GUIDE-UTILISATEUR.md#91-les-neuf-blueprints-livrés).
 Pour des automatisations complètes, prêtes à coller, voyez
 [Exemples d'utilisation des blueprints](EXEMPLES-BLUEPRINTS.md).
 Si vous arrivez de l'intégration `pronote` avec des automatisations déjà
@@ -18,7 +18,7 @@ Si vous arrivez de l'intégration `pronote` avec des automatisations déjà
 
 ## Sommaire
 
-- [Ce que les huit ont en commun](#ce-que-les-huit-ont-en-commun)
+- [Ce que les neuf ont en commun](#ce-que-les-neuf-ont-en-commun)
 - [1. Réveil adaptatif](#1-réveil-adaptatif)
 - [2. Rappel des devoirs du lendemain](#2-rappel-des-devoirs-du-lendemain)
 - [3. Cours annulé ou modifié](#3-cours-annulé-ou-modifié)
@@ -27,11 +27,12 @@ Si vous arrivez de l'intégration `pronote` avec des automatisations déjà
 - [6. Nouveau message ou information](#6-nouveau-message-ou-information)
 - [7. Menu de la cantine](#7-menu-de-la-cantine)
 - [8. Retour de l'école](#8-retour-de-lécole)
+- [9. Retour du midi](#9-retour-du-midi)
 - [Si rien n'arrive jamais](#si-rien-narrive-jamais)
 
 ---
 
-## Ce que les huit ont en commun
+## Ce que les neuf ont en commun
 
 **Rien n'est codé en dur, et c'est délibéré.** Home Assistant fabrique
 l'identifiant d'une entité à partir de son nom **traduit** : « Prochain
@@ -340,6 +341,41 @@ Message fourni : `Sortie à 16:00 après ÉDUCATION MUSICALE. 1 cours annulé en
 
 ---
 
+## 9. Retour du midi
+
+Exécute l'action de votre choix quand la matinée de l'élève se termine avant la
+pause du midi.
+
+| Réglage | Défaut | À quoi ça sert |
+| --- | --- | --- |
+| **Capteur « Fin de matinée »** | — | La fin du dernier cours avant la pause du midi : les cours annulés et les dispenses en sont déjà retirés. Pas « Fin des cours » ni « Prochain cours ». |
+| **Tenir compte des cours annulés (professeur absent)** | activé | Activé : l'action part quand la matinée finit vraiment. Désactivé : elle part à l'heure prévue par la grille, pour un élève qui reste en permanence. Voir ci-dessous. |
+| **Écart** | 0 | S'**ajoute** à l'heure de fin de matinée. Négatif pour partir avant la sonnerie, positif pour le temps du trajet. |
+| **Pas avant** | 09:00 | Garde-fou : un emploi du temps aberrant ne doit pas déclencher l'action en pleine nuit. |
+| **Pas après** | 15:00 | Garde-fou symétrique : passée cette heure, un retour du midi n'est plus vraisemblable. |
+| **Action à la fin de la matinée** | — | Notification, annonce vocale, portail… |
+
+**Le piège évité : une pause du midi avancée par une annulation.** Le jour où
+le dernier cours du matin saute, la matinée finit plus tôt, et le creux réel
+commence avant l'heure où l'on cherche d'habitude une pause du midi. Le capteur
+la reconnaît quand même, parce que la grille prévue contenait une pause : son
+état est l'heure où la matinée finit vraiment.
+
+**Rester en permanence.** Option désactivée, l'automatisation attend l'heure
+prévue par la grille (attribut `scheduled_end`). Un jour où la grille ne
+prévoyait aucune pause et où seules des annulations en ont ouvert une, rien ne
+se passe. L'attente se fait dans l'exécution de l'automatisation : un
+redémarrage de Home Assistant pendant cette attente la perd.
+
+**Les jours sans pause du midi sont gratuits.** Journée continue, journée qui
+s'arrête à midi, week-end, vacances : le capteur vaut `unknown`, et le
+déclencheur horaire ne s'arme pas. Une journée qui s'arrête à midi relève de
+« Retour de l'école ».
+
+Message fourni : `Fin de matinée à 10:30. 1 cours annulé en fin de matinée. Reprise à 13:30.`
+
+---
+
 ## Si rien n'arrive jamais
 
 Un blueprint qui ne se déclenche pas n'est presque jamais un blueprint cassé.
@@ -363,6 +399,7 @@ d'un palier, réglable dans les options de l'intégration :
 | Message ou information | `discussions`, `news` | « Messages non lus », « Actualités non lues » |
 | Menu de la cantine | `menus` | « Menu du jour » |
 | Retour de l'école | `timetable` | « Fin des cours » |
+| Retour du midi | `timetable` | « Fin de matinée » |
 
 **3. Les collectes sont arrêtées, et rien n'en a l'air.** Carnet scolaire applique
 « périmé plutôt qu'indisponible » : quand une collecte échoue, les entités

@@ -7,18 +7,17 @@ qui sanctionne une adresse IP. Deux contraintes qui façonnent tout le reste.
 
 Le dépôt s'appelle `ha-carnet-scolaire`, l'intégration s'appelle **Carnet
 scolaire**, et son domaine Home Assistant est `carnet_scolaire`. Elle collecte
-auprès de PRONOTE et d'EcoleDirecte ; elle s'appelait *Pronote NG* (domaine
-`pronote_ng`) jusqu'à la 0.0.32.
+auprès de PRONOTE et d'EcoleDirecte. Une entrée créée sous l'ancien domaine
+`pronote_ng` n'est pas migrée : supprimez-la et ajoutez-la à nouveau.
 
 ---
 
-> **Un `.venv` local ne suffit plus pour les portails.** Home Assistant 2026.9
-> exige Python **3.14.2**, et le harnais `pytest-homeassistant` aussi : il
-> refuse de s'installer sous 3.13. Un environnement local en 3.13
-> installe donc l'ancienne pile, et `mypy --strict` y vérifie le code contre une
-> version de Home Assistant **antérieure au plancher déclaré** — ce qui a déjà
-> laissé passer une clé d'API supprimée depuis. Lancez `ruff`, `mypy` et
-> `pytest` dans le conteneur ou sous Python 3.14, comme la CI.
+> **Les portails tournent sous Python 3.14.** Home Assistant au plancher et le
+> harnais `pytest-homeassistant` l'exigent. Un environnement local en 3.13
+> installe une pile plus ancienne, et `mypy --strict` y vérifie le code contre
+> une version de Home Assistant **antérieure au plancher déclaré** — une API
+> supprimée y passe inaperçue. Lancez `mypy` et `pytest` dans le conteneur ou
+> sous Python 3.14, comme la CI.
 
 ## 1. Les deux règles non négociables
 
@@ -43,8 +42,11 @@ passe.
 
 ### 1.2 Jamais le journaliseur `pronotepy` en DEBUG
 
-`pronotepy/pronoteAPI.py` écrit l'hexadécimal de chaque corps de requête au
-niveau DEBUG, identifiants compris. Cette intégration ne configure donc aucun
+`pronotepy` fuit à deux endroits au niveau DEBUG : `pronotepy.pronoteAPI` écrit
+l'hexadécimal de chaque corps de requête, identifiants compris, et
+`pronotepy.dataClasses` écrit en JSON lisible le dictionnaire entier d'un objet
+dont le décodage échoue — nom d'élève compris. Ce sont deux journaliseurs
+distincts : filtrer l'un ne protège pas de l'autre. Cette intégration ne configure donc aucun
 journaliseur et ne déclare **aucune clé `loggers`** dans son manifeste — c'est
 `scripts/check_manifest.py` qui l'empêche, et un test qui vérifie qu'un cycle
 complet ne journalise aucun secret.
@@ -132,9 +134,9 @@ lectures de fichiers coûteraient en milliers de jetons — et, plus utile ici, 
 arêtes répondent à « qui appelle ce symbole » sans qu'on ait à faire confiance à
 un `grep` sur un nom court.
 
-Aucun portail n'en dépend, et rien dans `custom_components/` ne le connaît. Qui
-ne l'installe pas travaille exactement comme avant : ce que le dépôt versionne,
-c'est la configuration, jamais l'index.
+Aucun portail n'en dépend, et rien dans `custom_components/` ne le connaît. On
+peut s'en passer entièrement : ce que le dépôt versionne, c'est la
+configuration, jamais l'index.
 
 ```bash
 npm install -g @nanonets/graft
@@ -161,9 +163,9 @@ quand employer laquelle des six commandes, et `.mcp.json` déclare le serveur MC
 préférences propres à un poste vont dans `.claude/settings.local.json`, qui
 n'est pas versionné. Les deux fichiers de `.claude/helpers/` ne sont que des
 amorces : ils cherchent le paquet installé et n'ont aucun effet en son absence.
-L'installeur de graft y grave le chemin absolu de la machine qui l'a lancé, ce
-que ce dépôt neutralise à chaque fois — un chemin d'un autre poste n'aide
-personne, et porte un nom de compte.
+L'installeur de graft y grave le chemin absolu de la machine qui l'a lancé ;
+ce chemin ne se versionne pas — il n'aide aucun autre poste, et porte un nom de
+compte.
 
 **La règle §1.1 tient sans aménagement.** graft n'indexe que ce qui est déjà
 suivi en version, où aucun identifiant réel ne figure ; il suit `.gitignore`,
@@ -184,8 +186,10 @@ ruff check .
 ruff format --check .
 mypy --strict custom_components/carnet_scolaire
 python scripts/check_manifest.py
-pytest tests --cov=custom_components/carnet_scolaire --cov-branch --cov-report=xml:coverage.xml
+pytest tests -n auto --cov=custom_components/carnet_scolaire --cov-branch --cov-report=xml:coverage.xml
 python scripts/check_coverage.py coverage.xml
+python scripts/check_doc_citations.py --since=<base-ref>   # sur l'hôte : demande git
+mkdocs build --strict                                      # voir § 3.2
 ```
 
 ### 3.1 La couverture
@@ -236,19 +240,12 @@ identiquement sur GitHub et sur le site.
 
 **Citez un symbole, jamais un numéro de ligne.** La documentation renvoie au
 code par le nom de ce qu'elle décrit et le fichier qui le porte —
-« `async_request_tick`, `account.py` » — et non par une plage de lignes. La
-règle vient d'un dégât mesuré : sur cent cinquante-deux plages citées, soixante
-et onze pointaient sur du code qui avait bougé, et les quatorze premières
-ouvertes étaient toutes fausses. Une plage fausse est plus coûteuse qu'une
-citation absente, parce qu'elle atterrit sur du code réel : le lecteur essaie de
-le réconcilier avec une affirmation qui, elle, est restée juste, et conclut
-contre l'affirmation. Un nom de symbole survit à un déplacement de fonction, se
-retrouve par recherche, et `scripts/check_doc_citations.py` reste là pour les
-plages qui subsistent.
-
-L'exception est `docs/revue-contradictoire-v1.md`, qui cite `pronotepy` 2.15.6
-par plages : c'est une archive de revue, ses citations portent sur du code
-extérieur au dépôt, et un avertissement en tête du document le dit.
+« `async_request_tick`, `account.py` » — et non par une plage de lignes. Une
+plage dérive dès que le code bouge, et une plage fausse coûte plus qu'une
+citation absente : elle atterrit sur du code réel, que le lecteur essaie de
+réconcilier avec une affirmation restée juste, et il conclut contre
+l'affirmation. Un nom de symbole survit à un déplacement de fonction et se
+retrouve par recherche ; `scripts/check_doc_citations.py` signale les plages.
 
 ---
 
@@ -310,24 +307,16 @@ Corollaires, si vous touchez à ces deux modules :
 
 ### 5.1 L'épingle est surveillée
 
-Un matin, toutes les connexions à un établissement ont échoué sur un
-`CryptoError` que l'amont commente « *probably the qr code has expired* ». Le QR
-code était parfaitement valide : le serveur PRONOTE de l'établissement venait
-de passer en 26.2.5, et `pronotepy` avait publié six jours plus tôt une version
-dont un commit s'appelle littéralement *fix compatibility with PRONOTE
-2026.2.5.6* et réécrit trois lignes de l'échange de défi dans `_login`. Le
-correctif existait, il était public, et rien dans ce dépôt ne le disait — c'est
-la seule raison pour laquelle la panne a duré une matinée.
-
-`.github/workflows/pronotepy-watch.yml` le dit désormais. Une fois par semaine,
-il compare l'épingle à ce que PyPI publie et, si l'amont est devant, **ouvre une
-pull request qui relève l'épingle** sur la branche
+Une mise à jour du serveur PRONOTE d'un établissement peut casser la connexion
+— par exemple sur un `CryptoError` que l'amont attribue à tort à un QR code
+expiré — alors que `pronotepy` a déjà publié le correctif. Pour que ce correctif
+se voie dès sa publication, `.github/workflows/pronotepy-watch.yml` compare une
+fois par semaine l'épingle à ce que PyPI publie et, si l'amont est devant,
+**ouvre une pull request qui relève l'épingle** sur la branche
 `chore/pronotepy-<version>`. Pas une issue : une issue annonce qu'une version
 existe, une pull request dit si elle *fonctionne*, parce que `Validate` y fait
 tourner la suite entière et `mypy --strict` contre la nouvelle bibliothèque sur
-les deux socles. Ce matin-là, cette réponse aurait été disponible quelques
-minutes après la publication amont au lieu d'exiger de refaire l'installation à
-la main.
+les deux socles.
 
 Une branche par version amont, ce qui rend le job idempotent : une deuxième
 exécution retrouve la branche et met la pull request à jour au lieu d'en
@@ -339,9 +328,8 @@ contraire du but.
 
 La pull request porte la version épinglée, la nouvelle version, sa date de
 publication et **les sujets de commit entre les deux tags**. Ce dernier point
-est l'essentiel : ce qui a permis de conclure ce matin-là n'était pas un numéro
-de version, c'était une ligne de commit. Un rapport qui obligerait à aller la
-chercher n'aurait fait gagner la matinée à personne. Si la convention de
+est l'essentiel : c'est une ligne de commit, pas un numéro de version, qui dit
+si la nouvelle version corrige une rupture de protocole. Si la convention de
 nommage des tags amont change, la comparaison ne se résout plus et la pull
 request le dit, avec les seules informations de PyPI ; si PyPI est
 inaccessible, le job le note et sort au vert. Un portail hebdomadaire qui
@@ -357,12 +345,11 @@ seule chose qui distingue une montée de version d'une régression silencieuse, 
 elle ne se délègue pas. La pull request le rappelle avec une case à cocher, et
 la relecture est le travail réel que la proposition demande.
 
-Deux détails de fonctionnement, pour ne pas les redécouvrir en lisant les
-journaux. GitHub ne déclenche pas de workflow à partir d'un évènement produit
-par `GITHUB_TOKEN` — sinon un job pourrait s'auto-relancer sans fin — donc la
-pull request naît sans vérifications, et le job demande `Validate`
-explicitement sur la branche (c'est la raison du `workflow_dispatch` ajouté à
-`validate.yml`). Et si le dépôt interdit à Actions d'ouvrir une pull request,
+Deux détails de fonctionnement. GitHub ne déclenche pas de workflow à partir
+d'un évènement produit par `GITHUB_TOKEN` — sinon un job pourrait s'auto-relancer
+sans fin — donc la pull request naît sans vérifications, et le job demande
+`Validate` explicitement sur la branche (c'est la raison du `workflow_dispatch`
+de `validate.yml`). Et si le dépôt interdit à Actions d'ouvrir une pull request,
 le rapport arrive quand même sous forme d'issue préfixée `[pronotepy-upstream]`
 en disant pourquoi : le silence est le défaut qu'on corrige ici, pas la forme
 du rapport.
@@ -389,7 +376,7 @@ poignée de main PRONOTE est lente. Facturée au retour, elle laisse une fenêtr
 de plusieurs secondes pendant laquelle un second appelant lit un budget intact
 — c'est ainsi qu'un plafond de cinq connexions en laisse passer dix.
 
-Si votre changement modifie le budget par défaut (≈ 180 requêtes par jour pour
+Si votre changement modifie le budget par défaut (≈ 200 requêtes par jour pour
 un enfant), dites-le explicitement dans la PR et mettez à jour
 `docs/annexe-b-rate-limit.md`.
 
@@ -434,8 +421,8 @@ pas un raccourci.
    qui permet à quelqu'un de juger si votre correction est la bonne.
 4. Pousser **la branche**, ouvrir la PR.
 5. Les quatre workflows (`Validate`, `Hassfest`, `HACS`, `Docs`) au vert sur la
-   PR. Ce n'est plus seulement une consigne : la règle `Protect main` les exige
-   avant toute fusion — sauf la ligne `Tests (HA latest)`, tolérée exprès.
+   PR. La règle `Protect main` les exige avant toute fusion — sauf la ligne
+   `Tests (HA latest)`, tolérée exprès.
 
 Les pull requests de **Dependabot** se fusionnent seules une fois ces
 vérifications vertes (`.github/workflows/dependabot-auto-merge.yml`). Elles ne
@@ -492,9 +479,8 @@ message d'erreur brut ou une capture d'écran ne passent par aucune rédaction.
 | --- | --- |
 | [`docs/GUIDE-UTILISATEUR.md`](docs/GUIDE-UTILISATEUR.md) | ce que voit l'utilisateur : entités, services, réglages, dépannage |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | les couches, le limiteur, l'ordonnanceur, la session, et pourquoi c'est construit ainsi |
-| [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) | le raisonnement d'origine — à lire avec le §12 de l'architecture, qui liste où le code s'en écarte |
+| [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) | les exigences et leur raisonnement ; le code cite ses sections par numéro (`§5.1`) |
 | [`docs/annexe-b-rate-limit.md`](docs/annexe-b-rate-limit.md) | l'arithmétique du budget de requêtes |
-| [`docs/revue-contradictoire-v1.md`](docs/revue-contradictoire-v1.md) | la revue qui a produit la v2, conservée parce que ses raisons valent mieux que ses conclusions |
 
 Le tout est publié sur <https://fiveelements.github.io/ha-carnet-scolaire/>.
 

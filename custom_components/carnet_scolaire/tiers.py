@@ -7,8 +7,8 @@ out of :mod:`.gateway` so the gateway keeps its property: one public function pe
 Each function returns the snapshot, what it cost, and the events its change
 detector found. The cost is returned rather than inferred, which is what makes
 the per-tier contract test of §11.1 possible -- an accidental property access
-doubles the cost with nothing breaking, and that is the regression this project
-exists to prevent.
+doubles the cost with nothing breaking, and that is what this project exists
+to prevent.
 """
 
 from typing import TYPE_CHECKING, Any, Final
@@ -42,20 +42,16 @@ def _priority_for(account: PronoteAccount, tier: Tier, student_id: str) -> Prior
     which is the one dispensation annexe B already grants: ``CRITICAL`` is the
     priority the login itself uses, and the quiet-hours branch of
     ``RateLimiter.check`` exempts it. Without that, an instance restarted -- or
-    installed -- at 23:00 showed nothing at all until 06:00 and looked broken,
+    installed -- at 23:00 would show nothing at all until 06:00 and look broken,
     and the first collection is exactly the one a user is watching for.
 
-    The dispensation used to be described as self-limiting because a tier that
-    collects stops qualifying. True, and insufficient: **success was its only
-    exit**. A tier that can never succeed stays data-less for ever, so it held
-    a *standing* quiet-hours exemption. On a live instance the establishment's
-    unusable teaching-staff tab was therefore the only tier awake between 22:00
-    and 06:00 -- which made it the only tier able to accumulate failures, with
-    no other tier's success available to reset the account's back-off. One
-    broken tab became an account-wide ``backoff``, and entities it does not own
-    went stale behind it.
+    Success alone is not a sufficient exit: a tier that can never succeed would
+    hold a *standing* quiet-hours exemption, be the only tier awake between
+    22:00 and 06:00, and so the only one accumulating failures -- one broken tab
+    would become an account-wide ``backoff``, with entities it does not own
+    going stale behind it.
 
-    So the exit is now *evidence* as well as success. The argument for the
+    So the exit is *evidence* as well as success. The argument for the
     dispensation is about a first collection that works, and it cannot survive
     the demonstration that this one does not: after
     :data:`_FIRST_COLLECTION_ATTEMPTS` failures the tier drops back to its
@@ -142,13 +138,10 @@ async def _timetable(
 ) -> tuple[Snapshot[Any], int, list[DeltaEvent]]:
     """The current week and the next: two requests, every collection.
 
-    The horizon was "today and tomorrow" until next week was only asked for
-    when tomorrow crossed a week boundary -- one day in seven, Sunday. Which
-    meant that from Saturday's first collection the timetable knew nothing
-    about Monday for some forty-eight hours: an empty day in the card, no next
-    lesson, and ``binary_sensor.<eleve>_vacances`` reading ``on`` every
-    weekend. Two requests per batch instead of the 1.14 annexe B used to
-    budget, against a daily cap of 2000 and a measured 286.
+    Asking for next week every time is what lets the timetable know Monday
+    from Saturday onwards: without it the weekend shows an empty day in the
+    card, no next lesson, and ``binary_sensor.<eleve>_vacances`` reading
+    ``on``. Two requests per batch, well inside the daily cap of 2000.
     """
     result = await account.connector.async_collect(
         Tier.TIMETABLE, student_id, priority=priority

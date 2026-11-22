@@ -37,10 +37,10 @@ SECONDS_PER_MINUTE: Final = 60.0
 #: How many times a tier that produced *nothing* may be retried inside one of
 #: its own intervals. The limiter's back-off is account-wide and resets as soon
 #: as any other tier succeeds, so a tier failing for a reason of its own -- an
-#: establishment that publishes no teaching team, say -- never accrues any. It
-#: was therefore deferred by one back-off base, about thirty seconds, which is
-#: inside the five-minute master tick: a tier declaring one collection a day
-#: was attempted at every tick, 288 times, and annexe B's budget for it was
+#: establishment that publishes no teaching team, say -- never accrues any.
+#: Deferred by one back-off base, about thirty seconds, which is inside the
+#: five-minute master tick, a tier declaring one collection a day would be
+#: attempted at every tick, 288 times, and annexe B's budget for it would be
 #: wrong by that factor. Four rather than one because a transient failure
 #: deserves a retry before tomorrow.
 _RETRIES_PER_INTERVAL: Final = 4.0
@@ -144,12 +144,10 @@ class FetchScheduler:
 
         Exists because an options save reloads the config entry, and a reload
         builds a brand-new scheduler whose every ``last_collected`` is ``None``
-        -- which makes all ten tiers immediately due. Preserving
-        ``last_collected`` inside :meth:`reconfigure` was the right idea aimed
-        at the wrong seam: nothing ever called it, because Home Assistant
-        reloads rather than reconfigures. So the state is handed across the
-        reload instead, and nudging one interval no longer costs a login plus a
-        full batch every time the options page is saved (§7.3).
+        -- which makes all ten tiers immediately due. Home Assistant reloads
+        rather than reconfigures, so the state is handed across the reload, and
+        nudging one interval does not cost a login plus a full batch every time
+        the options page is saved (§7.3).
 
         Monotonic values are used as-is because a reload happens inside the same
         process, so the same monotonic origin still applies.
@@ -241,11 +239,11 @@ class FetchScheduler:
                 if overdue < 0 and not state.boosted:
                     continue
             # A boost raises the tier by one rank, floored at the rank just
-            # below CRITICAL. Giving it -1 outranked the session tier, so a
-            # refresh button on `history` (6 requests, LOW) was served first,
-            # drained the bucket and the `max_wait` allowance, and `timetable`
-            # -- HIGH -- was then deferred: the exact inverse of the sacrifice
-            # order annexe B §2.4 lays down. The button asks for a priority
+            # below CRITICAL. Giving it -1 would outrank the session tier, so a
+            # refresh button on `history` (6 requests, LOW) would be served
+            # first, drain the bucket and the `max_wait` allowance, and defer
+            # `timetable` -- HIGH: the exact inverse of the sacrifice order
+            # annexe B §2.4 lays down. The button asks for a priority
             # pass, not for supremacy.
             rank = PRIORITY_RANK[plan.priority]
             if state.boosted:
@@ -258,16 +256,14 @@ class FetchScheduler:
     def next_due_in(self) -> float | None:
         """Seconds until the earliest deadline; **negative when overdue**.
 
-        ``None`` means there is no enabled tier at all -- not "nothing is due",
-        which is what the previous wording claimed.
+        ``None`` means there is no enabled tier at all -- not "nothing is due".
 
-        The sign matters, and it used to be clamped to zero. Feeding
-        ``sensor.<account>_prochaine_collecte`` a clamped value made it publish
-        *the instant of its own last refresh* as the next collection, and that
-        entity is refreshed by a collection: a tier that was due and failing
-        left the timestamp frozen forty minutes in the past with nothing
-        explaining why. The card was right to call it absurd -- it was reading
-        "now" written down some time ago.
+        The sign matters, so the value is not clamped to zero. Fed a clamped
+        value, ``sensor.<account>_prochaine_collecte`` would publish *the
+        instant of its own last refresh* as the next collection, and that
+        entity is refreshed by a collection: a tier that is due and failing
+        would leave the timestamp frozen in the past with nothing explaining
+        why.
 
         Unclamped, the value is a **deadline** and not a countdown, so it does
         not depend on when it was computed. A past timestamp then means exactly
@@ -354,7 +350,7 @@ class FetchScheduler:
         its back-off counts the account's consecutive failures, which any other
         tier succeeding resets.
 
-        Without the floor, a tier collected once a day was retried at every
+        Without the floor, a tier collected once a day would be retried at every
         five-minute tick for as long as it kept failing. See
         :data:`_RETRIES_PER_INTERVAL`.
         """
@@ -378,18 +374,15 @@ class FetchScheduler:
         **At most one boost per tier per interval**, and that ceiling is the
         substance of this method rather than a refinement of it. A boosted tier
         is due regardless of its deadline -- that is what makes the button do
-        something at all -- so without a ceiling here, each press re-armed the
-        dispensation and each press bought another collection. Ten presses on
-        ``history``, which costs six requests per child, were 120 requests
+        something at all -- so without a ceiling here, each press would re-arm
+        the dispensation and buy another collection. Ten presses on
+        ``history``, which costs six requests per child, would be 120 requests
         against a server whose one sanction applies to an IP address; §5.1 says
         ten presses cost one batch, and this is the line that makes that true.
 
-        It was previously true only by accident: the ten collections used to
-        overlap, so all but the first hit the account's "a batch is already
-        running" guard and skipped. That is a property of the event loop, not of
-        this code, and it stopped holding between two Home Assistant releases
-        with nothing changed here -- measured at 2 requests on 2026.2 and 20 on
-        2026.8 for the same ten presses.
+        The account's "a batch is already running" guard is not enough on its
+        own: whether ten presses overlap is a property of the event loop, not of
+        this code, and cannot be relied on.
 
         A press whose boost is refused is not an error: the tier keeps its
         deadline and will be collected on time. Pressing again in the next
@@ -494,7 +487,7 @@ class FetchScheduler:
         not a nicety: with quiet hours on, which is the default, an eight-hour
         night is longer than ``stale_after`` times the interval of every fast
         tier, so without it the timetable, homework, news and discussion
-        entities of every installation went ``unavailable`` at 06:00 each
+        entities of every installation would go ``unavailable`` at 06:00 each
         morning. Reporting "I no longer know" because the integration was
         asleep on purpose is the one answer §2.5 rules out.
         """
@@ -504,25 +497,22 @@ class FetchScheduler:
             return True
         if age is None:
             # No recorded collection is **not** "too old": there is no age to
-            # exceed. Answering `True` here cost a live instance its whole
-            # dashboard, because of an ordering that is easy to miss.
+            # exceed. Answering `True` here would empty the dashboard, because
+            # of an ordering that is easy to miss.
             #
             # `_async_collect` publishes each student's snapshot and only then
             # calls `mark_collected`. Publishing is what notifies the entities,
             # so at the instant they are told their data has arrived, the tier
-            # still has no `last_collected` -- and every one of them evaluated
-            # `available` as False and wrote itself `unavailable`, on the very
-            # push that delivered the snapshot. `mark_collected` then set the
-            # age a microsecond later with nothing left to re-render.
+            # still has no `last_collected` -- and with `True` every one of them
+            # would write itself `unavailable` on the very push that delivered
+            # the snapshot, with nothing left to re-render once `mark_collected`
+            # sets the age a microsecond later.
             #
-            # What made it look like a different bug on every tier is which
-            # entities recover. Those in `CLOCK_DRIVEN_KEYS` schedule their own
-            # re-evaluation and repaired themselves within the hour, so
-            # `timetable` and `homework` appeared to work; `marks`, `news`,
-            # `menus`, `discussions`, `attendance` and `evaluations` have no
-            # such timer and stayed `unavailable` with their data present --
-            # until the tier's next interval, which is a full day for `menus`,
-            # and until 06:00 with quiet hours on.
+            # Entities in `CLOCK_DRIVEN_KEYS` schedule their own re-evaluation
+            # and would recover within the hour; `marks`, `news`, `menus`,
+            # `discussions`, `attendance` and `evaluations` have no such timer
+            # and would stay `unavailable` with their data present until the
+            # tier's next interval -- a full day for `menus`.
             #
             # Returning False cannot hide a missing snapshot, which is the
             # thing a caller might fear: `PronoteEntity.available` asks

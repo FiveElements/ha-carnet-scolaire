@@ -73,13 +73,11 @@ class PronoteEntity(CoordinatorEntity["PronoteTierCoordinator"]):
         # entity to the other entry's device and silently breaking every
         # automation that referenced it.
         #
-        # The middle part is `account.stable_key(...)` and **not** `student.id`.
-        # That was the defect: `student.id` is PRONOTE's `46#<signature>`, and
-        # the signature is not stable between sessions. When it rotated, every
-        # `unique_id` here moved with it, so Home Assistant saw a new child --
-        # a second device, a second full set of entities, and the previous set
-        # orphaned in the registry for ever, with every dashboard and
-        # automation still pointing at the dead one. See `child_keys.py`.
+        # The middle part is `account.stable_key(...)` and **not** `student.id`:
+        # `student.id` is PRONOTE's `46#<signature>`, which is not stable
+        # between sessions, and a `unique_id` moving with it would make Home
+        # Assistant see a new child and orphan the previous entities. See
+        # `child_keys.py`.
         self._child_key = account.stable_key(student.id)
         self._attr_unique_id = f"{account.entry.entry_id}_{self._child_key}_{key}"
         self._attr_translation_key = key
@@ -91,11 +89,9 @@ class PronoteEntity(CoordinatorEntity["PronoteTierCoordinator"]):
 
         Not the object the entity was built with: PRONOTE renames a child at
         every login, and an entity that kept the identifier it was created
-        under read its snapshots from a key nothing published to any more --
-        its data froze at the last collection before the re-login -- and
-        every write it placed asked for a child the session no longer had.
-        On a live instance that was the first homework tick after the list
-        became writable: "no child with id".
+        under would read its snapshots from a key nothing publishes to any more
+        -- its data frozen at the last collection before the re-login -- and
+        every write it placed would ask for a child the session no longer has.
         """
         current = self.account.student_for_key(self._child_key)
         if current is not None:
@@ -153,10 +149,9 @@ class PronoteAccountEntity(CoordinatorEntity["PronoteTierCoordinator"]):
 
     _attr_has_entity_name = True
     # A sibling of `PronoteEntity`, not a subclass, so this has to be repeated
-    # rather than inherited -- and it was not. The diagnostic sensors carry
-    # `by_tier` (a mapping) and `tiers_due` (a list), which the recorder was
-    # storing on every state write despite both being named in
-    # `UNRECORDED_LIST_ATTRIBUTES`.
+    # rather than inherited. The diagnostic sensors carry `by_tier` (a mapping)
+    # and `tiers_due` (a list), which the recorder would otherwise store on
+    # every state write.
     _unrecorded_attributes = frozenset({*UNRECORDED_LIST_ATTRIBUTES, "fetched_at"})
 
     def __init__(
@@ -183,13 +178,11 @@ class LocallyPolledMixin:
     ``_attr_should_poll = True`` on a :class:`CoordinatorEntity` does nothing.
     ``BaseCoordinatorEntity`` declares ``should_poll`` as a ``cached_property``
     returning ``False``, and a property beats the ``_attr_`` fallback it shadows
-    -- so the attribute was inert, and the diagnostic entities carrying it never
-    polled at all. They were refreshed only when the session tier happened to
-    collect, which is once every session cadence and not at all while a tier is
-    failing. That is how ``sensor.<account>_prochaine_collecte`` came to publish
-    an instant forty minutes old, and how the "throttled" flag -- the entity
-    whose whole job is to explain a quiet integration (§6.6) -- could stay ``on``
-    after the limiter had recovered.
+    -- so the attribute alone is inert. A diagnostic entity that does not poll
+    is refreshed only when the session tier happens to collect, so
+    ``sensor.<account>_prochaine_collecte`` would publish a stale instant and
+    the "throttled" flag -- the entity whose whole job is to explain a quiet
+    integration (§6.6) -- could stay ``on`` after the limiter had recovered.
 
     Two overrides are needed together and neither works alone. ``should_poll``
     has to be a property, and ``async_update`` has to stop being
@@ -255,18 +248,16 @@ def _student_device(account: PronoteAccount, student: Student) -> DeviceInfo:
     cancelled" has to be asked about *somebody*.
 
     The parent is named by ``via_device_id`` -- a registry id -- and not by the
-    ``via_device`` identifier tuple this used to pass. That is not a style
-    change: on Home Assistant 2026.9 the tuple form is rejected outright, and
+    ``via_device`` identifier tuple: Home Assistant rejects the tuple form, and
     because the platforms build their devices from this mapping, the rejection
-    surfaced as ``RuntimeError`` while *adding each entity*. Six of the seven
-    platforms failed -- every entity attached to a child -- and only the account
-    entities, which declare no parent, survived. A device link is therefore
-    load-bearing for the whole integration, which is why it is spelled out here.
+    surfaces as ``RuntimeError`` while *adding each entity* -- every entity
+    attached to a child. A device link is therefore load-bearing for the whole
+    integration, which is why it is spelled out here.
     """
     # The minted key, for the same reason as the entity `unique_id`: keyed on
-    # `student.id` this device was re-created from scratch every time PRONOTE
-    # rotated the child's resource signature, stranding the previous one and
-    # everything attached to it.
+    # `student.id` this device would be re-created from scratch every time
+    # PRONOTE rotates the child's resource signature, stranding the previous one
+    # and everything attached to it.
     info = DeviceInfo(
         identifiers={
             (DOMAIN, f"{account.entry.entry_id}_{account.stable_key(student.id)}")
@@ -308,11 +299,10 @@ def async_add_per_student(
 ) -> None:
     """Create a platform's entities for every child, now and later.
 
-    The seven platforms all used to iterate ``account.students`` once inside
-    ``async_setup_entry`` and let ``async_add_entities`` go out of scope, so a
-    pupil enrolled on a parent account mid-year had no entities until somebody
-    reloaded the entry -- and reloading drops every snapshot the account
-    holds. This keeps the callback alive and re-runs the difference whenever
+    Iterating ``account.students`` once inside ``async_setup_entry`` would
+    leave a pupil enrolled on a parent account mid-year with no entities until
+    somebody reloaded the entry -- and reloading drops every snapshot the
+    account holds. This keeps the callback alive and re-runs the difference whenever
     the ``SESSION`` coordinator publishes, which is what
     ``PronoteAccount._async_load_session_facts`` does for a newcomer.
 

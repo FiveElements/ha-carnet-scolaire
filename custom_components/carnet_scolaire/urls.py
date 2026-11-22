@@ -8,8 +8,8 @@ fragment of what the user pasted.
 What the user pastes, on the other hand, is very often not that. Establishments
 mail out deep links, ENT portals bounce back through single-sign-on with a
 ticket in the URL, and a parent copying from the browser's address bar after
-logging in copies whatever session parameter is sitting there. Keeping that
-string meant a session parameter could travel into the config entry, from there
+logging in copies whatever session parameter is sitting there. Kept, that
+string would let a session parameter travel into the config entry, from there
 into a repair issue's placeholders (which are written to ``.storage`` and
 rendered in the Repairs panel), and from there into the diagnostics download --
 the file users are asked to attach to a public issue.

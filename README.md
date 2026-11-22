@@ -48,6 +48,7 @@
 - Punitions
 - Bulletins
 - Actualités
+- Agenda de l'établissement
 - Discussions
 - Menus de cantine
 - Informations sur le personnel
@@ -60,10 +61,10 @@
 
  L'intégration fournit :
 
- - 14 déclencheurs d'appareil
+ - 16 déclencheurs d'appareil
 - 10 conditions
 - 4 actions
-- [8 blueprints prêts à l'emploi](https://fiveelements.github.io/ha-carnet-scolaire/BLUEPRINTS/)
+- [9 blueprints prêts à l'emploi](https://fiveelements.github.io/ha-carnet-scolaire/BLUEPRINTS/)
 - des blueprints disponibles en français et en anglais
 
  Aucune programmation en YAML n'est nécessaire pour les automatisations courantes.
@@ -97,7 +98,7 @@
 - compteurs de connexion séparés
 - cadence configurable des différentes collectes
 
- Le budget par défaut est d'environ **180 requêtes par jour et par enfant**.
+ Le budget par défaut est d'environ **200 requêtes par jour et par enfant**.
 
  L'intégration estime également le coût des réglages avant leur application afin de rendre leur impact visible.
 
@@ -132,7 +133,7 @@ décrit les trois modes et dit lequel choisir.
 3. Ajoutez `https://github.com/FiveElements/ha-carnet-scolaire`
 4. Sélectionnez la catégorie **Intégration**, puis **Ajouter**
 5. Installez **Carnet scolaire**, puis redémarrez Home Assistant
-6. **Paramètres → Appareils et services → Ajouter une intégration**, cherchez **PRONOTE**
+6. **Paramètres → Appareils et services → Ajouter une intégration**, cherchez **Carnet scolaire**
 
 </details>
 
@@ -210,6 +211,7 @@ Home Assistant 2026.11.0 ou supérieur
  - l'URL iCal de l'emploi du temps
 - l'identité de l'élève
 - l'emploi du temps au format PDF
+- l'adresse d'une pièce jointe de devoir
 - l'état du limiteur de requêtes
 
  Le [catalogue des entités et des services](https://fiveelements.github.io/ha-carnet-scolaire/annexe-a-entites/) donne, pour chaque champ publié, d'où il vient.
@@ -295,7 +297,7 @@ le fichier de diagnostic est au [§ 11 du guide](https://fiveelements.github.io/
 - [Catalogue des entités et services](https://fiveelements.github.io/ha-carnet-scolaire/annexe-a-entites/) — l'origine de chaque champ publié
 - [Configuration du limiteur de requêtes](https://fiveelements.github.io/ha-carnet-scolaire/annexe-b-rate-limit/) — couches, options, arithmétique du budget
 - [Création de tableaux de bord](https://fiveelements.github.io/ha-carnet-scolaire/AFFICHER-LES-DONNEES/)
-- [Blueprints](https://fiveelements.github.io/ha-carnet-scolaire/BLUEPRINTS/) — chaque réglage des huit blueprints, et le piège que chacun évite
+- [Blueprints](https://fiveelements.github.io/ha-carnet-scolaire/BLUEPRINTS/) — chaque réglage des neuf blueprints, et le piège que chacun évite
 - [Exemples d'utilisation](https://fiveelements.github.io/ha-carnet-scolaire/EXEMPLES-BLUEPRINTS/) — une automatisation complète et deux variantes d'action par blueprint
 - [Documentation technique pour les contributeurs](CONTRIBUTING.md) — et la [spécification](https://fiveelements.github.io/ha-carnet-scolaire/SPECIFICATION/)
 

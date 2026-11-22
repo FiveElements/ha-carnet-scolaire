@@ -19,15 +19,15 @@ Only the last one really hurts, and it does not target calls -- it targets
 *failed logins*. A limiter counting only requests would miss its target, which
 is why authentication has its own accounting here.
 
-Five properties are load-bearing, and each one exists because its absence was a
-real defect found by review rather than a hypothetical:
+Five properties are load-bearing, and each one guards against a concrete
+defect rather than a hypothetical:
 
 * **admission, not retrospection.** Spacing and the token bucket are charged
   *before* the request leaves, inside an admission lock. Charged afterwards,
-  two callers -- a scheduled batch and a service invoked during it -- read the
-  same ``_last_call``, computed the same wait, slept it together and fired in
-  the same millisecond: the desynchronised request counter of §1's first row,
-  produced by the very layer meant to prevent it.
+  two callers -- a scheduled batch and a service invoked during it -- would
+  read the same ``_last_call``, compute the same wait, sleep it together and
+  fire in the same millisecond: the desynchronised request counter of §1's
+  first row, produced by the very layer meant to prevent it.
 * **authentication is subject to the layers too.** A login costs five to seven
   HTTP requests, so it goes through the same admission as any call. It is only
   exempt from *shedding*, never from spacing, from the bucket, or from the
@@ -38,11 +38,11 @@ real defect found by review rather than a hypothetical:
   of 100 crosses 2.0 on the first day -- and reaching it refuses the login that
   every other tier depends on.
 * **the cost asked of the bucket is the cost charged.** Asking for one token
-  while charging six let ``history`` drain four times the burst capacity per
-  hour with no wait, which removes exactly the smoothing §2.2 exists for.
+  while charging six would let ``history`` drain four times the burst capacity
+  per hour with no wait, which removes exactly the smoothing §2.2 exists for.
 * **every login attempt counts, successful or not.** Counting only successes
-  left a failing account attempting without bound while the counter meant to
-  stop it stayed at zero.
+  would leave a failing account attempting without bound while the counter
+  meant to stop it stayed at zero.
 
 This module knows neither PRONOTE nor Home Assistant. It takes injectable
 clocks and returns decisions, which is what makes it testable to 100 % with no
@@ -120,11 +120,11 @@ REQUESTS_PER_LOGIN: Final = 5
 #:
 #: Its own key, and deliberately not ``str(Tier.SESSION)``. The session *tier*
 #: costs nothing -- periods, class and establishment come free with the login
-#: (annexe A §2) -- so booking the login's five to seven requests there made the
-#: one free tier read as the most expensive thing the integration does, on a
-#: diagnostic attribute users are told to look at when tuning the budget. It
-#: also collided with a real tier name, so a session tier that ever did place a
-#: request would have been indistinguishable from the login that preceded it.
+#: (annexe A §2) -- so booking the login's five to seven requests there would
+#: make the one free tier read as the most expensive thing the integration does,
+#: on a diagnostic attribute users are told to look at when tuning the budget.
+#: It would also collide with a real tier name, so a session tier that ever did
+#: place a request would be indistinguishable from the login that preceded it.
 #:
 #: Not a tier, so it is never a shedding candidate and never appears in
 #: `TIER_PRIORITY`: a login is admitted by `may_login`, which has no priority
@@ -173,8 +173,7 @@ async def _asyncio_sleep(seconds: float) -> None:
 class LoginOutcome(StrEnum):
     """How a login attempt ended, classified on the *right* exception.
 
-    This is the single most important thing to get right in this module, and
-    specification v1 did not name the exception.
+    This is the single most important thing to get right in this module.
 
     A wrong password does **not** raise ``PronoteAPIError``: the challenge
     decryption fails and ``_login`` raises ``CryptoError``, or ``_login``
@@ -451,8 +450,9 @@ class RateLimiter:
     def _roll_day(self) -> None:
         """Reset the daily counters when the local date moves *forward*.
 
-        Only forward. Resetting on any date change re-granted the whole day's
-        budget *and* the login cap whenever the host's clock stepped backwards
+        Only forward. Resetting on any date change would re-grant the whole
+        day's budget *and* the login cap whenever the host's clock stepped
+        backwards
         -- an NTP correction, or a machine whose clock was wrong at boot. Going
         backwards adopts the new date without clearing anything.
 
@@ -597,7 +597,7 @@ class RateLimiter:
 
         Annexe B §8: entering quiet hours *during* a batch lets that batch
         finish and postpones the next one. Without a batch boundary the
-        remaining tiers of a batch straddling 22:00 were refused halfway
+        remaining tiers of a batch straddling 22:00 would be refused halfway
         through, which is neither of the two documented behaviours.
         """
         self._batch_started = self._clock()
@@ -654,10 +654,11 @@ class RateLimiter:
     def _maybe_clear_throttled(self) -> None:
         """Clear the throttled flag only if nothing is being postponed.
 
-        Clearing it unconditionally on every success made the daily cap silent:
-        one successful ``HIGH`` call reset the flag while ``LOW`` and ``NORMAL``
-        tiers were still being dropped, so ``binary_sensor.<account>_bride``
-        flapped back to ``off`` every quarter of an hour. Annexe B §2.3 is
+        Clearing it unconditionally on every success would make the daily cap
+        silent: one successful ``HIGH`` call would reset the flag while ``LOW``
+        and ``NORMAL`` tiers were still being dropped, so
+        ``binary_sensor.<account>_bride`` would flap back to ``off`` every
+        quarter of an hour. Annexe B §2.3 is
         explicit that the cap is never silent, because data that ages with no
         error in the log is the hardest symptom there is to diagnose.
         """
@@ -680,7 +681,7 @@ class RateLimiter:
         if self._consecutive_failures <= 0:
             return 0.0
         # The exponent is clamped before the shift: computing 2**1024 first
-        # raises OverflowError, which turned a deep backoff into a crash.
+        # raises OverflowError, which would turn a deep backoff into a crash.
         exponent = min(self._consecutive_failures - 1, _MAX_BACKOFF_EXPONENT)
         nominal = min(
             self._config.backoff_max, self._config.backoff_base * 2.0**exponent
@@ -708,11 +709,9 @@ class RateLimiter:
     def _prune_failed_logins(self) -> None:
         """Drop failures strictly older than an hour.
 
-        Strictly. Keeping a failure for exactly ``3600`` seconds made a
+        Strictly. Keeping a failure for exactly ``3600`` seconds would make a
         ``may_login()`` landing on the instant a hold expired restart that
-        hold, doubling it -- and made any test advancing a simulated clock by
-        exactly ``credentials_hold`` fail for a reason unrelated to what it
-        was testing.
+        hold, doubling it.
         """
         cutoff = self._clock() - SECONDS_PER_HOUR
         self._failed_logins = [at for at in self._failed_logins if at > cutoff]
@@ -830,7 +829,7 @@ class RateLimiter:
             # A hold, not merely a flag. PRONOTE is waiting for a PIN this
             # integration deliberately does not store (§8.1), so no amount of
             # retrying can succeed -- and each retry costs five to seven
-            # requests. Left unbounded this produced thousands of login
+            # requests. Left unbounded this would produce thousands of login
             # attempts a day, which is the one gesture that gets an address
             # suspended. `reset_after_reauth()` lifts it the moment a human
             # supplies the PIN, which is the only thing that can.
@@ -971,8 +970,8 @@ class RateLimiter:
         """Charge ``count`` HTTP requests to ``tier``.
 
         The bucket is allowed to go **negative**. Clamping the debt at zero
-        forgave every overdraft, so a burst of expensive calls cost nothing to
-        repay and the hourly rate stopped meaning anything.
+        would forgive every overdraft, so a burst of expensive calls would cost
+        nothing to repay and the hourly rate would mean nothing.
         """
         self._roll_day()
         self._calls_today += count
@@ -1079,20 +1078,20 @@ class RateLimiter:
             # Charged here, inside the lock and *before* the request goes out,
             # exactly as `call()` does -- and for the same two reasons.
             #
-            # Under the lock, because charging afterwards left the spacing
-            # stamp, the bucket and `logins_today` untouched for the whole
-            # duration of a real handshake: any second caller in that window
-            # read a full bucket, a spacing debt of zero and a login count that
-            # only the first caller would ever write. The invariant this module
-            # exists to provide was being held by `SessionManager._gate`, a
-            # lock in a different module, which is not the same promise.
+            # Under the lock, because charging afterwards would leave the
+            # spacing stamp, the bucket and `logins_today` untouched for the
+            # whole duration of a real handshake: any second caller in that
+            # window would read a full bucket, a spacing debt of zero and a
+            # login count that only the first caller would ever write. The
+            # invariant this module exists to provide must not rest on
+            # `SessionManager._gate`, a lock in a different module.
             #
             # Before the request, because a cancellation during the handshake
             # -- an entry unloaded, an options save, a shutdown -- raises
             # `CancelledError` past every `except` in `session.py`, so
-            # `note_login` was never reached while the worker thread completed
-            # the login anyway: five to seven requests that reached the school
-            # and appeared in no counter.
+            # `note_login` is never reached while the worker thread completes
+            # the login anyway: five to seven requests that reach the school
+            # and would appear in no counter.
             self._commit_login(cost)
 
         return await fn()
@@ -1212,6 +1211,6 @@ def _elapsed(start: datetime, end: datetime) -> float:
     Both are converted to UTC first. Subtracting two aware datetimes that share
     the *same* ``tzinfo`` object makes CPython skip the offset lookup and return
     the wall-clock difference, so on the March transition "01:30 until 06:00"
-    came out as four and a half hours where three and a half actually elapse.
+    would come out as four and a half hours where three and a half elapse.
     """
     return (end.astimezone(UTC) - start.astimezone(UTC)).total_seconds()

@@ -11,9 +11,9 @@ Two of them, both from SPECIFICATION.md:
 * §11.1 -- on a release, ``version`` must equal the tag. A HACS integration
   whose manifest diverges from its tag installs once and never updates again.
 
-And one that comes from an outage rather than from the specification: the
-``pronotepy`` pin is declared twice, here and in ``requirements_test.txt``, and
-nothing made the two agree. ``manifest.json`` is what Home Assistant installs
+And one that is not in the specification: the ``pronotepy`` pin is declared
+twice, here and in ``requirements_test.txt``, and the two must agree.
+``manifest.json`` is what Home Assistant installs
 on a user's instance; ``requirements_test.txt`` is what the suite runs against.
 A divergence therefore means CI is green against a library nobody ships --
 which matters precisely because ``hardened_client.py`` corrects

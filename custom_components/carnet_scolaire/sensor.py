@@ -91,13 +91,9 @@ PARALLEL_UPDATES = 0
 #: 30 seconds. The polled entities here are diagnostic readings of the limiter,
 #: the scheduler and the session, all held in memory: polling them places no
 #: request, which is why a sub-minute cadence is affordable on this platform and
-#: nowhere else.
-#:
-#: This used to claim it was "the cadence these entities already ran at", and
-#: that was wrong: nothing on this platform polled, because ``should_poll`` on a
-#: coordinator entity is a property and the ``_attr_`` beside it was never
-#: consulted. See :class:`.entity.LocallyPolledMixin`, which is what makes the
-#: interval mean anything.
+#: nowhere else. :class:`.entity.LocallyPolledMixin` is what makes the interval
+#: mean anything: ``should_poll`` on a coordinator entity is a property, so the
+#: ``_attr_`` beside it is never consulted.
 SCAN_INTERVAL = timedelta(seconds=30)
 
 type StateValue = str | int | float | datetime | date | None
@@ -315,9 +311,9 @@ def _midday_break(
     included, that satisfies the rule itself. That is the day a cancellation
     brings the morning forward: 08:30 to 10:30, the 10:30 lesson cancelled
     because its teacher is absent, lunch, 14:00. The gap the child actually
-    has starts at 10:30, before the window, and was rejected as "not a lunch
-    break" -- so the lunch homecoming was never announced, on a live
-    instance, on exactly the day it came early. The scheduled grid is what
+    has starts at 10:30, before the window, and would be rejected as "not a
+    lunch break" -- so the lunch homecoming would go unannounced on exactly
+    the day it comes early. The scheduled grid is what
     tells that day apart from one morning lesson followed by a late
     afternoon: there, the planned gap starts at 10:00 as well, and still
     does not count.
@@ -409,8 +405,8 @@ def _morning_end_attributes(
             and lesson.start < after.start
         ),
         # As on every other timestamp taken from a lesson end: pronotepy
-        # infers it when `DateDuCoursFin` is absent, and on this
-        # establishment that is every lesson (§4.1).
+        # infers it when `DateDuCoursFin` is absent, and on some
+        # establishments that is every lesson (§4.1).
         "end_inferred": before.end_inferred,
         "resumes_at": after.start.isoformat(),
         "break_minutes": int((after.start - before.end).total_seconds() // 60),
@@ -541,9 +537,7 @@ def _lesson_dict(lesson: Lesson) -> dict[str, Any]:
         # capitals, with accents, and an establishment can rename it mid-year.
         "subject_id": lesson.subject_id,
         # The colour the establishment gives the subject, exactly as the server
-        # sent it, or None. Decoded by the gateway since day one and published
-        # nowhere until now, which is why a card asking for it always got
-        # nothing -- and why every dashboard needed a hand-written colour table
+        # sent it, or None, so a dashboard needs no hand-written colour table
         # to show what PRONOTE already knows.
         #
         # Published raw on purpose: no default, no colour derived from the name,
@@ -585,9 +579,9 @@ def _lessons_tomorrow_attributes(
 def _lessons_week_count(facts: TimetableFacts, _account: PronoteAccount) -> StateValue:
     """How many lessons in the fetched window.
 
-    Fresh at the timetable tier's cadence rather than six hours behind: folding
-    the week tier into the timetable tier cost nothing, because
-    ``Client.lessons()`` bills by the week either way (§5.2).
+    Fresh at the timetable tier's cadence: the timetable tier covers the week
+    at no extra cost, because ``Client.lessons()`` bills by the week either
+    way (§5.2).
     """
     return len(facts.lessons)
 
@@ -670,10 +664,9 @@ def _homework_dict(item: Homework) -> dict[str, Any]:
         # upstream saying the server always sends it on a homework entry -- so
         # this is the tier where a colour is most likely to be there.
         "background_color": item.background_color,
-        # `attachments` keeps carrying plain names, unchanged, because a
-        # template doing `| join(', ')` on it must go on working -- the shape
-        # is older than any of the others. Every attachment is named here,
-        # openable or not.
+        # `attachments` carries plain names, because a template doing
+        # `| join(', ')` on it must go on working. Every attachment is named
+        # here, openable or not.
         "attachments": [attachment.name for attachment in item.attachments],
         # Which documents can be *opened*, and how. No entry carries an address
         # that authorises anything: a link's is a third party's, and a file
@@ -685,15 +678,14 @@ def _homework_dict(item: Homework) -> dict[str, Any]:
             for attachment in item.attachments
             if attachment.kind is not AttachmentKind.OPAQUE
         ],
-        # Deprecated, kept for one release so a card already installed keeps
-        # opening links while it updates, then removed.
+        # Deprecated, kept so a card already installed keeps opening links
+        # while it updates; `attachment_refs` replaces it.
         #
-        # It no longer carries files. It used to give each one a signed path,
+        # Links only, never files: a file's address would be a signed path,
         # and a signed path is a bearer token -- readable by every account in
         # `/api/states`, kept by automation traces in `.storage`, shown in the
-        # more-info dialog. Keeping them "for one more release" would have been
-        # keeping open the exact hole this release closes, so a card that has
-        # not updated loses file opening, not the other way round.
+        # more-info dialog. A card that has not updated loses file opening
+        # rather than this attribute publishing one.
         "attachment_links": [
             {"name": attachment.name, "url": attachment.url}
             for attachment in item.attachments
@@ -1887,36 +1879,23 @@ _HISTORY_EXTRACTORS: Final[
 class PronoteSensor(PronoteEntity, SensorEntity):
     """A sensor whose state is derived from its tier's snapshot."""
 
-    #: There is deliberately **no** ``_unrecorded_attributes`` here, and that
-    #: absence is the fix for a measured leak rather than an oversight.
-    #:
-    #: A file's ``url`` inside ``items`` is a signed address, and a signed
-    #: address is a **bearer token**: anyone holding it fetches that document
-    #: for twelve hours with no credentials. Written to the history database on
-    #: every collection it becomes durable, and a database is copied into every
-    #: backup and pasted into the occasional bug report. `PronoteEntity`
-    #: already excludes ``items`` -- and now ``attachment_links`` --  through
-    #: `UNRECORDED_LIST_ATTRIBUTES`, so inheriting is all this class has to do.
+    #: There is deliberately **no** ``_unrecorded_attributes`` here.
+    #: `PronoteEntity` already excludes every list attribute -- ``items``,
+    #: ``lessons``, ``subjects``, the menu fields, ``messages``, ``address``,
+    #: ``attachment_links`` -- through `UNRECORDED_LIST_ATTRIBUTES`, so
+    #: inheriting is all this class has to do.
     #:
     #: Declaring the name here **removes** that protection. Home Assistant does
     #: not union the sets up a hierarchy: ``Entity.__init_subclass__`` computes
     #: ``_entity_component_unrecorded_attributes | cls._unrecorded_attributes``,
     #: and the right-hand side resolves by ordinary attribute lookup, so a
-    #: subclass declaration shadows the parent's instead of extending it.
-    #: v0.0.22 added ``frozenset({"attachment_links"})`` here believing it
-    #: additive; the effect was to hand the recorder every list attribute of
-    #: every sensor -- ``items``, ``lessons``, ``subjects``, the menu fields,
-    #: ``messages``, ``address`` -- plus ``fetched_at``. The signed addresses
-    #: were then measured in the history of a live instance, which is how the
-    #: mistake surfaced; the database bloat came free with it.
+    #: subclass declaration shadows the parent's instead of extending it and
+    #: hands the recorder every list attribute of every sensor.
     #:
-    #: Two lessons worth keeping. The recorder filter is **top-level only**
+    #: The recorder filter is **top-level only**
     #: (``recorder.db_schema.shared_attrs_bytes_from_event`` is a comprehension
-    #: over ``state.attributes.items()``), so a nested address is covered only
-    #: by excluding the key that contains it. And the diagnostics download was
-    #: once argued safe because "these values are never attributes" (see
-    #: `diagnostics.py`) -- true until this attribute existed. A property of an
-    #: architecture stops holding when the architecture changes.
+    #: over ``state.attributes.items()``), so a nested value is covered only by
+    #: excluding the key that contains it.
 
     entity_description: PronoteSensorDescription
 
@@ -2221,7 +2200,7 @@ class PronoteLimiterSensor(LocallyPolledMixin, PronoteAccountEntity, SensorEntit
                 # refresh press land?". A button that can only say "the
                 # request was sent" is a button somebody presses twice, and
                 # pressing twice is not free on a tier that is failing.
-                # Pressing has three outcomes and they were indistinguishable
+                # Pressing has three outcomes, otherwise indistinguishable
                 # from outside the integration: the ceiling refused it because
                 # one was already served inside this interval, it is armed and
                 # waiting for the next heartbeat (`boosted`), or it has been
@@ -2242,8 +2221,6 @@ class PronoteLimiterSensor(LocallyPolledMixin, PronoteAccountEntity, SensorEntit
                 # `deferrals`: those answer "did the limiter refuse", which is
                 # a different question, and a boost on a tier the limiter is
                 # holding moves `deferrals` without placing a single request.
-                # Conflating the two cost a peer session a wrong argument and
-                # cost this one a wrong sentence, on the same morning.
                 remaining = self.account.scheduler.next_due_in()
                 late = int(-remaining) if remaining is not None and remaining < 0 else 0
                 records = self.account.state.records

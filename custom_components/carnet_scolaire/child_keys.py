@@ -1,13 +1,11 @@
 """Stable identities for the children of one account.
 
 PRONOTE writes a child's resource identifier as ``46#<signature>``, and that
-signature is **not stable between sessions**. Three distinct values were
-observed for a single pupil on a single account in one day. Because an
-entity's ``unique_id`` embedded that identifier, a rotation was
-indistinguishable from the arrival of a new child: a second device appeared,
-a full set of entities was created against it, and the previous set was
-orphaned in the registry for ever -- every dashboard, automation and helper
-pointing at it dead, with nothing logged anywhere.
+signature is **not stable between sessions**: it can change several times a
+day for the same pupil. A ``unique_id`` embedding it would make a rotation
+indistinguishable from the arrival of a new child -- a second device, a full
+set of new entities, and the previous set orphaned in the registry with every
+dashboard, automation and helper pointing at it dead.
 
 So the identifier the rest of the integration uses is one **we mint**, and the
 mapping from PRONOTE's rotating identifier to ours is stored in the config
@@ -87,7 +85,7 @@ def pair(
     ``announced`` is ``(resource_id, name)`` in the order PRONOTE gave them.
     Returns the mapping the entities need, the table to store, and a list of
     human-readable notes about anything that moved -- so a rotation is logged
-    once, plainly, instead of being absorbed in silence as it was before.
+    once, plainly, instead of being absorbed in silence.
 
     Matching is by resource identifier first, because while it holds it is
     exact. Only children it does not place are then matched by name, and only
@@ -157,8 +155,8 @@ def pair(
 def is_legacy_selection(selection: Sequence[str]) -> bool:
     """Whether a stored selection still names PRONOTE identifiers.
 
-    The followed children used to be stored as the resource identifiers
-    PRONOTE announced at configuration time -- the very values that rotate. A
+    A selection in the legacy form stores the resource identifiers PRONOTE
+    announced at configuration time -- the very values that rotate. A
     selection holding any value that is not one of our keys is in that form,
     and :func:`followed` translates it once.
     """
@@ -190,12 +188,10 @@ def followed(
     replaced it, or directly through the roster when nothing has rotated since
     it was written. In that form a child absent from the selection was
     declined in the flow, so a key minted now is *not* followed. The one
-    exception is a selection of which nothing can be placed at all: the list
-    had gone stale, the account was already following every child to recover,
-    and it keeps doing so. That is an entry whose list grew by one identifier
-    per login; its choice cannot be read back out of identifiers that no
-    longer exist, and following what it already followed is the only answer
-    that changes nothing the user can see.
+    exception is a selection of which nothing can be placed at all: its choice
+    cannot be read back out of identifiers that no longer exist, so every
+    child is followed -- the only answer that changes nothing the user can
+    see for an entry already following everyone.
     """
     every = [record[CHILD_KEY] for record in table]
     if not selection:

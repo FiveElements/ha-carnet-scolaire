@@ -16,10 +16,6 @@ copyright: MIT — Jérôme Morille
 # that no longer resolves -- which is what actually keeps the two in step.
 docs_dir: docs
 
-# Specs and plans under superpowers/ are design drafts, not the published site.
-exclude_docs: |
-  superpowers/
-
 theme:
   name: material
   # French, because every document is. This drives the search tokeniser and
@@ -52,9 +48,8 @@ theme:
     - navigation.tracking
     - navigation.top
     - navigation.indexes
-    # The documents here are long -- the specification is 1 500 lines and the
-    # user guide 1 450 -- so the sections are collapsible and the table of
-    # contents follows the reader down the page.
+    # The documents here are long, so the table of contents follows the reader
+    # down the page.
     - toc.follow
     - search.highlight
     - search.suggest
@@ -65,16 +60,15 @@ nav:
   - Accueil: index.md
   - Guide de l'utilisateur: GUIDE-UTILISATEUR.md
   - Afficher les données: AFFICHER-LES-DONNEES.md
-  - Les huit blueprints: BLUEPRINTS.md
+  - Les neuf blueprints: BLUEPRINTS.md
   - Exemples d'utilisation: EXEMPLES-BLUEPRINTS.md
   - "Migrer depuis pronote": MIGRATION-AUTOMATISATIONS.md
   - Architecture: ARCHITECTURE.md
   - Le limiteur et ses six états: LIMITEUR.md
   - Spécification:
-      - Spécification v2: SPECIFICATION.md
+      - Spécification: SPECIFICATION.md
       - Annexe A — entités et services: annexe-a-entites.md
       - Annexe B — limiteur de débit: annexe-b-rate-limit.md
-      - Revue contradictoire de la v1: revue-contradictoire-v1.md
 
 markdown_extensions:
   - admonition
@@ -84,11 +78,9 @@ markdown_extensions:
   - toc:
       permalink: true
       permalink_title: Lien vers cette section
-      # GitHub's slugs, not Python-Markdown's. Every document here was written
-      # to be read on GitHub as well as on this site, and links inside them
-      # use GitHub anchors -- `#12-ecarts-avec-la-specification` with the
-      # accents intact. The default slugifier strips accents, so thirteen
-      # cross-references resolved on GitHub and silently went nowhere here.
+      # GitHub's slugs, not Python-Markdown's: every document is read on
+      # GitHub as well as here, and its links use GitHub anchors, accents
+      # intact. The default slugifier strips accents, which breaks them.
       slugify: !!python/object/apply:pymdownx.slugs.slugify
         kwds:
           case: lower
@@ -99,19 +91,14 @@ markdown_extensions:
   - pymdownx.snippets
   - pymdownx.superfences:
       custom_fences:
-        # Mermaid is rendered client-side by the theme rather than by a
-        # library declared here. This matters: the architecture document
-        # carries six diagrams and the user guide one, and on GitHub they are
-        # rendered natively from the same ```mermaid fences. One source, two
-        # renderers, no duplicated diagram.
+        # Mermaid is rendered client-side by the theme, and natively by GitHub
+        # from the same ```mermaid fences: one source, no duplicated diagram.
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
 
 # A broken anchor is a warning rather than a note, so `mkdocs build --strict`
-# fails on it. Without this the thirteen dead cross-references above were
-# reported at INFO and the build passed -- a link checker that does not fail
-# the build is a link checker nobody reads.
+# fails on it: a link checker that does not fail the build is one nobody reads.
 validation:
   anchors: warn
   links:

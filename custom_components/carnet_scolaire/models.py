@@ -42,8 +42,7 @@ class Lesson:
     required by §2.2.1: ``PageEmploiDuTemps`` returns several entries for the
     same slot -- the original and its replacements -- and upstream's docstring
     says *"for the same lesson time, the biggest num is the one shown on
-    pronote"*. Specification v1 declared ``num`` without saying what it was
-    for, which amounted to not using it.
+    pronote"*.
 
     ``end_inferred`` exists because ``end`` is not always transmitted. When
     ``DateDuCoursFin`` is absent, pronotepy computes it through
@@ -88,12 +87,11 @@ class Lesson:
         and deliberately not ``id``, because a replacement gets a new ``N``
         without the superseded entry being removed (§2.2.1).
 
-        ``subject_id`` used to be part of this key, and including it defeated
-        the de-duplication it exists for. A *substitution* -- the case the rule
-        is written for -- is two entries on one slot with different subjects and
-        different ``num``: keyed with the subject they landed in separate
-        buckets, both survived, and the day was counted twice, drawn twice in
-        the calendar, and "next lesson" could latch onto the superseded one.
+        ``subject_id`` is deliberately not part of this key: a *substitution*
+        -- the case the rule is written for -- is two entries on one slot with
+        different subjects and different ``num``, and keyed with the subject
+        both would survive, counting the day twice, drawing it twice in the
+        calendar, and letting "next lesson" latch onto the superseded one.
         A slot is a coordinate on the grid; what is taught in it is content.
 
         Not used as the delta key: see :attr:`Lesson.id` and ``delta.py``,
@@ -107,14 +105,13 @@ class Lesson:
         """The whitelisted fields a change is detected on.
 
         ``memo``, ``background_color`` and lesson content are excluded on
-        purpose: a teacher fixing a typo must not wake the house up. That is
-        what the single "delta on ``N`` only" rule was really trying to buy.
+        purpose: a teacher fixing a typo must not wake the house up.
 
         Classrooms and teachers are compared as **sets**, not as sequences.
         Nothing in the protocol orders ``ListeProfesseurs`` or
         ``ListeSalles``, and PRONOTE does reorder them between responses; as
-        tuples, a co-taught lesson emitted ``lesson_changed`` on an arbitrary
-        subset of collections, every night, for the rest of the year. An
+        tuples, a co-taught lesson would emit ``lesson_changed`` on an
+        arbitrary subset of collections, every night, for the rest of the year. An
         automation that pushes a notification on that event is worse than no
         automation.
         """
@@ -165,8 +162,7 @@ class HomeworkAttachment:
 
     ``kind`` says which of these this is, and it is the field to read. The
     presence of ``url`` does **not** tell a file from a link: an unusable link
-    has no ``url`` either, and for a while it was treated as a file because of
-    exactly that reading.
+    has no ``url`` either.
     """
 
     name: str
@@ -299,7 +295,7 @@ class Grade:
     def __post_init__(self) -> None:
         """Enforce the exclusivity the docstring promises.
 
-        A promise the type system cannot make and that no caller checked. The
+        A promise the type system cannot make and that no caller checks. The
         gateway is the only producer, so this can only fire on a gateway bug --
         which is precisely when it is worth failing loudly: a ``Grade`` holding
         both ``14.5`` and ``ABSENT`` would put one of the two into
@@ -369,9 +365,8 @@ class Absence:
     """An absence.
 
     Note the field set: upstream carries ``hours`` (a string) and ``days`` (an
-    int). There is **no** ``minutes`` -- that belongs to :class:`Delay`.
-    Specification v1 listed ``minutes`` on both, which is why they now have
-    separate event entities (annexe A §4).
+    int). There is **no** ``minutes`` -- that belongs to :class:`Delay`, which
+    is why the two have separate event entities (annexe A §4).
     """
 
     id: str
@@ -730,9 +725,8 @@ class SessionFacts:
 
     ``periods``, ``class_name`` and ``establishment`` are read out of
     ``func_options`` and ``parametres_utilisateur``, already in hand once
-    authenticated. Specification v1 filed them under the ``static`` tier and
-    budgeted calls for them; ``static`` is in fact a single call, the teaching
-    staff (annexe A §2).
+    authenticated, so they cost nothing; ``static`` is a single call, the
+    teaching staff (annexe A §2).
 
     ``current_period`` is ``None`` when it cannot be established.
     ``Client.current_period`` falls back to ``onglets[0]`` when tab 198 is
@@ -748,12 +742,12 @@ class SessionFacts:
 
 @dataclass(frozen=True, slots=True)
 class TimetableFacts:
-    """Lessons for the current week, plus next week's at a boundary crossing.
+    """Lessons for the current week and the next, inside the school year.
 
     ``Client.lessons()`` loops ``for week in range(first_week, last_week + 1)``
     and posts once *per week*, then filters client-side. Asking for "today and
     tomorrow" therefore costs exactly the same call as asking for the whole
-    week, which is why ``timetable_week`` was folded in here (§5.2).
+    week, which is why there is no separate week tier (§5.2).
 
     ``lessons`` is already de-duplicated by slot: without that,
     ``sensor.cours_du_jour`` overcounts every day a lesson was changed and the
@@ -766,10 +760,10 @@ class TimetableFacts:
     asks *what moved since last time*, and the entry de-duplication throws away
     is often the answer: on a substitution PRONOTE serves the original with
     ``estAnnule`` set **plus** a replacement with a higher ``num``, so the
-    winner is the replacement -- and running the delta on winners alone made
-    the cancellation of the original literally unobservable, because the entry
-    carrying it had been dropped one layer down. The detector now also reads
-    it to tell such a *covered* slot, where the child still has a lesson, from
+    winner is the replacement -- and running the delta on winners alone would
+    make the cancellation of the original unobservable, because the entry
+    carrying it is dropped one layer down. The detector also reads it to tell
+    such a *covered* slot, where the child still has a lesson, from
     an emptied one -- only the second is announced as cancelled.
 
     It costs a few extra objects per week and no extra request.
@@ -865,7 +859,7 @@ class DiscussionsFacts:
     ``gateway.MAX_DISCUSSION_EXPANSIONS`` newly active threads per cycle.
 
     Without this field the caller could not tell "this thread has no messages"
-    from "this thread was not read this time", and so recorded the new unread
+    from "this thread was not read this time", and would record the new unread
     count for a thread it had never looked at -- permanently disqualifying it
     from ever being expanded again (§2.2.1).
     """
@@ -885,8 +879,8 @@ class MenusFacts:
 class StaticFacts:
     """The teaching staff, and nothing else.
 
-    The iCal URL used to live here. It does not any more: keeping it would drop
-    an autonomous authentication bearer into the snapshot store -- a long-lived
+    Not the iCal URL: keeping it here would drop an autonomous authentication
+    bearer into the snapshot store -- a long-lived
     in-memory structure whose *purpose* is to be dumped into a diagnostic
     report. That is the very hazard §8.2 exists to prevent, moved from the
     state machine to the store. ``get_ical_url`` fetches on demand instead.
@@ -899,8 +893,8 @@ class StaticFacts:
 class HistoryFacts:
     """Closed periods: marks, attendance and report, read once a day.
 
-    A closed period cannot change. Re-reading it every three hours, as the
-    current integration does, spends calls on a constant result (§5.2).
+    A closed period cannot change. Re-reading it every three hours would spend
+    calls on a constant result (§5.2).
     """
 
     marks: tuple[MarksFacts, ...]
@@ -913,8 +907,8 @@ class GatewayResult[T]:
 
     Returning the cost rather than inferring it is what makes the per-tier
     contract test of §11.1 possible: an accidental property access doubles the
-    cost without anything breaking, and that is the regression this whole
-    project exists to prevent.
+    cost without anything breaking, and that is what this whole project exists
+    to prevent.
     """
 
     __slots__ = ("calls", "facts")
@@ -947,8 +941,8 @@ class SessionLifetime:
 
     This is what makes the lazy strategy defensible instead of a bet: if the
     measured inactivity timeout turns out to be shorter than the fastest tier's
-    interval, the lazy strategy degenerates into exactly one login per batch --
-    specification v1's design. It is therefore never worse, for any value of
+    interval, the lazy strategy degenerates into exactly one login per batch.
+    It is therefore never worse than logging in per batch, for any value of
     the unknown parameter.
 
     Before the first measurement the behaviour is the pessimistic one. The

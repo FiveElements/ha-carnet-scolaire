@@ -1,8 +1,8 @@
 # Exemples d'utilisation des blueprints
 
-Huit automatisations complètes, une par blueprint, à copier et à adapter.
+Neuf automatisations complètes, une par blueprint, à copier et à adapter.
 
-Cette page ne remplace pas [Les huit blueprints, en détail](BLUEPRINTS.md),
+Cette page ne remplace pas [Les neuf blueprints, en détail](BLUEPRINTS.md),
 qui explique chaque réglage et nomme le piège que chacun évite. Celle-ci sert à
 autre chose : partir d'un cas concret et d'un bloc prêt à coller, plutôt que
 d'un formulaire vide.
@@ -738,7 +738,7 @@ sur le libellé ne se déclenche jamais, sans erreur ni avertissement.
 
 ### Ne rien faire pendant les vacances
 
-Aucun blueprint n'en a besoin — c'est déjà gratuit dans les huit, parce qu'un
+Aucun blueprint n'en a besoin — c'est déjà gratuit dans les neuf, parce qu'un
 capteur sans valeur n'arme pas un déclencheur horaire. Mais pour vos propres
 automatisations :
 
@@ -755,7 +755,7 @@ conditions:
 
 | Document | Pour qui |
 | --- | --- |
-| [Les huit blueprints, en détail](BLUEPRINTS.md) | Chaque réglage, et le piège que chacun évite |
+| [Les neuf blueprints, en détail](BLUEPRINTS.md) | Chaque réglage, et le piège que chacun évite |
 | [§ 9 du guide](GUIDE-UTILISATEUR.md#9-automatisations) | Écrire une automatisation sans blueprint |
 | [Migrer ses automatisations](MIGRATION-AUTOMATISATIONS.md) | Vous arrivez de l'intégration `pronote` |
 | [Annexe A](annexe-a-entites.md) | L'origine exacte de chaque donnée, et les attributs de chaque évènement |

@@ -8,9 +8,9 @@ their tier's cadence they would be up to fifteen minutes wrong, so each one
 declares its next transition instant and is re-evaluated there with
 ``async_track_point_in_time`` (annexe A §3.1).
 
-Three "twins" the first draft had -- ``devoirs_a_faire``,
-``actualites_non_lues`` and ``messages_non_lus`` -- are deliberately absent.
-Each one only restated ``> 0`` of a numeric sensor that already exists, and a
+Three "twins" -- ``devoirs_a_faire``, ``actualites_non_lues`` and
+``messages_non_lus`` -- are deliberately absent. Each one would only restate
+``> 0`` of a numeric sensor that already exists, and a
 ``numeric_state`` trigger above zero says the same thing without a second
 entity to keep consistent (annexe A §3.1).
 """
@@ -58,23 +58,19 @@ PARALLEL_UPDATES = 0
 #: 30 seconds, for the one polled entity here: the limiter's "throttled" flag,
 #: read straight out of memory. Polling it places no request, which is why a
 #: sub-minute cadence is affordable on this platform and nowhere else.
-#:
-#: This used to claim it was "the cadence these entities already ran at", and
-#: that was wrong: nothing polled, because ``should_poll`` on a coordinator
-#: entity is a property and the ``_attr_`` beside it was never consulted. See
-#: :class:`.entity.LocallyPolledMixin`, which is what makes the interval mean
-#: anything -- and note what it cost here: the flag whose whole purpose is to
-#: explain a quiet integration could itself go quiet.
+#: :class:`.entity.LocallyPolledMixin` is what makes the interval mean anything:
+#: ``should_poll`` on a coordinator entity is a property, so the ``_attr_``
+#: beside it is never consulted.
 SCAN_INTERVAL = timedelta(seconds=30)
 
 #: How far ahead ``holidays`` looks for a lesson. Seven days rather than "the
 #: active period", because PRONOTE publishes no holiday calendar: the only
 #: evidence available is the absence of lessons (annexe A §3).
 #:
-#: Seven is also exactly what the timetable tier now fetches ahead at its
-#: narrowest -- a Sunday, whose window is this week plus the next. The question
-#: used to be wider than the data it was asked of, which is how a Saturday with
-#: two days of lessons behind it answered "holidays".
+#: Seven is also exactly what the timetable tier fetches ahead at its
+#: narrowest -- a Sunday, whose window is this week plus the next. A question
+#: wider than the data it is asked of would answer "holidays" on a Saturday
+#: with two days of lessons behind it.
 HOLIDAY_LOOKAHEAD_DAYS: Final = 7
 
 
@@ -244,7 +240,7 @@ def _is_holiday(facts: TimetableFacts, account: PronoteAccount) -> bool:
     **Forward** is the break that is about to start: on the Saturday before the
     Toussaint holidays the week just gone is full and the week ahead is empty,
     and only looking ahead can see it. It needs the seven days to be *fetched*,
-    which is why the timetable tier now always reaches into next week.
+    which is why the timetable tier always reaches into next week.
 
     **The current week** is the break that is already running. A holiday of two
     weeks -- Toussaint, Noël, février, Pâques -- or the two months of summer

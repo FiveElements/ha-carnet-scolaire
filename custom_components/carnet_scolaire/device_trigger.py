@@ -68,9 +68,8 @@ if TYPE_CHECKING:
 
 #: One trigger per event type, not per entity. A user thinking "a room
 #: changed" should not have to know that seven different changes share one
-#: ``event`` entity (annexe A §4) -- and the count was itself wrong here,
-#: which is the argument for the trigger list: `LESSON_EVENT_TYPES` is the
-#: only place that knows how many there are.
+#: ``event`` entity (annexe A §4); `LESSON_EVENT_TYPES` is the only place that
+#: knows how many there are.
 TRIGGER_TYPES: Final = (
     EVENT_GRADE_ADDED,
     EVENT_HOMEWORK_ADDED,
@@ -135,7 +134,7 @@ async def async_validate_trigger_config(
 ) -> ConfigType:
     """Refuse a change the device's source can never produce.
 
-    The editor no longer offers one, but an automation written by hand, pasted
+    The editor does not offer one, but an automation written by hand, pasted
     from a forum or imported in a blueprint is not built from that list. Home
     Assistant calls this once the integration is set up, which does not mean
     the entry is: one still retrying has no connector yet, which is why
@@ -166,9 +165,7 @@ async def async_attach_trigger(
     # built with `student_id: None` is a *valid* event filter that no real
     # event can match. It attaches without error and fires nothing -- no
     # trace, no log entry, no `unavailable` entity -- so it is indistinguishable
-    # from a quiet week. That happened: an automation on a child device whose
-    # PRONOTE resource signature had rotated went silent, and the missed
-    # announcement was noticed by the household, not by the integration.
+    # from a quiet week.
     #
     # Minting our own child key (`child_keys.py`) stops the identifier moving,
     # but it cannot help a device left behind by an account that no longer
@@ -295,13 +292,10 @@ def _student_id(hass: HomeAssistant, device_id: str) -> str | None:
 
     Resolution happens at *attach* time and the stored trigger holds only a
     device and a type, never an identifier. That is necessary for an automation
-    to survive a rotation but **not sufficient**, and the docstring here used
-    to claim it was: both sides are re-derived, from the device identifier --
-    which itself embedded the rotating `46#<signature>` until this integration
-    began minting its own key. So the two were re-derived from a value that had
-    also moved, and four automations out of four went silent on the live
-    instance while this sentence said they would survive. The guarantee holds
-    from the minted key onwards, and `async_attach_trigger` now refuses rather
+    to survive a rotation but **not sufficient**: both sides are re-derived
+    from the device identifier, so the guarantee rests on that identifier
+    carrying the minted key rather than PRONOTE's rotating `46#<signature>`.
+    Where the key cannot be translated, `async_attach_trigger` refuses rather
     than attach a filter that cannot match.
     """
     identifier = _identifier(hass, device_id)

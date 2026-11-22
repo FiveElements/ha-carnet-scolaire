@@ -63,22 +63,20 @@ async def async_get_config_entry_diagnostics(
     """Everything useful for a bug report, and nothing that grants access."""
     account = entry.runtime_data
 
-    # The address is re-trimmed here rather than trusted. It is stored trimmed
-    # since the config flow started doing that, but an entry created before then
-    # -- or restored from a backup, or edited by hand in `.storage` -- can still
-    # hold the deep link a school mailed out, complete with its ticket. This
-    # file exists so nobody has to notice that before attaching it to a public
-    # issue (§8.2).
+    # The address is re-trimmed here rather than trusted. The config flow stores
+    # it trimmed, but an older entry -- or one restored from a backup, or edited
+    # by hand in `.storage` -- can still hold the deep link a school mailed out,
+    # complete with its ticket. This file exists so nobody has to notice that
+    # before attaching it to a public issue (§8.2).
     data = dict(entry.data)
     if CONF_PRONOTE_URL in data:
         data[CONF_PRONOTE_URL] = public_url(str(data[CONF_PRONOTE_URL]))
 
-    # The child selection, fingerprinted rather than redacted. It escaped both
-    # treatments: `TO_REDACT` never listed it, so a dump carried each followed
-    # child's PRONOTE resource identifier -- `46#<opaque blob>` -- in full,
-    # while the `students` block a few lines below had been reducing the very
-    # same identifiers to a fingerprint all along. One file, two policies, and
-    # the laxer one won on the half nobody looked at.
+    # The child selection, fingerprinted rather than redacted. `TO_REDACT` does
+    # not list it, so without this a dump would carry each followed child's
+    # PRONOTE resource identifier -- `46#<opaque blob>` -- in full, while the
+    # `students` block reduces the very same identifiers to a fingerprint. One
+    # file, one policy.
     #
     # Fingerprinting rather than dropping, for the reason this module's own
     # docstring gives: "both children show the same tier failing" stays legible

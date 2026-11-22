@@ -2,24 +2,20 @@
 
 PRONOTE's ``N`` is **not an identifier, it is a session token**. A homework
 item is ``147#<signature>``, and the signature is re-encrypted by every login:
-measured on a live instance on 2026-09-26, the same assignment was
-``147#<A>`` in the session opened before 22:57 and ``147#<B>`` in the one
-opened after it, and the older value was gone from the list altogether. The
-child's ``46#<signature>`` rotates the same way (see :mod:`.child_keys`); it
-was simply the first one anybody noticed.
+the same assignment carries a different ``N`` in each session, and the older
+value is gone from the list altogether. The child's ``46#<signature>`` rotates
+the same way (see :mod:`.child_keys`).
 
 Anything that outlives one session and is indexed on ``N`` is therefore wrong
-the moment the session changes, and two defects came from exactly that on the
-same evening:
+the moment the session changes:
 
-- **A tick that never held.** The to-do list published ``N`` as the item's
-  ``uid``. A tick sent after a reconnection named an assignment the new session
-  had never heard of; PRONOTE answered ``SaisieTAFFaitEleve`` normally and
-  recorded nothing, so the next collection read it back unticked. ``E: 2``
-  (PR #74) was a real divergence, and could not have fixed this.
-- **Fifty-four "new homework" events in one millisecond.** The change detector
-  compares identifiers, so the first collection in the new session announced
-  the whole school year as new.
+- **A tick that never holds.** A to-do ``uid`` built on ``N`` would make a
+  tick sent after a reconnection name an assignment the new session has never
+  heard of; PRONOTE answers ``SaisieTAFFaitEleve`` normally and records
+  nothing, so the next collection reads it back unticked.
+- **The whole school year announced as new.** The change detector compares
+  identifiers, so the first collection in a new session would report every
+  item as new.
 
 So the ``id`` the rest of the integration sees is **one we mint** from the
 item's content, and PRONOTE's ``N`` is kept beside it as ``ref`` -- valid in

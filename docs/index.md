@@ -22,7 +22,7 @@ Ce qui la caractérise, en quatre points :
   coûter, calculée par la fonction même qui produit les chiffres de
   [l'annexe B](annexe-b-rate-limit.md) — un réglage dont on ne voit pas la
   conséquence se règle au hasard. En dessous : un limiteur à trois étages, deux
-  compteurs de connexion tenus à part, dix paliers de collecte ayant chacun sa
+  compteurs de connexion tenus à part, onze paliers de collecte ayant chacun sa
   cadence, et un seul battement maître.
 - **Aucun secret ne devient un état.** L'URL iCal, le bloc d'identité et le
   lien du PDF d'emploi du temps sont des réponses de service, que rien ne
@@ -50,24 +50,24 @@ authentification, et aucun mot de passe n'est conservé.
       [l'architecture](ARCHITECTURE.md).
     * Une tuile est bloquée sur « Temporisation » ou « Bridé » et vous voulez
       savoir pourquoi : [le limiteur et ses six états](LIMITEUR.md).
-    * Vous voulez le **raisonnement d'origine**, y compris ce qui s'est révélé
-      faux : [la spécification](SPECIFICATION.md) et
-      [la revue contradictoire](revue-contradictoire-v1.md).
+    * Vous voulez les **exigences et leur raisonnement** :
+      [la spécification](SPECIFICATION.md).
 
 ## Ce que ça fait
 
 - **Sept plateformes d'entités** : `sensor`, `binary_sensor`, `calendar`,
   `todo`, `image`, `event`, `button` — emploi du temps, devoirs, notes et
   moyennes, absences et retards, punitions, évaluations par compétences,
-  actualités, discussions, menus, personnel, bulletins.
+  actualités, agenda de l'établissement, discussions, menus, personnel,
+  bulletins.
 - **Neuf services**, dont cinq renvoient une réponse plutôt que d'alimenter
   une entité : l'URL iCal, l'identité, le PDF d'emploi du temps, l'adresse
   d'une pièce jointe et l'état du limiteur.
 - **Écritures optionnelles**, activées pour une nouvelle installation et
   coupées d'un interrupteur : cocher un devoir, marquer une actualité comme
   lue, envoyer un message.
-- **Automatisations d'appareil** : 14 déclencheurs, 10 conditions, 4 actions,
-  plus huit blueprints livrés en français et en anglais.
+- **Automatisations d'appareil** : 16 déclencheurs, 10 conditions, 4 actions,
+  plus neuf blueprints livrés en français et en anglais.
 - **Trois modes de connexion** : QR code (recommandé), identifiants directs,
   ENT.
 - **Comptes parents multi-enfants**, chaque enfant étant un appareil distinct.
@@ -94,7 +94,7 @@ facturée au retour, elle laisse une fenêtre de plusieurs secondes pendant
 laquelle un second appelant lit un budget intact — c'est ainsi qu'un plafond de
 cinq connexions en laisse passer dix.
 
-Le budget par défaut est d'environ **180 requêtes par jour** pour un enfant.
+Le budget par défaut est d'environ **200 requêtes par jour** pour un enfant.
 
 Aucun secret ne transite par un état d'entité, un attribut ou le fichier de
 diagnostic : ni l'URL iCal — qui donne accès à l'emploi du temps complet d'un
@@ -114,7 +114,7 @@ préfixe de toutes ses entités et de tous ses services.
        *Intégration*.
     3. Installer **Carnet scolaire**, puis redémarrer Home Assistant.
     4. *Paramètres → Appareils et services → Ajouter une intégration →
-       PRONOTE*.
+       Carnet scolaire*.
 
 === "Manuellement"
 

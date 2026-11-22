@@ -32,7 +32,7 @@ comment en écrire.
 - [4. Le schéma d'un cours a changé](#4-le-schéma-dun-cours-a-changé)
 - [5. Ce qui n'a plus d'équivalent](#5-ce-qui-na-plus-déquivalent)
 - [6. Garder ses conditions tout en utilisant un blueprint](#6-garder-ses-conditions-tout-en-utilisant-un-blueprint)
-- [7. Cinq pièges rencontrés en vrai](#7-cinq-pièges-rencontrés-en-vrai)
+- [7. Cinq pièges à connaître](#7-cinq-pièges-à-connaître)
 - [8. Vérifier, puis nettoyer](#8-vérifier-puis-nettoyer)
 
 ---
@@ -89,9 +89,8 @@ lieu d'être réécrite.
 ## 3. La correspondance des entités
 
 Ce tableau couvre les entités les plus utilisées dans des automatisations. Il ne
-prétend pas décrire exhaustivement l'ancienne intégration, dont le catalogue a
-changé au fil de ses versions : prenez-le comme un point de départ, et vérifiez
-chez vous.
+prétend pas décrire exhaustivement l'ancienne intégration : prenez-le comme un
+point de départ, et vérifiez chez vous.
 
 | Ce que vous lisiez | Chez Carnet scolaire |
 | --- | --- |
@@ -124,7 +123,7 @@ pour **composer un texte** —, les clés de chaque élément ne sont plus les m
 | `lesson` | `subject` | |
 | `start_time` (`"08:30"`) | `start` (ISO complet) | `{{ c.start \| as_datetime \| as_local }}` pour en faire une date |
 | `end_time` (`"09:30"`) | `end` (ISO complet) | idem |
-| `start_at` (date-heure) | `start` | une seule clé désormais, plus deux |
+| `start_at` (date-heure) | `start` | une seule clé au lieu de deux |
 | `num` | `id` | et il ne sert plus à dédoublonner : voir § 5.2 |
 | `canceled` | `canceled` | inchangé |
 | `is_morning`, `is_afternoon` | **rien** | voir § 5.1 |
@@ -132,8 +131,8 @@ pour **composer un texte** —, les clés de chaque élément ne sont plus les m
 | — | `status` | nouveau : le libellé PRONOTE (« Prof. absent », « Cours dépl. ») |
 | — | `end_inferred` | nouveau, et important : voir § 7 |
 
-**Mettre une heure en forme.** Les horodatages étant maintenant ISO, l'astuce
-`start_time | replace(':','h')` ne fonctionne plus. L'équivalent :
+**Mettre une heure en forme.** Les horodatages étant au format ISO, l'astuce
+`start_time | replace(':','h')` ne fonctionne pas. L'équivalent :
 
 ```jinja
 {%- set d = c.start | as_datetime | as_local -%}
@@ -161,26 +160,24 @@ Ce qui remplace le découpage, selon ce que vous cherchiez :
 | La fin de la journée | `sensor.enfant_un_fin_des_cours` |
 | Le début de la journée | `sensor.enfant_un_prochain_cours`, ou l'attribut `first_start` de `cours_du_jour` |
 | L'heure du réveil | `sensor.enfant_un_prochain_reveil` |
-| La fin de la matinée, pour un retour du midi | Voir ci-dessous |
+| La fin de la matinée, pour un retour du midi | `sensor.enfant_un_fin_de_matinee` — voir ci-dessous |
 
-**La fin de la matinée.** C'est le seul cas qui demande encore du travail. La
-règle qui donne un résultat juste n'est pas une heure fixe mais **la coupure
-repas** : parmi les cours du jour non annulés et non dispensés, le plus long trou
-qui commence entre 11 h et 14 h 30 et qui dure au moins 45 minutes ; l'heure
-cherchée est la fin du cours qui précède ce trou.
+**La fin de la matinée.** `sensor.enfant_un_fin_de_matinee` la porte. La règle
+n'est pas une heure fixe mais **la coupure repas** : parmi les cours du jour non
+annulés et non dispensés, le plus long trou qui commence entre 11 h et 14 h 30
+et qui dure au moins 45 minutes ; l'état est la fin du cours qui précède ce
+trou. Les attributs `resumes_at` et `break_minutes` donnent l'heure de reprise et
+la durée de la coupure. L'[annexe A](annexe-a-entites.md) détaille le cas d'un
+cours annulé juste avant midi.
 
-Le point important est ce qu'il faut faire **quand ce trou n'existe pas** :
-publier `inconnu`, et non une valeur de repli. Une journée continue ne rend pas
-le fait faux, elle le rend inexistant. En particulier, une journée qui s'arrête à
-midi ne doit **rien** produire ici — c'est `fin_des_cours` qui répond, et deux
-entités portant le même horodatage déclencheraient deux automatisations pour un
-seul retour à la maison.
+**Quand ce trou n'existe pas**, l'état est `inconnu`, et non une valeur de
+repli. Une journée continue ne rend pas le fait faux, elle le rend inexistant.
+En particulier, une journée qui s'arrête à midi ne produit **rien** ici — c'est
+`fin_des_cours` qui répond, et deux entités portant le même horodatage
+déclencheraient deux automatisations pour un seul retour à la maison.
 
-**Un capteur natif est prévu** pour porter cette règle, avec en plus l'heure de
-reprise et la durée de la coupure. D'ici là, écrivez-la dans un capteur
-template. Vous pourrez alors le supprimer **sans retoucher votre
-automatisation**, à condition d'avoir gardé l'identifiant de l'aide — c'est
-exactement ce que dit le point 5 du § 7.
+Si vous aviez écrit cette règle dans un capteur template, supprimez-le et
+pointez vos déclencheurs sur `fin_de_matinee`.
 
 ### 5.2 La déduplication par `num`
 
@@ -275,18 +272,17 @@ journal.
 
 ---
 
-## 7. Cinq pièges rencontrés en vrai
+## 7. Cinq pièges à connaître
 
-Cette liste vient d'une migration réelle de quatre automatisations. Chacun de ces
-points a produit un défaut observable.
+Chacun de ces points produit un défaut observable si on l'ignore.
 
 **1. « Fin des cours » est la fin de la journée, pas la fin de l'après-midi.**
 Si votre ancien capteur ne retenait que les cours d'après-midi, il ne publiait
 rien les jours qui s'arrêtent à midi, et c'était votre alerte du midi qui
 annonçait le retour. `sensor.enfant_un_fin_des_cours` publie ces jours-là. Si
 vous branchez les deux annonces sans y penser, elles tombent **ensemble** à midi.
-Le § 5.1 explique comment le découpage se répare : c'est la fin de matinée qui
-doit se taire, pas la fin de journée.
+Le § 5.1 explique le découpage : c'est la fin de matinée qui se tait ces
+jours-là, pas la fin de journée.
 
 **2. Un évènement par changement, pas un évènement agrégé.** Deux annulations
 détectées dans la même collecte donnent deux déclenchements successifs. Vos

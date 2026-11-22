@@ -4,10 +4,10 @@ The message of a transport exception is not ours and it is not safe to print.
 ``requests`` writes ``HTTPSConnectionPool(host='…', port=443): Max retries
 exceeded with url: /…`` and ``aiohttp`` writes ``Cannot connect to host …``:
 the host names the establishment, and the path of a PRONOTE page can carry the
-parameters of a session. Those lines went to the log -- at INFO, on the
-``log-when-unavailable`` line, and in a DEBUG traceback -- and into the reason
-Home Assistant shows for an entry that is not ready. That log is what a user is
-invited to paste into a public issue (§8.2).
+parameters of a session. Printed, those lines would reach the log -- at INFO,
+on the ``log-when-unavailable`` line, and in a DEBUG traceback -- and the
+reason Home Assistant shows for an entry that is not ready. That log is what a
+user is invited to paste into a public issue (§8.2).
 
 So a failure is described by what can be known without reading its message:
 the class name of the exception, and a coarse category taken from its type
@@ -24,9 +24,10 @@ A *decoding* failure is the same problem with a worse payload. ``pronotepy``'s
 error>``, and a converter's error quotes the value it refused --
 ``invalid literal for int() with base 10: 'Enfant Un'``; a ``KeyError`` names
 whatever was looked up, which can be a value (a ``N``, a child's name) as
-easily as a protocol key. That text reached the ERROR line of a login that
-could not be decoded, the message of ``AccountUnreadable``, the cause chained
-to the set-up refusal and the DEBUG traceback of every skipped entry. So a
+easily as a protocol key. Printed, that text would reach the ERROR line of a
+login that could not be decoded, the message of ``AccountUnreadable``, the
+cause chained to the set-up refusal and the DEBUG traceback of every skipped
+entry. So a
 decoding failure gets the category ``decode`` and, when it can be known
 without reading a message, the *name* of the protocol field involved: the
 path ``pronotepy``'s resolver was walking -- literals in its source, never

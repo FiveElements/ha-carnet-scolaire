@@ -69,8 +69,9 @@ class PronoteTierCoordinator(DataUpdateCoordinator[TierData]):
         after a success.
 
         The identity check is the one runtime defence against the worst silent
-        failure this integration has (§7.1). ``pronotepy``'s parent client sets
-        ``_selected_child = self.children[0]`` in its constructor, so a code
+        failure this integration has (§7.1). The client (``HardenedClient``, like
+        upstream's parent client) selects ``self.children[0]`` in its
+        constructor, so a code
         path that forgets ``set_child`` raises nothing at all -- it returns the
         *first* child's data. With one child that is undetectable; with two it
         publishes one child's timetable under the other child's entities, and

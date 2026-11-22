@@ -1,7 +1,7 @@
 # AGENTS-REFERENCE.md
 
-The long form of `AGENTS.md`: the reasoning and the incidents behind each rule
-stated there in one line. Not loaded into an agent's context by default — read
+The long form of `AGENTS.md`: the reasoning behind each rule stated there in
+one line. Not loaded into an agent's context by default — read
 the section concerned **before** changing the code it describes. Section
 titles match the pointers in `AGENTS.md`.
 
@@ -19,11 +19,11 @@ access to a child's entire timetable with no credentials — treat it as a
 password.
 
 **Never enable the `pronotepy` DEBUG logger.** It leaks in **two** places, so
-filtering by sub-logger does not help. `pronotepy/pronoteAPI.py:139` writes the
+filtering by sub-logger does not help. `pronotepy.pronoteAPI` writes the
 reversible hex of every request body, credentials included, and `clients.log is
 pronoteAPI.log` — one single logger, so the useful lines cannot be separated
-from the leaking ones. Separately, `pronotepy/dataClasses.py:228-231`, in the
-strict branch of `_resolver.__call__`, does `log.debug(json.dumps(self.json_dict))`
+from the leaking ones. Separately, `pronotepy.dataClasses`, in the strict branch
+of `_resolver.__call__`, does `log.debug(json.dumps(self.json_dict))`
 — the **entire** dictionary of the object being decoded, as readable JSON:
 student name, homework text, establishment identifiers. That one is worse in one
 respect (it is plain text, not hex to reverse) and it fires on a failed decode
@@ -47,7 +47,7 @@ The full suite **cannot** run natively: `pytest-homeassistant`
 registers a pytest entry point that imports `fcntl`, loaded before any
 `conftest.py` is read. A local `.venv` on Python 3.13 also installs an old HA
 stack, so `mypy --strict` there checks against a version *below* the declared
-floor and has already let a removed API through. `ruff` is fine locally; `mypy`
+floor and lets a removed API through. `ruff` is fine locally; `mypy`
 and `pytest` are not.
 
 Use a prebuilt Docker image (build once — the HA test stack is large):
@@ -62,9 +62,8 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "C:/project/ai-project/carnet-scolaire/ha-
 plus `requirements_test.txt`, then `pip install homeassistant==2026.11.0` over
 the beta harness exactly as `validate.yml` does.
 `pytest-homeassistant` is the official harness, released from
-home-assistant/core under HA's own version number; it replaced
-`pytest-homeassistant-custom-component`, which stopped at 2026.10. Never
-install both — their fixtures overlap. `MSYS_NO_PATHCONV=1` and the absolute path are
+home-assistant/core under HA's own version number. Never install it beside
+`pytest-homeassistant-custom-component` — their fixtures overlap. `MSYS_NO_PATHCONV=1` and the absolute path are
 required under Git Bash, or MSYS rewrites `/work`.
 
 Never add `-p no:logging` — it removes the plugin that provides `caplog`, and
@@ -153,8 +152,7 @@ Two entity behaviours in `entity.py`:
   it keeps its value and flags its age. A `numeric_state` trigger on an entity
   that flaps to `unavailable` and back fires spuriously.
 
-  Those are **two questions asked separately**, and merging them cost a live
-  instance its whole dashboard. `PronoteEntity.available` asks
+  Those are **two questions asked separately**. `PronoteEntity.available` asks
   `snapshot is not None` first; `FetchScheduler.is_stale` only ever answers the
   second, about **age**, and must return `False` for a tier with no recorded
   collection — there is no age to have exceeded. Answering `True` there looks
@@ -162,14 +160,10 @@ Two entity behaviours in `entity.py`:
   `PronoteAccount._async_collect` calls `coordinator.publish` — which is what
   notifies the entities — and `scheduler.mark_collected` only after the loop
   over the students. Every entity is therefore told its data arrived during the
-  one instant when its tier holds a snapshot and no age, and each wrote itself
-  `unavailable` on the very push that delivered it, with nothing left to
-  re-render. Measured: ten tiers collected, nineteen entities across seven
-  tiers stayed empty holding data. The entities in `CLOCK_DRIVEN_KEYS` repaired
-  themselves, which is why `timetable` and `homework` looked healthy and
-  `marks`, `news` and `menus` waited a full tier interval — twenty-four hours,
-  or 06:00 with quiet hours on. The same defect had been showing up in CI as
-  one flaky run in twenty on the lowest-priority tier.
+  one instant when its tier holds a snapshot and no age; answering `True`
+  would make each write itself `unavailable` on the very push that delivered
+  it, and only the entities in `CLOCK_DRIVEN_KEYS` would re-render before the
+  tier's next collection.
 
   Two corollaries worth knowing before you debug this class of symptom. Home
   Assistant publishes **no** `extra_state_attributes` on an entity that is
@@ -198,20 +192,20 @@ if (
     return Priority.CRITICAL
 ```
 
-`RateLimiter.check` exempts only `CRITICAL` from quiet hours
-(`priority is not Priority.CRITICAL and self._in_quiet_hours()`), so **every**
-tier collects immediately after a restart at any hour, and the login is
-`CRITICAL` by declaration anyway (`TIER_PRIORITY[Tier.SESSION]`). §2.5 is the
-reason: an unavailable entity breaks automations rather than merely looking
-empty, and an instance restarted at 23:00 that showed nothing until 06:00 read
-as broken.
+`RateLimiter.check` holds back during quiet hours every priority outside
+`QUIET_HOURS_EXEMPT`, and `CRITICAL` is in it, so **every** tier collects
+immediately after a restart at any hour, and the login is `CRITICAL` by
+declaration anyway (`TIER_PRIORITY[Tier.SESSION]`). §2.5 is the reason: an
+unavailable entity breaks automations rather than merely looking empty, and an
+instance restarted at 23:00 that showed nothing until 06:00 would read as
+broken.
 
-Three bounds to state accurately rather than round off. The dispensation is
+Two bounds to state accurately rather than round off. The dispensation is
 **per tier and evidence-bounded**: after `_FIRST_COLLECTION_ATTEMPTS` (3)
 failures a tier drops back to its declared priority and does wait for 06:00 —
-success was once its only exit, and a tab that could never succeed held a
-standing exemption, became the only tier awake at night, and turned one broken
-page into an account-wide `backoff`. The dispensation is also not a budget
+otherwise a tab that can never succeed would hold a standing exemption, stay
+the only tier awake at night, and turn one broken page into an account-wide
+`backoff`. The dispensation is also not a budget
 dispensation: the daily request cap and the cap of `max_logins_per_day` still
 apply, so a midnight restart spends a login and one full round out of the day's
 allowance.
@@ -239,9 +233,9 @@ several choices that otherwise look redundant:
   the only route to a fact. A state reading `8h30` or `14,5` loses sorting,
   graphing, thresholds and locale in one stroke.
 - `event.py` exists because a state trigger cannot say "a *new* grade arrived".
-  One `lesson_changed` entity declares **six** event types
-  (`LESSON_EVENT_TYPES` in `const.py`: cancelled, restored, moved, room
-  changed, teacher changed, status changed) and fires **one event per changed
+  One `lesson_changed` entity declares **seven** event types
+  (`LESSON_EVENT_TYPES` in `const.py`: cancelled, restored, replaced, moved,
+  room changed, teacher changed, status changed) and fires **one event per changed
   aspect**, so an automation asking "was a room changed?" never inspects a
   payload. `lesson_restored` is a distinct type from `lesson_canceled` on
   purpose: a detector that merges them fires "no first lesson, sleep in" on the
@@ -270,18 +264,17 @@ the bare page URL, because ENT bounces and address-bar copies carry session
 parameters that would otherwise reach `.storage` and repair placeholders.
 
 Writes to PRONOTE are **on for a new entry** — seeded into its options at
-creation — and **off for an entry that lacks the key**, which predates that
-default; `LEGACY_WRITE_OPERATIONS_ENABLED` is the fallback in both
+creation — and **off for an entry that lacks the key**, whose owner never chose them; `LEGACY_WRITE_OPERATIONS_ENABLED` is the fallback in both
 `write_enabled` and the options form, which is submitted as displayed.
 `todo.py`'s tick is the only write
 reachable without a service call, and with writes off the list is read-only
 through its supported features rather than by failing when tapped.
 
 `login_guard.py` holds the two things that outlive a `PronoteAccount` — punitive
-limiter state and login counters — in `hass.data`, because a `ConfigEntryNotReady`
-retry every eighty seconds otherwise rebuilt a fresh limiter with all its holds
-reset, producing thousands of logins against a cap of twenty-four while
-`calls_today` reported five.
+limiter state and login counters — in `hass.data`, because every
+`ConfigEntryNotReady` retry builds a new account: a limiter rebuilt with it
+would start with every hold lifted and its login counters at zero, and the
+login cap would never bind.
 
 ### The config flow
 
@@ -317,7 +310,7 @@ Three floors, and `scripts/check_coverage.py` fails on any of them:
 
 Everything is measured as `min(line, branch)`. The 95 % floor is Silver
 `test-coverage` on the Home Assistant quality scale; adding a module without
-tests now fails CI rather than diluting an average.
+tests fails CI rather than diluting an average.
 
 ## Test conventions
 
@@ -344,14 +337,11 @@ tests now fails CI rather than diluting an average.
   `sensor.<child>_moyennes_par_matiere` in French — never
   `sensor.<child>_averages`. Read the name from `translations/<lang>.json` and
   slugify it with `homeassistant.util.slugify`; do not re-implement the accent
-  folding, which is where this project's two repositories have already
-  disagreed once. The suite's entity ids are the **English** slugs; the French
-  ones exist only on a French instance. This has now cost real time twice: a
-  fixture that invented `sensor.enfant_un_averages`, and eleven identifiers in
-  annexe A that named entities which do not exist. Home Assistant does not
+  folding. The suite's entity ids are the **English** slugs; the French ones
+  exist only on a French instance. Home Assistant does not
   reject an unknown entity id in an automation — the trigger simply never
   fires, which reads as a broken integration.
-- `tests/test_doc_contract.py` is the barrier for that second failure: every
+- `tests/test_doc_contract.py` holds annexe A to the same rule: every
   translated entity name must appear as a suffix in `docs/annexe-a-entites.md`.
   Names carrying a placeholder (`Notes ({period})`) are skipped, because Home
   Assistant substitutes the establishment's own period label and the suffix

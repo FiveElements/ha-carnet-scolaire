@@ -157,8 +157,8 @@ def probe_account(data: Mapping[str, Any]) -> dict[str, Any]:
         # `_do_2fa`, after a challenge that has already succeeded.
         #
         # So a failure here is about the QR code itself, and it is classified as
-        # such. It was reported as "the credentials were refused", which sent a
-        # parent looking at the one field that could not possibly matter --
+        # such. Reporting it as "the credentials were refused" would send a
+        # parent looking at the one field that cannot possibly matter --
         # upstream's own message compounds it by appending "probably the qr code
         # has expired" on nothing more than `login_mode == "qr_code"`.
         if enrolling:
@@ -226,17 +226,17 @@ def _ent_provider(data: Mapping[str, Any]) -> Callable[..., Any] | None:
     Resolved by name at call time rather than stored, because a config entry
     holds JSON and ``pronotepy.ent`` exposes plain functions.
 
-    An unresolvable name **raises**, and it used to return ``None``. That looks
-    like a graceful degradation and is the opposite of one: ``build_client``
-    then runs with ``ent=None`` in ``mode="normal"``, which sends the *ENT
-    portal's* username and password straight to the PRONOTE server. The login
-    cannot succeed -- so the user was shown "invalid credentials" for what is a
-    typo in a provider name, and one of the three slots on the IP guard was
-    spent proving it. The provider list is a free-text-capable selector
+    An unresolvable name **raises** rather than returning ``None``. ``None``
+    would look like a graceful degradation and be the opposite of one:
+    ``build_client`` would run with ``ent=None`` in ``mode="normal"``, sending
+    the *ENT portal's* username and password straight to the PRONOTE server.
+    The login cannot succeed -- so the user would see "invalid credentials" for
+    a typo in a provider name, and one of the three slots on the IP guard would
+    be spent proving it. The provider list is a free-text-capable selector
     (``custom_value=True``), so a typo is not a remote possibility.
 
-    Two names can reach here: one the user typed, and one persisted long ago
-    that a ``pronotepy`` upgrade has since removed. The second is why the check
+    Two names can reach here: one the user typed, and a persisted one that the
+    installed ``pronotepy`` no longer provides. The second is why the check
     cannot live only in the flow's form validation -- the runtime login path
     resolves the same stored name on every reconnection.
     """

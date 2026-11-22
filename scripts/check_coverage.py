@@ -21,15 +21,16 @@ GLOBAL_MINIMUM = 80.0
 #: Every module of the package, with no exception list. The Home Assistant
 #: quality scale asks for this at Silver (`test-coverage`), and the reason it
 #: is a *per-module* floor rather than a global one is that a global average
-#: hides exactly what matters: this package carries four modules above five
+#: hides exactly what matters: this package carries several modules above five
 #: hundred statements, so a module of forty can fall to nothing without moving
 #: the global figure by a point. The global floor stays as a second, weaker
 #: guard.
 MODULE_MINIMUM = 95.0
 
-# The four modules where an error produces no visible symptom: a rate limiter
-# that lets a call through, a scheduler that skips a tier, a gateway that
-# silently mis-decodes, a delta detector that misses a change.
+# The seven modules where an error produces no visible symptom: a rate limiter
+# (PRONOTE's or EcoleDirecte's) that lets a call through, a scheduler that
+# skips a tier, a gateway or an EcoleDirecte client or mapping that silently
+# mis-decodes, a delta detector that misses a change.
 #
 # Suffixes under the package, not basenames: see the module docstring.
 CRITICAL_MODULES = {
