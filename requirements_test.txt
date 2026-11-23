@@ -40,7 +40,7 @@ pytest-xdist
 # `qr_code`. That message is a guess, not a finding, and it cost most of a day:
 # no key derivation can unpad a string that was never ciphertext.
 pronotepy==2.15.7
-ruff==0.17.5
+ruff==0.17.6
 mypy==2.4.1
 
 # `hardened_client.py` subclasses `requests.Session` to inject the HTTP timeout
